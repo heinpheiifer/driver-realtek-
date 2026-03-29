@@ -1,0 +1,383 @@
+[
+  {
+    "id": "b7f0e8d6a8a9c111",
+    "type": "tab",
+    "label": "Victron Storm Watch",
+    "disabled": false,
+    "info": "Storm watch automation for Victron Cerbo GX.\n\nReads CAP alerts + GPS, then raises ESS Min SoC and sets Keep Batteries Charged during active in-zone storm alerts.\nRestores baseline when alerts clear."
+  },
+  {
+    "id": "3e9cf7d6adce9f58",
+    "type": "inject",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Init storm config",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "0.5",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 180,
+    "y": 80,
+    "wires": [
+      [
+        "3f507df62b8fef67"
+      ]
+    ]
+  },
+  {
+    "id": "3f507df62b8fef67",
+    "type": "function",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Init config into flow context",
+    "func": "const config = {\n    // CAP/Atom endpoint. Replace with your provider feed.\n    capFeedUrl: \"https://alerts.metservice.com/cap/atom\",\n\n    // Event keywords (case-insensitive) that trigger storm mode.\n    // Match is by substring against CAP event title.\n    watchEvents: [\n        \"storm\",\n        \"severe thunderstorm\",\n        \"tropical cyclone\",\n        \"high wind\",\n        \"gale\"\n    ],\n\n    // Minimum CAP severity that can trigger action.\n    // One of: Minor, Moderate, Severe, Extreme\n    minSeverity: \"Severe\",\n\n    // ESS storm targets\n    stormMinSoc: 80,\n    stormHub4Mode: 3, // Keep batteries charged\n\n    // Defaults used if baseline is unknown.\n    normalMinSoc: 20,\n    normalHub4Mode: 1,\n\n    // Optional fixed fallback location if GPS topics are unavailable.\n    // Set to null to disable fixed fallback.\n    homeLat: null,\n    homeLon: null,\n\n    // Optional override if portal id cannot be inferred from MQTT topics.\n    portalId: null,\n\n    // If true, re-send storm setpoints on every poll while active.\n    enforceWhileActive: false\n};\n\nflow.set(\"stormConfig\", config);\n\nconst state = flow.get(\"stormState\") || { active: false };\nflow.set(\"stormState\", state);\n\nmsg.payload = {\n    action: \"init\",\n    config,\n    state\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 440,
+    "y": 80,
+    "wires": [
+      [
+        "953cb1122e98c73d"
+      ]
+    ]
+  },
+  {
+    "id": "953cb1122e98c73d",
+    "type": "debug",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Init debug",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 680,
+    "y": 80,
+    "wires": []
+  },
+  {
+    "id": "f709b1d2b26ffc15",
+    "type": "inject",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Poll CAP feed (5m)",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "300",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "2",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 180,
+    "y": 180,
+    "wires": [
+      [
+        "7a4a8b492455fcb1"
+      ]
+    ]
+  },
+  {
+    "id": "7a4a8b492455fcb1",
+    "type": "function",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Build CAP request",
+    "func": "const cfg = flow.get(\"stormConfig\") || {};\nif (!cfg.capFeedUrl) {\n    node.warn(\"stormConfig.capFeedUrl is missing\");\n    return null;\n}\n\nmsg.method = \"GET\";\nmsg.url = cfg.capFeedUrl;\nmsg.headers = {\n    \"accept\": \"application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.8\"\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 430,
+    "y": 180,
+    "wires": [
+      [
+        "b7372044b431df2c"
+      ]
+    ]
+  },
+  {
+    "id": "b7372044b431df2c",
+    "type": "http request",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Fetch CAP XML",
+    "method": "use",
+    "ret": "txt",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": true,
+    "headers": [],
+    "x": 670,
+    "y": 180,
+    "wires": [
+      [
+        "95a7f36f34afc18f"
+      ]
+    ]
+  },
+  {
+    "id": "95a7f36f34afc18f",
+    "type": "function",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Parse CAP feed",
+    "func": "function decodeXml(text) {\n    if (typeof text !== \"string\") return \"\";\n    return text\n        .replace(/&lt;/g, \"<\")\n        .replace(/&gt;/g, \">\")\n        .replace(/&quot;/g, \"\\\"\")\n        .replace(/&#39;/g, \"'\")\n        .replace(/&apos;/g, \"'\")\n        .replace(/&amp;/g, \"&\");\n}\n\nfunction stripTags(text) {\n    return decodeXml(String(text || \"\").replace(/<[^>]*>/g, \"\")).trim();\n}\n\nfunction extractFirst(segment, tagNames) {\n    for (const tagName of tagNames) {\n        const re = new RegExp(`<(?:\\\\w+:)?${tagName}\\\\b[^>]*>([\\\\s\\\\S]*?)<\\\\/(?:\\\\w+:)?${tagName}>`, \"i\");\n        const m = segment.match(re);\n        if (m && m[1] !== undefined) {\n            const v = stripTags(m[1]);\n            if (v) return v;\n        }\n    }\n    return \"\";\n}\n\nfunction extractAll(segment, tagName) {\n    const re = new RegExp(`<(?:\\\\w+:)?${tagName}\\\\b[^>]*>([\\\\s\\\\S]*?)<\\\\/(?:\\\\w+:)?${tagName}>`, \"gi\");\n    const out = [];\n    let m;\n    while ((m = re.exec(segment)) !== null) {\n        const v = stripTags(m[1]);\n        if (v) out.push(v);\n    }\n    return out;\n}\n\nfunction parseEntries(xmlText, containerTag) {\n    const re = new RegExp(`<(?:\\\\w+:)?${containerTag}\\\\b[\\\\s\\\\S]*?<\\\\/(?:\\\\w+:)?${containerTag}>`, \"gi\");\n    return xmlText.match(re) || [];\n}\n\nconst xml = typeof msg.payload === \"string\" ? msg.payload : String(msg.payload || \"\");\n\nconst entryBlocks = parseEntries(xml, \"entry\");\nconst alertBlocks = entryBlocks.length ? [] : parseEntries(xml, \"alert\");\nconst blocks = entryBlocks.length ? entryBlocks : alertBlocks;\n\nconst alerts = [];\nfor (const b of blocks) {\n    const alert = {\n        id: extractFirst(b, [\"id\", \"identifier\"]),\n        event: extractFirst(b, [\"event\"]),\n        severity: extractFirst(b, [\"severity\"]),\n        urgency: extractFirst(b, [\"urgency\"]),\n        certainty: extractFirst(b, [\"certainty\"]),\n        headline: extractFirst(b, [\"headline\", \"title\"]),\n        effective: extractFirst(b, [\"effective\", \"updated\", \"published\"]),\n        expires: extractFirst(b, [\"expires\"]),\n        areaDesc: extractFirst(b, [\"areaDesc\"]),\n        polygons: extractAll(b, \"polygon\"),\n        circles: extractAll(b, \"circle\")\n    };\n\n    // Keep records that are likely useful CAP alerts.\n    if (alert.event || alert.headline || alert.polygons.length || alert.circles.length) {\n        alerts.push(alert);\n    }\n}\n\nmsg.payload = {\n    fetchedAt: new Date().toISOString(),\n    sourceUrl: msg.url,\n    count: alerts.length,\n    alerts\n};\n\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 900,
+    "y": 180,
+    "wires": [
+      [
+        "e9ff907bac83e710"
+      ]
+    ]
+  },
+  {
+    "id": "66d847be7e4ccb5a",
+    "type": "mqtt in",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Victron GPS (lat/lon)",
+    "topic": "N/+/gps/+/Position/+",
+    "qos": "0",
+    "datatype": "auto",
+    "broker": "56a4f8dfe3a11f6f",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 170,
+    "y": 300,
+    "wires": [
+      [
+        "5cf9f5db91aa3168"
+      ]
+    ]
+  },
+  {
+    "id": "5cf9f5db91aa3168",
+    "type": "function",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Store GPS + portalId",
+    "func": "function extractValue(payload) {\n    if (payload && typeof payload === \"object\" && payload.value !== undefined) {\n        return Number(payload.value);\n    }\n    return Number(payload);\n}\n\nconst topic = String(msg.topic || \"\");\nconst parts = topic.split(\"/\");\nif (parts.length > 2 && parts[1]) {\n    flow.set(\"portalId\", parts[1]);\n}\n\nconst v = extractValue(msg.payload);\nif (!Number.isFinite(v)) return null;\n\nif (topic.endsWith(\"/Latitude\")) {\n    flow.set(\"gpsLat\", v);\n} else if (topic.endsWith(\"/Longitude\")) {\n    flow.set(\"gpsLon\", v);\n} else {\n    return null;\n}\n\nmsg.payload = {\n    portalId: flow.get(\"portalId\"),\n    gpsLat: flow.get(\"gpsLat\"),\n    gpsLon: flow.get(\"gpsLon\")\n};\n\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 430,
+    "y": 300,
+    "wires": [
+      [
+        "b321d91cae523008"
+      ]
+    ]
+  },
+  {
+    "id": "b321d91cae523008",
+    "type": "debug",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "GPS debug",
+    "active": false,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 670,
+    "y": 300,
+    "wires": []
+  },
+  {
+    "id": "a87b7a4f9c5d7483",
+    "type": "mqtt in",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Victron settings (CGwacs)",
+    "topic": "N/+/settings/0/Settings/CGwacs/#",
+    "qos": "0",
+    "datatype": "auto",
+    "broker": "56a4f8dfe3a11f6f",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 190,
+    "y": 360,
+    "wires": [
+      [
+        "d74789bd8de3bf9f"
+      ]
+    ]
+  },
+  {
+    "id": "d74789bd8de3bf9f",
+    "type": "function",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Track baseline MinSoC / Hub4",
+    "func": "function extractValue(payload) {\n    if (payload && typeof payload === \"object\" && payload.value !== undefined) {\n        return Number(payload.value);\n    }\n    return Number(payload);\n}\n\nconst topic = String(msg.topic || \"\");\nconst value = extractValue(msg.payload);\nif (!Number.isFinite(value)) return null;\n\nconst parts = topic.split(\"/\");\nif (parts.length > 2 && parts[1]) {\n    flow.set(\"portalId\", parts[1]);\n}\n\nconst stormState = flow.get(\"stormState\") || { active: false };\n\nif (topic.endsWith(\"/BatteryLife/MinimumSocLimit\")) {\n    flow.set(\"currentMinSoc\", value);\n    if (!stormState.active) {\n        flow.set(\"baselineMinSoc\", value);\n    }\n} else if (topic.endsWith(\"/Hub4Mode\")) {\n    flow.set(\"currentHub4Mode\", value);\n    if (!stormState.active) {\n        flow.set(\"baselineHub4Mode\", value);\n    }\n} else {\n    return null;\n}\n\nmsg.payload = {\n    portalId: flow.get(\"portalId\"),\n    currentMinSoc: flow.get(\"currentMinSoc\"),\n    baselineMinSoc: flow.get(\"baselineMinSoc\"),\n    currentHub4Mode: flow.get(\"currentHub4Mode\"),\n    baselineHub4Mode: flow.get(\"baselineHub4Mode\"),\n    stormActive: stormState.active\n};\n\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 470,
+    "y": 360,
+    "wires": [
+      [
+        "6d8fb2815ff163f2"
+      ]
+    ]
+  },
+  {
+    "id": "6d8fb2815ff163f2",
+    "type": "debug",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Settings baseline debug",
+    "active": false,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 730,
+    "y": 360,
+    "wires": []
+  },
+  {
+    "id": "e9ff907bac83e710",
+    "type": "function",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Evaluate storm state & create commands",
+    "func": "const cfg = flow.get(\"stormConfig\") || {};\nconst now = Date.now();\n\nfunction toNumber(v) {\n    const n = Number(v);\n    return Number.isFinite(n) ? n : null;\n}\n\nfunction severityRank(sev) {\n    const map = {\n        unknown: 0,\n        minor: 1,\n        moderate: 2,\n        severe: 3,\n        extreme: 4\n    };\n    return map[String(sev || \"unknown\").toLowerCase()] ?? 0;\n}\n\nfunction watchEventMatches(event) {\n    const patterns = Array.isArray(cfg.watchEvents) ? cfg.watchEvents : [];\n    if (!patterns.length) return true;\n    const e = String(event || \"\").toLowerCase();\n    return patterns.some(p => e.includes(String(p || \"\").toLowerCase()));\n}\n\nfunction parsePoints(polyText) {\n    const points = [];\n    const re = /(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)/g;\n    let m;\n    while ((m = re.exec(String(polyText || \"\"))) !== null) {\n        const lat = Number(m[1]);\n        const lon = Number(m[2]);\n        if (Number.isFinite(lat) && Number.isFinite(lon)) {\n            points.push({ lat, lon });\n        }\n    }\n    return points;\n}\n\nfunction pointInPolygon(lat, lon, polygon) {\n    if (!Array.isArray(polygon) || polygon.length < 3) return false;\n    const x = lon;\n    const y = lat;\n    let inside = false;\n\n    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {\n        const xi = polygon[i].lon;\n        const yi = polygon[i].lat;\n        const xj = polygon[j].lon;\n        const yj = polygon[j].lat;\n\n        const intersect = ((yi > y) !== (yj > y)) &&\n            (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-12) + xi);\n        if (intersect) inside = !inside;\n    }\n\n    return inside;\n}\n\nfunction parseCircle(circleText) {\n    const nums = String(circleText || \"\").match(/-?\\d+(?:\\.\\d+)?/g);\n    if (!nums || nums.length < 3) return null;\n    const lat = Number(nums[0]);\n    const lon = Number(nums[1]);\n    const km = Number(nums[2]);\n    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(km)) return null;\n    return { lat, lon, km };\n}\n\nfunction distanceKm(lat1, lon1, lat2, lon2) {\n    const R = 6371;\n    const dLat = (lat2 - lat1) * Math.PI / 180;\n    const dLon = (lon2 - lon1) * Math.PI / 180;\n    const a =\n        Math.sin(dLat / 2) * Math.sin(dLat / 2) +\n        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *\n        Math.sin(dLon / 2) * Math.sin(dLon / 2);\n    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));\n    return R * c;\n}\n\nfunction isInAlertZone(alert, lat, lon) {\n    const polygons = Array.isArray(alert.polygons) ? alert.polygons : [];\n    for (const polyText of polygons) {\n        const pts = parsePoints(polyText);\n        if (pointInPolygon(lat, lon, pts)) return true;\n    }\n\n    const circles = Array.isArray(alert.circles) ? alert.circles : [];\n    for (const circleText of circles) {\n        const c = parseCircle(circleText);\n        if (!c) continue;\n        if (distanceKm(lat, lon, c.lat, c.lon) <= c.km) return true;\n    }\n\n    return false;\n}\n\nconst portalId = flow.get(\"portalId\") || cfg.portalId || null;\nconst gpsLat = toNumber(flow.get(\"gpsLat\"));\nconst gpsLon = toNumber(flow.get(\"gpsLon\"));\nconst homeLat = gpsLat ?? toNumber(cfg.homeLat);\nconst homeLon = gpsLon ?? toNumber(cfg.homeLon);\n\nconst stormState = flow.get(\"stormState\") || { active: false };\nconst minSeverity = severityRank(cfg.minSeverity || \"Severe\");\nconst alerts = (msg.payload && Array.isArray(msg.payload.alerts)) ? msg.payload.alerts : [];\n\nlet matched = [];\nif (homeLat !== null && homeLon !== null) {\n    matched = alerts.filter(a => {\n        const sev = severityRank(a.severity);\n        if (sev < minSeverity) return false;\n        if (!watchEventMatches(a.event || a.headline)) return false;\n\n        if (a.expires) {\n            const expiresTs = Date.parse(a.expires);\n            if (Number.isFinite(expiresTs) && expiresTs < now) return false;\n        }\n\n        return isInAlertZone(a, homeLat, homeLon);\n    });\n}\n\nconst shouldStorm = matched.length > 0;\n\nconst baselineMinSoc = toNumber(flow.get(\"baselineMinSoc\")) ?? toNumber(cfg.normalMinSoc) ?? 20;\nconst baselineHub4Mode = toNumber(flow.get(\"baselineHub4Mode\")) ?? toNumber(cfg.normalHub4Mode) ?? 1;\nconst stormMinSoc = toNumber(cfg.stormMinSoc) ?? 80;\nconst stormHub4Mode = toNumber(cfg.stormHub4Mode) ?? 3;\n\nfunction writeMsg(path, value, reason) {\n    return {\n        topic: `W/${portalId}${path}`,\n        payload: { value },\n        reason,\n        retain: false,\n        qos: 0\n    };\n}\n\nconst status = {\n    timestamp: new Date().toISOString(),\n    portalId,\n    homeLat,\n    homeLon,\n    alertCount: alerts.length,\n    matchedCount: matched.length,\n    matchedAlerts: matched.map(a => ({\n        event: a.event,\n        severity: a.severity,\n        expires: a.expires,\n        headline: a.headline\n    })),\n    previousState: stormState.active ? \"storm\" : \"normal\",\n    nextState: shouldStorm ? \"storm\" : \"normal\"\n};\n\nif (homeLat === null || homeLon === null) {\n    status.note = \"No location available (GPS or fixed homeLat/homeLon).\";\n    flow.set(\"stormState\", stormState);\n    return [null, status];\n}\n\nif (!portalId) {\n    status.note = \"No portalId found. Ensure MQTT topics are arriving or set stormConfig.portalId.\";\n    flow.set(\"stormState\", stormState);\n    return [null, status];\n}\n\nlet commandMsgs = null;\n\nif (shouldStorm && (!stormState.active || cfg.enforceWhileActive)) {\n    stormState.active = true;\n    stormState.lastChange = status.timestamp;\n    stormState.lastReason = \"storm_enter\";\n    commandMsgs = [\n        writeMsg(\"/settings/0/Settings/CGwacs/BatteryLife/MinimumSocLimit\", stormMinSoc, \"storm_enter_min_soc\"),\n        writeMsg(\"/settings/0/Settings/CGwacs/Hub4Mode\", stormHub4Mode, \"storm_enter_hub4_mode\")\n    ];\n    status.transition = \"storm_enter\";\n} else if (!shouldStorm && stormState.active) {\n    stormState.active = false;\n    stormState.lastChange = status.timestamp;\n    stormState.lastReason = \"storm_exit\";\n    commandMsgs = [\n        writeMsg(\"/settings/0/Settings/CGwacs/BatteryLife/MinimumSocLimit\", baselineMinSoc, \"storm_exit_restore_min_soc\"),\n        writeMsg(\"/settings/0/Settings/CGwacs/Hub4Mode\", baselineHub4Mode, \"storm_exit_restore_hub4_mode\")\n    ];\n    status.transition = \"storm_exit\";\n} else {\n    status.transition = \"no_change\";\n}\n\nflow.set(\"stormState\", stormState);\n\nreturn [commandMsgs, status];",
+    "outputs": 2,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1200,
+    "y": 180,
+    "wires": [
+      [
+        "0ce77ad5f0f2fd6c",
+        "b6a462cc5933acfc"
+      ],
+      [
+        "8f5a02d7f9bd2fbc"
+      ]
+    ]
+  },
+  {
+    "id": "0ce77ad5f0f2fd6c",
+    "type": "mqtt out",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Victron write settings",
+    "topic": "",
+    "qos": "",
+    "retain": "",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "56a4f8dfe3a11f6f",
+    "x": 1470,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "b6a462cc5933acfc",
+    "type": "debug",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Command debug",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1450,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "8f5a02d7f9bd2fbc",
+    "type": "debug",
+    "z": "b7f0e8d6a8a9c111",
+    "name": "Storm state debug",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "payload.transition",
+    "statusType": "msg",
+    "x": 1450,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "56a4f8dfe3a11f6f",
+    "type": "mqtt-broker",
+    "name": "Victron MQTT (localhost)",
+    "broker": "localhost",
+    "port": "1883",
+    "clientid": "",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true,
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthRetain": "false",
+    "birthPayload": "",
+    "birthMsg": {},
+    "closeTopic": "",
+    "closeQos": "0",
+    "closeRetain": "false",
+    "closePayload": "",
+    "closeMsg": {},
+    "willTopic": "",
+    "willQos": "0",
+    "willRetain": "false",
+    "willPayload": "",
+    "willMsg": {},
+    "userProps": "",
+    "sessionExpiry": ""
+  }
+]
