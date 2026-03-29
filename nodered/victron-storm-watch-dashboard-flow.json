@@ -1,0 +1,856 @@
+[
+  {
+    "id": "f6cf3f41548fa7cf",
+    "type": "tab",
+    "label": "Victron Storm Watch Dashboard",
+    "disabled": false,
+    "info": "Full storm controller + dashboard for Cerbo GX.\n\n- CAP polling\n- Geofence detection from CAP polygons/circles\n- ESS control (ForceCharge + MinimumSoc)\n- Dashboard map, status, settings, and manual override"
+  },
+  {
+    "id": "3a8a4426434f9f0e",
+    "type": "inject",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Poll CAP (every 5 min)",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "300",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "8",
+    "topic": "poll",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 120,
+    "wires": [
+      [
+        "d6369a5f21605706"
+      ]
+    ]
+  },
+  {
+    "id": "d6369a5f21605706",
+    "type": "function",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Load effective config",
+    "func": "const defaults = {\n    capFeedUrl: \"https://alerts.metservice.com/cap/rss\",\n    portalId: \"\",\n    home: { lat: null, lon: null, name: \"Home\" },\n    useVictronGps: true,\n    homeAreaKeywords: [],\n    matchAllWithoutGeometry: false,\n    leadMinutes: 30,\n    clearHoldMinutes: 60,\n    normalMinSoc: 20,\n    stormMinSoc: 80,\n    acceptedSeverities: [\"Moderate\", \"Severe\", \"Extreme\"],\n    stormKeywords: [\n        \"storm\",\n        \"thunderstorm\",\n        \"severe weather\",\n        \"heavy rain\",\n        \"flood\",\n        \"wind\",\n        \"gale\",\n        \"squall\",\n        \"cyclone\",\n        \"tornado\",\n        \"hail\",\n        \"snow\",\n        \"ice\"\n    ]\n};\n\nconst runtime = flow.get(\"stormConfigRuntime\") || {};\nconst cfg = {\n    ...defaults,\n    ...runtime,\n    home: {\n        ...defaults.home,\n        ...(runtime.home || {})\n    }\n};\n\ncfg.normalMinSoc = Math.round(Math.max(0, Math.min(100, Number(cfg.normalMinSoc) || 20)) / 5) * 5;\ncfg.stormMinSoc = Math.round(Math.max(0, Math.min(100, Number(cfg.stormMinSoc) || 80)) / 5) * 5;\n\nflow.set(\"stormConfig\", cfg);\nmsg.stormConfig = cfg;\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 120,
+    "wires": [
+      [
+        "7c628683d9583dbf"
+      ]
+    ]
+  },
+  {
+    "id": "7c628683d9583dbf",
+    "type": "function",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Build CAP request",
+    "func": "const cfg = msg.stormConfig || flow.get(\"stormConfig\") || {};\nconst capUrl = cfg.capFeedUrl || \"https://alerts.metservice.com/cap/rss\";\nmsg.method = \"GET\";\nmsg.url = `${capUrl}${capUrl.includes(\"?\") ? \"&\" : \"?\"}_ts=${Date.now()}`;\nmsg.headers = { \"User-Agent\": \"victron-storm-watch/2.0\" };\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 620,
+    "y": 120,
+    "wires": [
+      [
+        "fd3d6f560f81b257"
+      ]
+    ]
+  },
+  {
+    "id": "fd3d6f560f81b257",
+    "type": "http request",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Fetch CAP RSS",
+    "method": "use",
+    "ret": "txt",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 840,
+    "y": 120,
+    "wires": [
+      [
+        "75ffba7ee0d4e8e1"
+      ]
+    ]
+  },
+  {
+    "id": "75ffba7ee0d4e8e1",
+    "type": "xml",
+    "z": "f6cf3f41548fa7cf",
+    "name": "XML -> JS",
+    "property": "payload",
+    "attr": "",
+    "chr": "",
+    "x": 1020,
+    "y": 120,
+    "wires": [
+      [
+        "aab3678fe5ef6a6d"
+      ]
+    ]
+  },
+  {
+    "id": "aab3678fe5ef6a6d",
+    "type": "function",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Extract CAP alerts",
+    "func": "function asArray(v) {\n    if (v === undefined || v === null) return [];\n    return Array.isArray(v) ? v : [v];\n}\n\nfunction text(v) {\n    if (Array.isArray(v)) {\n        for (const i of v) {\n            const t = text(i);\n            if (t) return t;\n        }\n        return \"\";\n    }\n    if (typeof v === \"object\" && v !== null) {\n        if (v._ !== undefined) return String(v._).trim();\n        return \"\";\n    }\n    return String(v).trim();\n}\n\nconst p = msg.payload || {};\nlet items = [];\n\nif (p.rss && p.rss.channel) {\n    items = asArray((asArray(p.rss.channel)[0] || {}).item);\n} else if (p.feed && p.feed.entry) {\n    items = asArray(p.feed.entry);\n}\n\nmsg.alerts = items.map((item) => ({\n    title: text(item.title),\n    event: text(item[\"cap:event\"]) || text(item.title),\n    description: text(item.description) || text(item.summary),\n    severity: text(item[\"cap:severity\"]),\n    area: text(item[\"cap:areaDesc\"]) || text(item[\"cap:area\"]),\n    onset: text(item[\"cap:onset\"]),\n    effective: text(item[\"cap:effective\"]),\n    expires: text(item[\"cap:expires\"]),\n    pubDate: text(item.pubDate),\n    polygons: asArray(item[\"cap:polygon\"]).map(text).filter(Boolean),\n    circles: asArray(item[\"cap:circle\"]).map(text).filter(Boolean)\n}));\n\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1210,
+    "y": 120,
+    "wires": [
+      [
+        "788f21f0f0ffd4af"
+      ]
+    ]
+  },
+  {
+    "id": "788f21f0f0ffd4af",
+    "type": "function",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Evaluate alerts + geofence",
+    "func": "function asArray(v) {\n    if (v === undefined || v === null) return [];\n    return Array.isArray(v) ? v : [v];\n}\nfunction num(v) {\n    const n = Number(v);\n    return Number.isFinite(n) ? n : null;\n}\nfunction parseDateMs(v) {\n    if (!v) return null;\n    const ms = Date.parse(String(v).trim());\n    return Number.isFinite(ms) ? ms : null;\n}\nfunction parsePolygon(polyText) {\n    const points = [];\n    for (const pair of String(polyText || \"\").trim().split(/\\s+/)) {\n        if (!pair) continue;\n        const parts = pair.split(\",\");\n        if (parts.length !== 2) continue;\n        const lat = num(parts[0]);\n        const lon = num(parts[1]);\n        if (lat === null || lon === null) continue;\n        points.push([lat, lon]);\n    }\n    return points;\n}\nfunction pointInPolygon(lat, lon, points) {\n    let inside = false;\n    const x = lon;\n    const y = lat;\n    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {\n        const yi = points[i][0];\n        const xi = points[i][1];\n        const yj = points[j][0];\n        const xj = points[j][1];\n        const intersects = ((yi > y) !== (yj > y)) &&\n            (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-12) + xi);\n        if (intersects) inside = !inside;\n    }\n    return inside;\n}\nfunction parseCircle(circleText) {\n    const parts = String(circleText || \"\").trim().split(/\\s+/);\n    if (parts.length < 2) return null;\n    const center = parts[0].split(\",\");\n    if (center.length !== 2) return null;\n    const lat = num(center[0]);\n    const lon = num(center[1]);\n    const radiusKm = num(parts[1]);\n    if (lat === null || lon === null || radiusKm === null || radiusKm < 0) return null;\n    return { lat, lon, radiusKm };\n}\nfunction haversineKm(lat1, lon1, lat2, lon2) {\n    const toRad = (d) => d * Math.PI / 180;\n    const R = 6371;\n    const dLat = toRad(lat2 - lat1);\n    const dLon = toRad(lon2 - lon1);\n    const a = Math.sin(dLat / 2) ** 2 +\n        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;\n    return 2 * R * Math.asin(Math.sqrt(a));\n}\n\nconst cfg = msg.stormConfig || flow.get(\"stormConfig\") || {};\nconst now = Date.now();\nconst leadMs = Math.max(0, (num(cfg.leadMinutes) || 0) * 60000);\nconst holdMs = Math.max(0, (num(cfg.clearHoldMinutes) || 0) * 60000);\n\nconst gpsLat = num(flow.get(\"gpsLatitude\"));\nconst gpsLon = num(flow.get(\"gpsLongitude\"));\nconst cfgLat = num((cfg.home || {}).lat);\nconst cfgLon = num((cfg.home || {}).lon);\n\nlet homeLat = cfgLat;\nlet homeLon = cfgLon;\nlet homeSource = \"config\";\nif (cfg.useVictronGps && gpsLat !== null && gpsLon !== null) {\n    homeLat = gpsLat;\n    homeLon = gpsLon;\n    homeSource = \"victron-gps\";\n}\nconst hasHome = homeLat !== null && homeLon !== null;\n\nconst acceptedSeverity = new Set(asArray(cfg.acceptedSeverities).map((s) => String(s).toLowerCase()));\nconst stormKeywords = asArray(cfg.stormKeywords).map((s) => String(s).toLowerCase()).filter(Boolean);\nconst areaKeywords = asArray(cfg.homeAreaKeywords).map((s) => String(s).toLowerCase()).filter(Boolean);\n\nconst matched = [];\nfor (const a of asArray(msg.alerts)) {\n    const searchable = `${a.event || \"\"} ${a.title || \"\"} ${a.description || \"\"}`.toLowerCase();\n    if (stormKeywords.length && !stormKeywords.some((k) => searchable.includes(k))) continue;\n\n    const severity = String(a.severity || \"\").toLowerCase();\n    if (acceptedSeverity.size && !acceptedSeverity.has(severity)) continue;\n\n    const onsetMs = parseDateMs(a.onset) || parseDateMs(a.effective);\n    const effectiveMs = parseDateMs(a.effective);\n    const expiresMs = parseDateMs(a.expires) || parseDateMs(a.pubDate);\n    const startsMs = onsetMs || effectiveMs || now;\n\n    if (startsMs - leadMs > now) continue;\n    if (expiresMs !== null && expiresMs < now) continue;\n\n    let inZone = false;\n    let zoneType = \"none\";\n    const parsedPolygons = [];\n    const parsedCircles = [];\n\n    if (hasHome) {\n        for (const polyText of asArray(a.polygons)) {\n            const pts = parsePolygon(polyText);\n            if (pts.length >= 3) {\n                parsedPolygons.push(pts);\n                if (!inZone && pointInPolygon(homeLat, homeLon, pts)) {\n                    inZone = true;\n                    zoneType = \"polygon\";\n                }\n            }\n        }\n        for (const circleText of asArray(a.circles)) {\n            const c = parseCircle(circleText);\n            if (!c) continue;\n            parsedCircles.push(c);\n            if (!inZone && haversineKm(homeLat, homeLon, c.lat, c.lon) <= c.radiusKm) {\n                inZone = true;\n                zoneType = \"circle\";\n            }\n        }\n    }\n\n    if (!inZone && areaKeywords.length) {\n        const areaNorm = String(a.area || \"\").toLowerCase();\n        if (areaKeywords.some((k) => areaNorm.includes(k))) {\n            inZone = true;\n            zoneType = \"area-keyword\";\n        }\n    }\n\n    if (!inZone && cfg.matchAllWithoutGeometry && (!a.polygons || !a.polygons.length) && (!a.circles || !a.circles.length)) {\n        inZone = true;\n        zoneType = \"no-geometry-fallback\";\n    }\n\n    if (!inZone) continue;\n\n    matched.push({\n        title: a.title,\n        event: a.event,\n        severity: a.severity || \"Unknown\",\n        area: a.area,\n        zoneType,\n        startsAt: startsMs ? new Date(startsMs).toISOString() : null,\n        expiresAt: expiresMs ? new Date(expiresMs).toISOString() : null,\n        expiresTs: expiresMs,\n        polygons: parsedPolygons,\n        circles: parsedCircles\n    });\n}\n\nlet holdUntil = num(flow.get(\"stormHoldUntil\")) || 0;\nlet shouldProtect = matched.length > 0;\nlet reason = shouldProtect ? \"active-alert\" : \"clear\";\n\nif (shouldProtect) {\n    let furthestExpiry = 0;\n    for (const m of matched) {\n        if (m.expiresTs && m.expiresTs > furthestExpiry) furthestExpiry = m.expiresTs;\n    }\n    holdUntil = (furthestExpiry || now) + holdMs;\n    flow.set(\"stormHoldUntil\", holdUntil);\n} else if (holdUntil > now) {\n    shouldProtect = true;\n    reason = \"hold-timer\";\n} else {\n    flow.set(\"stormHoldUntil\", 0);\n}\n\nconst manualMode = String(flow.get(\"stormManualMode\") || \"auto\");\nif (manualMode === \"force_on\") {\n    shouldProtect = true;\n    reason = \"manual-force-on\";\n} else if (manualMode === \"force_off\") {\n    shouldProtect = false;\n    reason = \"manual-force-off\";\n}\n\nconst discoveredPortalId = flow.get(\"portalId\") || \"\";\nconst portalId = cfg.portalId || discoveredPortalId;\n\nmsg.stormWatch = {\n    timestamp: new Date(now).toISOString(),\n    shouldProtect,\n    reason,\n    matchedCount: matched.length,\n    matchedAlerts: matched.slice(0, 10),\n    holdUntil: holdUntil ? new Date(holdUntil).toISOString() : null,\n    portalId: portalId || null,\n    home: {\n        lat: homeLat,\n        lon: homeLon,\n        source: hasHome ? homeSource : \"missing\"\n    },\n    control: {\n        normalMinSoc: cfg.normalMinSoc,\n        stormMinSoc: cfg.stormMinSoc\n    },\n    manualMode\n};\n\nif (!hasHome) {\n    msg.stormWatch.warning = \"Home location is missing. Configure home lat/lon or provide Victron GPS.\";\n}\n\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1420,
+    "y": 120,
+    "wires": [
+      [
+        "8f7d39c82e8b4e88",
+        "fd9660333cf5af96"
+      ]
+    ]
+  },
+  {
+    "id": "8f7d39c82e8b4e88",
+    "type": "function",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Set ForceCharge + MinimumSoc (state changes only)",
+    "func": "const info = msg.stormWatch || {};\nconst prev = !!flow.get(\"stormProtectActive\");\nconst next = !!info.shouldProtect;\nconst portalId = info.portalId || flow.get(\"portalId\") || \"\";\n\nfunction clampSocStep5(v, fallback) {\n    const n = Number(v);\n    const base = Number.isFinite(n) ? n : fallback;\n    const clipped = Math.max(0, Math.min(100, base));\n    return Math.round(clipped / 5) * 5;\n}\n\nconst normalMinSoc = clampSocStep5(info.control && info.control.normalMinSoc, 20);\nconst stormMinSoc = clampSocStep5(info.control && info.control.stormMinSoc, 80);\n\nfunction settingMsg(path, value) {\n    return {\n        topic: `W/${portalId}/settings/0/${path}`,\n        payload: JSON.stringify({ value })\n    };\n}\n\nif (!portalId) {\n    return [null, { payload: { level: \"warn\", text: \"Portal ID unknown; waiting for N/<portalId>/... topics\", stormWatch: info } }];\n}\n\nif (next && !prev) {\n    flow.set(\"stormProtectActive\", true);\n    return [[\n        settingMsg(\"Settings/CGwacs/BatteryLife/MinimumSocLimit\", stormMinSoc),\n        settingMsg(\"Settings/CGwacs/BatteryLife/ForceCharge\", 1)\n    ], { payload: { level: \"info\", text: `Storm protection ENABLED (${stormMinSoc}%)`, stormWatch: info } }];\n}\n\nif (!next && prev) {\n    flow.set(\"stormProtectActive\", false);\n    return [[\n        settingMsg(\"Settings/CGwacs/BatteryLife/ForceCharge\", 0),\n        settingMsg(\"Settings/CGwacs/BatteryLife/MinimumSocLimit\", normalMinSoc)\n    ], { payload: { level: \"info\", text: `Storm protection DISABLED (${normalMinSoc}%)`, stormWatch: info } }];\n}\n\nreturn [null, { payload: { level: \"debug\", text: \"No ESS setting change\", stormWatch: info } }];",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1740,
+    "y": 100,
+    "wires": [
+      [
+        "a4ab44ecf58f6191"
+      ],
+      [
+        "8c6c36ff1d8f2552"
+      ]
+    ]
+  },
+  {
+    "id": "a4ab44ecf58f6191",
+    "type": "mqtt out",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Victron MQTT settings writes",
+    "topic": "",
+    "qos": "1",
+    "retain": "false",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "f57ceac00e0c4a4a",
+    "x": 2070,
+    "y": 80,
+    "wires": []
+  },
+  {
+    "id": "8c6c36ff1d8f2552",
+    "type": "debug",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Controller events",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 2050,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "fd9660333cf5af96",
+    "type": "function",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Build dashboard messages",
+    "func": "const sw = msg.stormWatch || {};\nconst cfg = flow.get(\"stormConfig\") || {};\nconst manualMode = sw.manualMode || flow.get(\"stormManualMode\") || \"auto\";\n\nconst home = sw.home || {};\nconst homeStr = (home.lat !== null && home.lat !== undefined && home.lon !== null && home.lon !== undefined)\n    ? `${Number(home.lat).toFixed(5)}, ${Number(home.lon).toFixed(5)} (${home.source || \"unknown\"})`\n    : \"Home location missing\";\n\nconst settingsPreset = {\n    capFeedUrl: cfg.capFeedUrl || \"\",\n    homeLat: (cfg.home && cfg.home.lat !== null && cfg.home.lat !== undefined) ? String(cfg.home.lat) : \"\",\n    homeLon: (cfg.home && cfg.home.lon !== null && cfg.home.lon !== undefined) ? String(cfg.home.lon) : \"\",\n    normalMinSoc: cfg.normalMinSoc || 20,\n    stormMinSoc: cfg.stormMinSoc || 80,\n    leadMinutes: cfg.leadMinutes || 30,\n    clearHoldMinutes: cfg.clearHoldMinutes || 60,\n    acceptedSeverities: (cfg.acceptedSeverities || []).join(\", \"),\n    stormKeywords: (cfg.stormKeywords || []).join(\", \"),\n    homeAreaKeywords: (cfg.homeAreaKeywords || []).join(\", \"),\n    useVictronGps: String(!!cfg.useVictronGps),\n    matchAllWithoutGeometry: String(!!cfg.matchAllWithoutGeometry)\n};\n\nreturn [\n    { payload: sw.shouldProtect ? \"PROTECT ACTIVE\" : \"NORMAL\" },\n    { payload: sw.reason || \"-\" },\n    { payload: String(sw.matchedCount || 0) },\n    { payload: homeStr },\n    { payload: sw.holdUntil || \"-\" },\n    { payload: sw.portalId || flow.get(\"portalId\") || \"(discovering)\" },\n    { payload: { home: sw.home || {}, alerts: sw.matchedAlerts || [] } },\n    { payload: { alerts: sw.matchedAlerts || [] } },\n    { payload: settingsPreset },\n    { payload: manualMode }\n];",
+    "outputs": 10,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1750,
+    "y": 240,
+    "wires": [
+      [
+        "1c68af777b0f2f9e"
+      ],
+      [
+        "1165f262d95f2f35"
+      ],
+      [
+        "50c5fb20f6959f2c"
+      ],
+      [
+        "1c86e1c8225dfe10"
+      ],
+      [
+        "6f5d5d0bf57e4aac"
+      ],
+      [
+        "0bad6b8933fe22bb"
+      ],
+      [
+        "50d84a80e3155d0b"
+      ],
+      [
+        "a0e8d5336e6f4955"
+      ],
+      [
+        "f9f495adcbfaec48"
+      ],
+      [
+        "c807f8a55b66b68d"
+      ]
+    ]
+  },
+  {
+    "id": "1d80f6e5b1be43f8",
+    "type": "comment",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Telemetry listeners (portal ID, GPS, SOC)",
+    "info": "",
+    "x": 250,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "12bd66f8e15399f3",
+    "type": "mqtt in",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Battery SoC",
+    "topic": "N/+/battery/+/Soc",
+    "qos": "1",
+    "datatype": "auto-detect",
+    "broker": "f57ceac00e0c4a4a",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 130,
+    "y": 380,
+    "wires": [
+      [
+        "0fd7cf00a5090ec5"
+      ]
+    ]
+  },
+  {
+    "id": "0fd7cf00a5090ec5",
+    "type": "function",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Store portal ID + SOC",
+    "func": "const t = String(msg.topic || \"\");\nconst m = t.match(/^N\\/([^/]+)\\//);\nif (m) flow.set(\"portalId\", m[1]);\n\nlet value = msg.payload;\nif (value && typeof value === \"object\" && value.value !== undefined) value = value.value;\nconst soc = Number(value);\nif (Number.isFinite(soc)) flow.set(\"batterySoc\", soc);\nreturn null;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 370,
+    "y": 380,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "9e2f31e4e2be44cf",
+    "type": "mqtt in",
+    "z": "f6cf3f41548fa7cf",
+    "name": "System GPS",
+    "topic": "N/+/system/0/Gps/#",
+    "qos": "1",
+    "datatype": "auto-detect",
+    "broker": "f57ceac00e0c4a4a",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 120,
+    "y": 440,
+    "wires": [
+      [
+        "f0e6daf04ece5ff7"
+      ]
+    ]
+  },
+  {
+    "id": "f922d1cb5dd35f5e",
+    "type": "mqtt in",
+    "z": "f6cf3f41548fa7cf",
+    "name": "GPS service (alt path)",
+    "topic": "N/+/gps/+/#",
+    "qos": "1",
+    "datatype": "auto-detect",
+    "broker": "f57ceac00e0c4a4a",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 150,
+    "y": 500,
+    "wires": [
+      [
+        "f0e6daf04ece5ff7"
+      ]
+    ]
+  },
+  {
+    "id": "f0e6daf04ece5ff7",
+    "type": "function",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Store GPS lat/lon + portal ID",
+    "func": "const t = String(msg.topic || \"\");\nconst m = t.match(/^N\\/([^/]+)\\//);\nif (m) flow.set(\"portalId\", m[1]);\n\nlet value = msg.payload;\nif (value && typeof value === \"object\" && value.value !== undefined) value = value.value;\n\nfunction setIfFinite(key, v) {\n    const n = Number(v);\n    if (Number.isFinite(n)) {\n        flow.set(key, n);\n        return true;\n    }\n    return false;\n}\n\nconst tl = t.toLowerCase();\nif (tl.endsWith(\"/latitude\") || tl.endsWith(\"/lat\")) setIfFinite(\"gpsLatitude\", value);\nif (tl.endsWith(\"/longitude\") || tl.endsWith(\"/lon\") || tl.endsWith(\"/lng\")) setIfFinite(\"gpsLongitude\", value);\n\nif (value && typeof value === \"object\") {\n    setIfFinite(\"gpsLatitude\", value.latitude);\n    setIfFinite(\"gpsLatitude\", value.lat);\n    setIfFinite(\"gpsLongitude\", value.longitude);\n    setIfFinite(\"gpsLongitude\", value.lon);\n    setIfFinite(\"gpsLongitude\", value.lng);\n}\n\nreturn null;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 470,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "3935f3b49372f804",
+    "type": "comment",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Dashboard controls",
+    "info": "",
+    "x": 170,
+    "y": 620,
+    "wires": []
+  },
+  {
+    "id": "f9f495adcbfaec48",
+    "type": "ui_form",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Storm settings",
+    "label": "Controller settings",
+    "group": "84749ddcd85af323",
+    "order": 2,
+    "width": "12",
+    "height": "8",
+    "options": [
+      {
+        "label": "CAP feed URL",
+        "value": "capFeedUrl",
+        "type": "text",
+        "required": true
+      },
+      {
+        "label": "Home latitude",
+        "value": "homeLat",
+        "type": "text",
+        "required": false
+      },
+      {
+        "label": "Home longitude",
+        "value": "homeLon",
+        "type": "text",
+        "required": false
+      },
+      {
+        "label": "Normal MinSoC",
+        "value": "normalMinSoc",
+        "type": "number",
+        "required": true
+      },
+      {
+        "label": "Storm MinSoC",
+        "value": "stormMinSoc",
+        "type": "number",
+        "required": true
+      },
+      {
+        "label": "Lead minutes",
+        "value": "leadMinutes",
+        "type": "number",
+        "required": true
+      },
+      {
+        "label": "Clear hold minutes",
+        "value": "clearHoldMinutes",
+        "type": "number",
+        "required": true
+      },
+      {
+        "label": "Accepted severities (CSV)",
+        "value": "acceptedSeverities",
+        "type": "text",
+        "required": false
+      },
+      {
+        "label": "Storm keywords (CSV)",
+        "value": "stormKeywords",
+        "type": "text",
+        "required": false
+      },
+      {
+        "label": "Area keywords (CSV)",
+        "value": "homeAreaKeywords",
+        "type": "text",
+        "required": false
+      },
+      {
+        "label": "Use Victron GPS (true/false)",
+        "value": "useVictronGps",
+        "type": "text",
+        "required": true
+      },
+      {
+        "label": "Match all without geometry (true/false)",
+        "value": "matchAllWithoutGeometry",
+        "type": "text",
+        "required": true
+      }
+    ],
+    "formValue": {
+      "capFeedUrl": "https://alerts.metservice.com/cap/rss",
+      "normalMinSoc": 20,
+      "stormMinSoc": 80,
+      "leadMinutes": 30,
+      "clearHoldMinutes": 60,
+      "acceptedSeverities": "Moderate, Severe, Extreme",
+      "stormKeywords": "storm, thunderstorm, severe weather, heavy rain, flood, wind",
+      "homeAreaKeywords": "",
+      "useVictronGps": "true",
+      "matchAllWithoutGeometry": "false"
+    },
+    "payload": "",
+    "submit": "Apply",
+    "cancel": "Reset",
+    "topic": "ui/settings",
+    "topicType": "str",
+    "splitLayout": false,
+    "className": "",
+    "x": 1820,
+    "y": 620,
+    "wires": [
+      [
+        "9ef14c83e8f65858"
+      ]
+    ]
+  },
+  {
+    "id": "9ef14c83e8f65858",
+    "type": "function",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Apply settings + trigger poll",
+    "func": "const input = msg.payload || {};\nconst runtime = flow.get(\"stormConfigRuntime\") || {};\n\nfunction numOr(v, fallback) {\n    const n = Number(v);\n    return Number.isFinite(n) ? n : fallback;\n}\nfunction csv(v) {\n    return String(v || \"\").split(\",\").map((s) => s.trim()).filter(Boolean);\n}\nfunction asBool(v, fallback) {\n    const s = String(v).trim().toLowerCase();\n    if (s === \"true\" || s === \"1\" || s === \"yes\" || s === \"on\") return true;\n    if (s === \"false\" || s === \"0\" || s === \"no\" || s === \"off\") return false;\n    return fallback;\n}\n\nruntime.capFeedUrl = String(input.capFeedUrl || runtime.capFeedUrl || \"https://alerts.metservice.com/cap/rss\").trim();\nruntime.home = runtime.home || {};\n\nconst homeLat = String(input.homeLat || \"\").trim();\nconst homeLon = String(input.homeLon || \"\").trim();\nruntime.home.lat = homeLat === \"\" ? null : numOr(homeLat, null);\nruntime.home.lon = homeLon === \"\" ? null : numOr(homeLon, null);\n\nruntime.normalMinSoc = Math.round(Math.max(0, Math.min(100, numOr(input.normalMinSoc, runtime.normalMinSoc || 20))) / 5) * 5;\nruntime.stormMinSoc = Math.round(Math.max(0, Math.min(100, numOr(input.stormMinSoc, runtime.stormMinSoc || 80))) / 5) * 5;\nruntime.leadMinutes = Math.max(0, Math.floor(numOr(input.leadMinutes, runtime.leadMinutes || 30)));\nruntime.clearHoldMinutes = Math.max(0, Math.floor(numOr(input.clearHoldMinutes, runtime.clearHoldMinutes || 60)));\nruntime.acceptedSeverities = csv(input.acceptedSeverities);\nruntime.stormKeywords = csv(input.stormKeywords);\nruntime.homeAreaKeywords = csv(input.homeAreaKeywords);\nruntime.useVictronGps = asBool(input.useVictronGps, true);\nruntime.matchAllWithoutGeometry = asBool(input.matchAllWithoutGeometry, false);\n\nflow.set(\"stormConfigRuntime\", runtime);\n\nreturn [\n    { topic: \"poll\", payload: Date.now() },\n    { payload: `Storm settings saved. MinSoC normal/storm: ${runtime.normalMinSoc}/${runtime.stormMinSoc}` }\n];",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 2100,
+    "y": 620,
+    "wires": [
+      [
+        "d6369a5f21605706"
+      ],
+      [
+        "02f995a2df4a9ad2"
+      ]
+    ]
+  },
+  {
+    "id": "c807f8a55b66b68d",
+    "type": "ui_dropdown",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Manual override",
+    "label": "Manual override",
+    "tooltip": "",
+    "place": "Select mode",
+    "group": "84749ddcd85af323",
+    "order": 1,
+    "width": "6",
+    "height": "1",
+    "passthru": false,
+    "multiple": false,
+    "options": [
+      {
+        "label": "Auto",
+        "value": "auto",
+        "type": "str"
+      },
+      {
+        "label": "Force ON",
+        "value": "force_on",
+        "type": "str"
+      },
+      {
+        "label": "Force OFF",
+        "value": "force_off",
+        "type": "str"
+      }
+    ],
+    "payload": "",
+    "topic": "ui/manual",
+    "topicType": "str",
+    "className": "",
+    "x": 1810,
+    "y": 560,
+    "wires": [
+      [
+        "ac1672388ef4de0f"
+      ]
+    ]
+  },
+  {
+    "id": "ac1672388ef4de0f",
+    "type": "function",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Apply manual override + trigger poll",
+    "func": "const mode = String(msg.payload || \"auto\");\nflow.set(\"stormManualMode\", mode);\nreturn [\n    { topic: \"poll\", payload: Date.now() },\n    { payload: `Manual override set to: ${mode}` }\n];",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 2100,
+    "y": 560,
+    "wires": [
+      [
+        "d6369a5f21605706"
+      ],
+      [
+        "02f995a2df4a9ad2"
+      ]
+    ]
+  },
+  {
+    "id": "3fbf1560ac6ece76",
+    "type": "ui_button",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Run now",
+    "group": "84749ddcd85af323",
+    "order": 0,
+    "width": "6",
+    "height": "1",
+    "passthru": false,
+    "label": "Run check now",
+    "tooltip": "",
+    "color": "",
+    "bgcolor": "",
+    "icon": "refresh",
+    "payload": "",
+    "payloadType": "date",
+    "topic": "poll",
+    "topicType": "str",
+    "x": 1800,
+    "y": 520,
+    "wires": [
+      [
+        "d6369a5f21605706"
+      ]
+    ]
+  },
+  {
+    "id": "02f995a2df4a9ad2",
+    "type": "ui_toast",
+    "z": "f6cf3f41548fa7cf",
+    "position": "top right",
+    "displayTime": "4",
+    "highlight": "",
+    "sendall": true,
+    "outputs": 0,
+    "ok": "OK",
+    "cancel": "",
+    "raw": false,
+    "topic": "",
+    "name": "Dashboard notices",
+    "x": 2350,
+    "y": 600,
+    "wires": []
+  },
+  {
+    "id": "1c68af777b0f2f9e",
+    "type": "ui_text",
+    "z": "f6cf3f41548fa7cf",
+    "group": "9f4b812a8429f952",
+    "order": 1,
+    "width": "3",
+    "height": "1",
+    "name": "Mode",
+    "label": "Mode",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "x": 2060,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "1165f262d95f2f35",
+    "type": "ui_text",
+    "z": "f6cf3f41548fa7cf",
+    "group": "9f4b812a8429f952",
+    "order": 2,
+    "width": "3",
+    "height": "1",
+    "name": "Reason",
+    "label": "Reason",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "x": 2060,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "50c5fb20f6959f2c",
+    "type": "ui_text",
+    "z": "f6cf3f41548fa7cf",
+    "group": "9f4b812a8429f952",
+    "order": 3,
+    "width": "3",
+    "height": "1",
+    "name": "Matched",
+    "label": "Matched alerts",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "x": 2070,
+    "y": 300,
+    "wires": []
+  },
+  {
+    "id": "1c86e1c8225dfe10",
+    "type": "ui_text",
+    "z": "f6cf3f41548fa7cf",
+    "group": "9f4b812a8429f952",
+    "order": 4,
+    "width": "12",
+    "height": "1",
+    "name": "Home",
+    "label": "Home",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "x": 2060,
+    "y": 340,
+    "wires": []
+  },
+  {
+    "id": "6f5d5d0bf57e4aac",
+    "type": "ui_text",
+    "z": "f6cf3f41548fa7cf",
+    "group": "9f4b812a8429f952",
+    "order": 5,
+    "width": "6",
+    "height": "1",
+    "name": "Hold until",
+    "label": "Hold until",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "x": 2080,
+    "y": 380,
+    "wires": []
+  },
+  {
+    "id": "0bad6b8933fe22bb",
+    "type": "ui_text",
+    "z": "f6cf3f41548fa7cf",
+    "group": "9f4b812a8429f952",
+    "order": 6,
+    "width": "6",
+    "height": "1",
+    "name": "Portal ID",
+    "label": "Portal ID",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "className": "",
+    "x": 2070,
+    "y": 420,
+    "wires": []
+  },
+  {
+    "id": "50d84a80e3155d0b",
+    "type": "ui_template",
+    "z": "f6cf3f41548fa7cf",
+    "group": "ce88ceb4c2665327",
+    "name": "Storm map",
+    "order": 1,
+    "width": "12",
+    "height": "10",
+    "format": "<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\" />\n<div id=\"storm-map-{{$id}}\" style=\"height: 360px; border: 1px solid #333; border-radius: 6px;\"></div>\n<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>\n<script>\n(function(scope) {\n    const mapId = 'storm-map-' + scope.$id;\n    let map;\n    let layer;\n    let homeMarker;\n\n    function initMap() {\n        if (!window.L) return;\n        if (!map) {\n            map = L.map(mapId).setView([0, 0], 5);\n            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {\n                maxZoom: 18,\n                attribution: '&copy; OpenStreetMap contributors'\n            }).addTo(map);\n            layer = L.layerGroup().addTo(map);\n            setTimeout(function() { map.invalidateSize(); }, 250);\n        }\n    }\n\n    function render(data) {\n        initMap();\n        if (!map || !layer) return;\n        layer.clearLayers();\n\n        const hasHome = data && data.home && Number.isFinite(Number(data.home.lat)) && Number.isFinite(Number(data.home.lon));\n        if (hasHome) {\n            const lat = Number(data.home.lat);\n            const lon = Number(data.home.lon);\n            homeMarker = L.marker([lat, lon]).addTo(layer).bindPopup('Home');\n            map.setView([lat, lon], 8);\n        }\n\n        const alerts = (data && data.alerts) || [];\n        alerts.forEach(function(a) {\n            (a.polygons || []).forEach(function(poly) {\n                if (Array.isArray(poly) && poly.length >= 3) {\n                    L.polygon(poly, { color: '#d32f2f', weight: 2, fillOpacity: 0.15 }).addTo(layer)\n                        .bindPopup((a.event || a.title || 'Alert') + ' (' + (a.severity || 'Unknown') + ')');\n                }\n            });\n            (a.circles || []).forEach(function(c) {\n                if (Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lon)) && Number.isFinite(Number(c.radiusKm))) {\n                    L.circle([Number(c.lat), Number(c.lon)], {\n                        radius: Number(c.radiusKm) * 1000,\n                        color: '#ff9800',\n                        weight: 2,\n                        fillOpacity: 0.12\n                    }).addTo(layer).bindPopup((a.event || a.title || 'Alert') + ' (' + (a.severity || 'Unknown') + ')');\n                }\n            });\n        });\n\n        if (layer.getLayers().length > 1) {\n            const bounds = layer.getBounds();\n            if (bounds.isValid()) {\n                map.fitBounds(bounds.pad(0.2));\n            }\n        }\n    }\n\n    scope.$watch('msg', function(msg) {\n        if (msg && msg.payload) {\n            render(msg.payload);\n        }\n    });\n})(scope);\n</script>",
+    "storeOutMessages": true,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 2060,
+    "y": 460,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "a0e8d5336e6f4955",
+    "type": "ui_template",
+    "z": "f6cf3f41548fa7cf",
+    "group": "6b938fd4cec85f6b",
+    "name": "Alerts list",
+    "order": 1,
+    "width": "12",
+    "height": "8",
+    "format": "<div ng-if=\"!msg.payload || !msg.payload.alerts || !msg.payload.alerts.length\" style=\"padding:8px;\">No active matching storm alerts.</div>\n<div ng-if=\"msg.payload && msg.payload.alerts && msg.payload.alerts.length\" style=\"padding:8px; overflow:auto; max-height:300px;\">\n  <table style=\"width:100%; border-collapse:collapse; font-size:12px;\">\n    <thead>\n      <tr>\n        <th style=\"text-align:left; border-bottom:1px solid #666;\">Event</th>\n        <th style=\"text-align:left; border-bottom:1px solid #666;\">Severity</th>\n        <th style=\"text-align:left; border-bottom:1px solid #666;\">Area</th>\n        <th style=\"text-align:left; border-bottom:1px solid #666;\">Expires</th>\n      </tr>\n    </thead>\n    <tbody>\n      <tr ng-repeat=\"a in msg.payload.alerts\">\n        <td style=\"padding:4px; border-bottom:1px solid #333;\">{{a.event || a.title}}</td>\n        <td style=\"padding:4px; border-bottom:1px solid #333;\">{{a.severity}}</td>\n        <td style=\"padding:4px; border-bottom:1px solid #333;\">{{a.area}}</td>\n        <td style=\"padding:4px; border-bottom:1px solid #333;\">{{a.expiresAt || '-'}} </td>\n      </tr>\n    </tbody>\n  </table>\n</div>",
+    "storeOutMessages": true,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 2060,
+    "y": 500,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "f57ceac00e0c4a4a",
+    "type": "mqtt-broker",
+    "name": "Cerbo local MQTT",
+    "broker": "127.0.0.1",
+    "port": "1883",
+    "clientid": "nodered-storm-watch-dashboard",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true,
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthRetain": "false",
+    "birthPayload": "",
+    "birthMsg": {},
+    "closeTopic": "",
+    "closeQos": "0",
+    "closeRetain": "false",
+    "closePayload": "",
+    "closeMsg": {},
+    "willTopic": "",
+    "willQos": "0",
+    "willRetain": "false",
+    "willPayload": "",
+    "willMsg": {},
+    "userProps": "",
+    "sessionExpiry": ""
+  },
+  {
+    "id": "1062e7df28f4d8e0",
+    "type": "ui_tab",
+    "name": "Storm Watch",
+    "icon": "warning",
+    "order": 8,
+    "disabled": false,
+    "hidden": false
+  },
+  {
+    "id": "9f4b812a8429f952",
+    "type": "ui_group",
+    "name": "Status",
+    "tab": "1062e7df28f4d8e0",
+    "order": 1,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "84749ddcd85af323",
+    "type": "ui_group",
+    "name": "Controls & Settings",
+    "tab": "1062e7df28f4d8e0",
+    "order": 2,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "ce88ceb4c2665327",
+    "type": "ui_group",
+    "name": "Map",
+    "tab": "1062e7df28f4d8e0",
+    "order": 3,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  },
+  {
+    "id": "6b938fd4cec85f6b",
+    "type": "ui_group",
+    "name": "Matching Alerts",
+    "tab": "1062e7df28f4d8e0",
+    "order": 4,
+    "disp": true,
+    "width": "12",
+    "collapse": false,
+    "className": ""
+  }
+]

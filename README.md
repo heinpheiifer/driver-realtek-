@@ -1,101 +1,172 @@
-# Victron Cerbo GX Storm Watch Controller (Node-RED)
+# Victron Cerbo GX Storm Watch Controller
 
-This project provides a Node-RED flow for **Victron Cerbo GX / Venus OS** that:
+This repository now includes **two implementations**:
 
-1. Polls a CAP (Common Alerting Protocol) weather-alert feed (default: MetService NZ),
-2. Matches alerts against your installation location (GPS or configured home lat/lon),
-3. If your location is in an affected zone, automatically:
-   - enables ESS force charging, and
-   - raises ESS Minimum SOC,
-4. Keeps protection active until alerts clear (plus hold timer),
-5. Restores normal ESS settings when storm risk has passed.
+1. **Python daemon for Venus OS** (recommended for always-on control)
+2. **Node-RED flows**:
+   - headless controller flow
+   - full dashboard flow (map + settings + manual override)
+
+Both options do the same core job:
+
+- Poll CAP weather alerts (default MetService NZ),
+- match alerts to your installation location (GPS or fixed home lat/lon),
+- when you are in an affected zone:
+  - set ESS `ForceCharge = 1`
+  - raise `MinimumSocLimit` to storm reserve,
+- when alerts pass (and hold timer expires):
+  - set `ForceCharge = 0`
+  - restore normal `MinimumSocLimit`.
 
 ---
 
-## What is included
+## Included files
 
-- `nodered/victron-storm-watch-flow.json`  
-  Import this flow into Node-RED on Cerbo GX.
+### Python (Venus OS service)
+
+- `stormwatch-python/stormwatchd.py` - main daemon
+- `stormwatch-python/config.example.json` - editable config
+- `stormwatch-python/install.sh` - installs to `/data/stormwatch` + autostart hook
+- `stormwatch-python/start-stormwatch.sh` - runner script
+
+### Node-RED
+
+- `nodered/victron-storm-watch-flow.json` - controller-only flow
+- `nodered/victron-storm-watch-dashboard-flow.json` - dashboard flow
 
 ---
 
 ## Requirements
 
-- Victron Cerbo GX (or another GX device) running Venus OS with Node-RED available.
-- Local MQTT enabled on GX device.
-- ESS configured on MultiPlus/Quattro (for `MinimumSocLimit` and `ForceCharge` settings).
-- Internet access from GX to fetch CAP feed.
+- Victron Cerbo GX / Venus OS
+- Local MQTT enabled
+- ESS configured on MultiPlus/Quattro
+- Internet access for CAP feed
+
+For dashboard flow:
+
+- Node-RED dashboard packages compatible with your Node-RED install.
+- For map display, install `node-red-contrib-web-worldmap`.
 
 ---
 
-## Install and import
+## Option A: Python daemon on Venus OS (recommended)
 
-1. Open Node-RED on the Cerbo GX.
-2. Menu -> **Import** -> paste the content of:
-   - `nodered/victron-storm-watch-flow.json`
-3. Deploy the flow.
-4. Confirm MQTT broker node points to local broker:
-   - Host: `127.0.0.1`
-   - Port: `1883`
+### Install
 
----
+Copy `stormwatch-python` to Cerbo and run:
 
-## Configuration (important)
+```sh
+cd /path/to/stormwatch-python
+sh install.sh
+```
 
-Open function node **`Evaluate CAP alerts + geofence`** and edit `CONFIG`:
+This installs to:
 
-- `capFeedUrl`  
-  Default is `https://alerts.metservice.com/cap/rss`
-- `home.lat` / `home.lon`  
-  Set your fixed home coordinates (recommended fallback).
-- `useVictronGps`  
-  `true` to prefer live GX GPS values if available.
-- `homeAreaKeywords`  
-  Optional area-name fallback match if CAP geometry is absent.
-- `leadMinutes`  
-  Start protection before onset/effective by this many minutes.
-- `clearHoldMinutes`  
-  Keep protection active after alert expiry.
-- `normalMinSoc` and `stormMinSoc`  
-  SOC values (rounded to nearest 5%).
-- `acceptedSeverities` and `stormKeywords`  
-  Filter which alerts trigger protection.
+- `/data/stormwatch/stormwatchd.py`
+- `/data/stormwatch/config.json` (created from example on first install)
+- `/data/stormwatch/start-stormwatch.sh`
+- `/data/rc.local.d/stormwatch.sh` (autostart hook)
 
----
+### Configure
 
-## How it controls Victron ESS
+Edit:
 
-On storm activation, the flow publishes MQTT writes to:
+```sh
+/data/stormwatch/config.json
+```
 
-- `W/<portalId>/settings/0/Settings/CGwacs/BatteryLife/MinimumSocLimit` = `stormMinSoc`
-- `W/<portalId>/settings/0/Settings/CGwacs/BatteryLife/ForceCharge` = `1`
+Important keys:
 
-On storm clear, it restores:
+- `capFeedUrl`
+- `home.lat`, `home.lon`
+- `useVictronGps`
+- `leadMinutes`, `clearHoldMinutes`
+- `normalMinSoc`, `stormMinSoc`
+- `acceptedSeverities`, `stormKeywords`
+- `stateTopicBase` (status publish root)
+- `commandTopic` (manual command input topic)
 
-- `ForceCharge` = `0`
-- `MinimumSocLimit` = `normalMinSoc`
+### Start now
 
-`<portalId>` is auto-discovered from incoming Victron telemetry topic `N/<portalId>/...`.
+```sh
+/data/stormwatch/start-stormwatch.sh
+```
 
----
+### Optional runtime commands (MQTT)
 
-## GPS and telemetry topics used
+Publish JSON to `commandTopic`:
 
-The flow listens for:
+- Force on:
+  - `{"action":"forceProtect","enabled":true}`
+- Force off:
+  - `{"action":"forceProtect","enabled":false}`
+- Back to auto:
+  - `{"action":"clearManualOverride"}`
+- Trigger immediate evaluation:
+  - `{"action":"runNow"}`
 
-- Battery SoC: `N/+/battery/+/Soc`
-- GPS candidates:
-  - `N/+/system/0/Gps/#`
-  - `N/+/gps/+/#`
-
-If live GPS is not found, the flow uses configured `home.lat/lon`.
+Status is retained under `stateTopicBase` (for dashboards/monitoring).
 
 ---
 
-## Notes and safety
+## Option B: Node-RED dashboard flow
 
-- Test in a controlled setting before relying on unattended operation.
-- Verify your exact firmware/topic paths; some Venus OS versions differ.
-- The flow only writes settings on **state changes** (normal -> protect, protect -> normal).
-- Keep a local/remote fallback plan for critical power systems.
+Import:
+
+- `nodered/victron-storm-watch-dashboard-flow.json`
+
+Dashboard includes:
+
+- Status text and active/hold state
+- Home GPS display
+- Last alert summary
+- Manual override buttons (AUTO, FORCE ON, FORCE OFF)
+- Runtime settings controls:
+  - Normal Min SOC
+  - Storm Min SOC
+  - Lead minutes
+  - Hold minutes
+- Map payload output for worldmap node (`msg.payload.markers` and `msg.payload.polygons`)
+
+Notes:
+
+- Map requires worldmap node installed.
+- Settings panel updates runtime config in flow context.
+
+---
+
+## Option C: Node-RED headless controller flow
+
+Import:
+
+- `nodered/victron-storm-watch-flow.json`
+
+This is lighter and uses debug output only.
+
+---
+
+## Victron ESS control topics used
+
+Writes:
+
+- `W/<portalId>/settings/0/Settings/CGwacs/BatteryLife/MinimumSocLimit`
+- `W/<portalId>/settings/0/Settings/CGwacs/BatteryLife/ForceCharge`
+
+`<portalId>` is auto-discovered from `N/<portalId>/...` telemetry where possible.
+
+Telemetry listeners used:
+
+- `N/+/battery/+/Soc`
+- `N/+/system/0/Gps/#`
+- `N/+/gps/+/#`
+
+---
+
+## Safety notes
+
+- Validate topic paths on your Venus OS version before production use.
+- Test with manual override and simulated CAP conditions first.
+- Keep a fallback procedure for critical power systems.
+- This logic writes settings on state transitions to avoid command spam.
 

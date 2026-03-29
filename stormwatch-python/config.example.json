@@ -1,0 +1,44 @@
+{
+  "capFeedUrl": "https://alerts.metservice.com/cap/rss",
+  "portalId": "",
+  "home": {
+    "lat": null,
+    "lon": null,
+    "name": "Home"
+  },
+  "useVictronGps": true,
+  "homeAreaKeywords": [],
+  "matchAllWithoutGeometry": false,
+  "leadMinutes": 30,
+  "clearHoldMinutes": 60,
+  "pollSeconds": 300,
+  "normalMinSoc": 20,
+  "stormMinSoc": 80,
+  "acceptedSeverities": [
+    "Moderate",
+    "Severe",
+    "Extreme"
+  ],
+  "stormKeywords": [
+    "storm",
+    "thunderstorm",
+    "severe weather",
+    "heavy rain",
+    "flood",
+    "wind",
+    "gale",
+    "squall",
+    "cyclone",
+    "tornado",
+    "hail",
+    "snow",
+    "ice"
+  ],
+  "stateTopicBase": "N/custom/stormwatch",
+  "commandTopic": "R/custom/stormwatch/command",
+  "mqtt": {
+    "host": "127.0.0.1",
+    "port": 1883,
+    "clientId": "stormwatchd"
+  }
+}
