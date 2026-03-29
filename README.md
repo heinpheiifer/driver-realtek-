@@ -3,6 +3,7 @@
 A lightweight browser-based app to capture solar installation compliance and commissioning records, including:
 
 - Electrical Certificate of Compliance (COC) fields
+- Electrical worker + supervised worker detail capture
 - Commissioning checklist
 - PV string test measurements
 - Inverter/AC test values

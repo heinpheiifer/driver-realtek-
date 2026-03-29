@@ -44,6 +44,14 @@
 | Worker Phone | 0273288180 |
 | Worker Email | hein@solarelectrix.co.nz |
 
+### Supervised Electrical Worker Details (if applicable)
+
+| Field | Value |
+|---|---|
+| Supervised Worker Name | Alex Example |
+| Registration / Licence | EST 123456 |
+| Contact Number | 0210000000 |
+
 ---
 
 ## 4) Work Details & Certification
