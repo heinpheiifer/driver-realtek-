@@ -36,6 +36,27 @@ This repository includes a GitHub Actions workflow to publish the app from `app/
 4. Your app will be available at:
    - `https://heinpheiifer.github.io/driver-realtek-/`
 
+## Custom subdomain setup (`safety.solarelectrix.co.nz`)
+
+This project includes `app/CNAME` with:
+
+```text
+safety.solarelectrix.co.nz
+```
+
+After deployment:
+
+1. In GitHub, open **Settings -> Pages**
+2. Confirm **Custom domain** is set to `safety.solarelectrix.co.nz`
+3. At your DNS provider for `solarelectrix.co.nz`, add:
+   - **Type:** `CNAME`
+   - **Host/Name:** `safety`
+   - **Value/Target:** `heinpheiifer.github.io`
+4. Wait for DNS to propagate, then open:
+   - `https://safety.solarelectrix.co.nz`
+
+Optional (recommended): enable **Enforce HTTPS** in GitHub Pages once DNS is active.
+
 ## Compliance note
 
 This app is a practical field form and **not legal advice**. You should review your process against the relevant standards and guidance for your jurisdiction, including (where applicable):
