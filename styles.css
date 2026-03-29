@@ -41,6 +41,26 @@ body {
   align-items: center;
 }
 
+.job-dashboard {
+  border-left: 4px solid #22c55e;
+}
+
+.job-grid {
+  align-items: end;
+}
+
+.job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.job-meta {
+  margin: 0.8rem 0 0;
+  color: #475569;
+  font-size: 0.88rem;
+}
+
 button,
 .import-label {
   border: 1px solid #cbd5e1;
@@ -190,7 +210,8 @@ textarea {
   gap: 0.65rem;
 }
 
-.photo-card {
+.photo-card,
+.photo-item {
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   padding: 0.6rem;
@@ -200,13 +221,32 @@ textarea {
   gap: 0.45rem;
 }
 
-.photo-card img {
+.photo-card img,
+.photo-item img {
   width: 100%;
   max-height: 230px;
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid #dbe4ef;
   background: #e2e8f0;
+}
+
+.signature-wrap {
+  margin-top: 1rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: #f8fafc;
+}
+
+#signatureCanvas {
+  width: 100%;
+  max-width: 760px;
+  height: 220px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  touch-action: none;
 }
 
 .photo-meta {
@@ -264,6 +304,7 @@ textarea {
   }
 
   .header-actions,
+  .job-dashboard,
   #addStringBtn,
   .remove-string,
   .photo-remove,

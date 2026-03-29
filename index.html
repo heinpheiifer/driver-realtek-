@@ -15,6 +15,7 @@
     <div class="header-actions">
       <button id="saveBtn" type="button">Save Draft</button>
       <button id="printBtn" type="button">Print Report</button>
+      <button id="pdfBtn" type="button">Export PDF</button>
       <button id="exportBtn" type="button">Export JSON</button>
       <label class="import-label">
         Import JSON
@@ -25,6 +26,25 @@
   </header>
 
   <main>
+    <section class="card job-dashboard">
+      <div class="section-head">
+        <h2>Jobs Dashboard</h2>
+      </div>
+      <div class="grid two-col job-grid">
+        <label>
+          Select Job
+          <select id="jobSelect"></select>
+        </label>
+        <div class="job-actions">
+          <button id="newJobBtn" type="button">New Job</button>
+          <button id="renameJobBtn" type="button">Rename</button>
+          <button id="duplicateJobBtn" type="button">Duplicate</button>
+          <button id="deleteJobBtn" type="button" class="danger">Delete</button>
+        </div>
+      </div>
+      <p id="jobMeta" class="job-meta"></p>
+    </section>
+
     <form id="cocForm">
       <section class="card">
         <h2>1) Project & Installation Details</h2>
@@ -289,6 +309,14 @@
             <input type="date" name="declarationDate" />
           </label>
         </div>
+        <div class="signature-wrap">
+          <div class="section-head">
+            <h3>Drawn Signature</h3>
+            <button id="clearSignatureBtn" type="button" class="danger">Clear Signature</button>
+          </div>
+          <canvas id="signatureCanvas" width="760" height="220"></canvas>
+          <p class="hint">Use mouse, stylus, or finger to sign. The drawn signature is saved per job and included in print/PDF reports.</p>
+        </div>
       </section>
     </form>
   </main>
@@ -315,6 +343,7 @@
     </article>
   </template>
 
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
