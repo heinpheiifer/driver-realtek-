@@ -28,6 +28,10 @@ const deleteJobBtn = document.getElementById("deleteJobBtn");
 const jobMeta = document.getElementById("jobMeta");
 const jobEmailTo = document.getElementById("jobEmailTo");
 const jobEmailCc = document.getElementById("jobEmailCc");
+const jobBrandName = document.getElementById("jobBrandName");
+const jobLogoInput = document.getElementById("jobLogoInput");
+const jobLogoPreview = document.getElementById("jobLogoPreview");
+const clearLogoBtn = document.getElementById("clearLogoBtn");
 
 const signatureCanvas = document.getElementById("signatureCanvas");
 const clearSignatureBtn = document.getElementById("clearSignatureBtn");
@@ -81,6 +85,12 @@ function createEmptyJob(title = "") {
     fields: {},
     emailTo: "",
     emailCc: "",
+    brandCompanyName: "",
+    brandCompanyAddress: "",
+    brandCompanyPhone: "",
+    brandCompanyEmail: "",
+    brandPrimaryColor: "#0f172a",
+    brandLogoDataUrl: "",
     stringTests: [createBlankStringTest()],
     installationPhotos: [],
     electricalPhotos: [],
@@ -134,6 +144,12 @@ function normalizeJob(rawJob, index = 0) {
     fields: rawJob?.fields && typeof rawJob.fields === "object" ? rawJob.fields : {},
     emailTo: typeof rawJob?.emailTo === "string" ? rawJob.emailTo : "",
     emailCc: typeof rawJob?.emailCc === "string" ? rawJob.emailCc : "",
+    brandCompanyName: typeof rawJob?.brandCompanyName === "string" ? rawJob.brandCompanyName : "",
+    brandCompanyAddress: typeof rawJob?.brandCompanyAddress === "string" ? rawJob.brandCompanyAddress : "",
+    brandCompanyPhone: typeof rawJob?.brandCompanyPhone === "string" ? rawJob.brandCompanyPhone : "",
+    brandCompanyEmail: typeof rawJob?.brandCompanyEmail === "string" ? rawJob.brandCompanyEmail : "",
+    brandPrimaryColor: typeof rawJob?.brandPrimaryColor === "string" ? rawJob.brandPrimaryColor : "#0f172a",
+    brandLogoDataUrl: typeof rawJob?.brandLogoDataUrl === "string" ? rawJob.brandLogoDataUrl : "",
     stringTests: normalizeStringTests(rawJob?.stringTests),
     installationPhotos: normalizePhotoArray(rawJob?.installationPhotos),
     electricalPhotos: normalizePhotoArray(rawJob?.electricalPhotos),
@@ -222,6 +238,7 @@ function persistCurrentJobFromUI(touchUpdated = true) {
   job.fields = serializeForm();
   job.emailTo = (jobEmailTo?.value || "").trim();
   job.emailCc = (jobEmailCc?.value || "").trim();
+  job.brandCompanyName = (jobBrandName?.value || "").trim();
   if (touchUpdated) {
     job.updatedAt = nowIso();
   }
@@ -264,7 +281,8 @@ function updateJobMeta() {
     return;
   }
   const emailInfo = job.emailTo ? ` | Email To: ${job.emailTo}` : "";
-  jobMeta.textContent = `Created: ${new Date(job.createdAt).toLocaleString()} | Updated: ${new Date(job.updatedAt).toLocaleString()} | Strings: ${job.stringTests.length} | Installation photos: ${job.installationPhotos.length} | Electrical photos: ${job.electricalPhotos.length}${emailInfo}`;
+  const brandInfo = job.brandCompanyName ? ` | Brand: ${job.brandCompanyName}` : "";
+  jobMeta.textContent = `Created: ${new Date(job.createdAt).toLocaleString()} | Updated: ${new Date(job.updatedAt).toLocaleString()} | Strings: ${job.stringTests.length} | Installation photos: ${job.installationPhotos.length} | Electrical photos: ${job.electricalPhotos.length}${emailInfo}${brandInfo}`;
 }
 
 function renderStringTests() {
@@ -504,12 +522,53 @@ function clearSignature() {
   updateJobMeta();
 }
 
+function updateLogoPreview(logoDataUrl) {
+  if (!jobLogoPreview) return;
+  if (!logoDataUrl) {
+    jobLogoPreview.style.display = "none";
+    jobLogoPreview.removeAttribute("src");
+    return;
+  }
+  jobLogoPreview.src = logoDataUrl;
+  jobLogoPreview.style.display = "block";
+}
+
+async function uploadLogoForCurrentJob(file) {
+  const job = getActiveJob();
+  if (!job || !file) return;
+  if (!file.type.startsWith("image/")) {
+    alert("Please select an image file for the logo.");
+    return;
+  }
+  const dataUrl = await fileToDataUrl(file);
+  job.brandLogoDataUrl = dataUrl;
+  job.updatedAt = nowIso();
+  updateLogoPreview(dataUrl);
+  saveDatabase();
+  updateJobMeta();
+}
+
+function clearBrandLogo() {
+  const job = getActiveJob();
+  if (!job) return;
+  job.brandLogoDataUrl = "";
+  job.updatedAt = nowIso();
+  updateLogoPreview("");
+  if (jobLogoInput) {
+    jobLogoInput.value = "";
+  }
+  saveDatabase();
+  updateJobMeta();
+}
+
 function loadActiveJobIntoUI() {
   const job = getActiveJob();
   if (!job) return;
   hydrateForm(job.fields);
   if (jobEmailTo) jobEmailTo.value = job.emailTo || "";
   if (jobEmailCc) jobEmailCc.value = job.emailCc || "";
+  if (jobBrandName) jobBrandName.value = job.brandCompanyName || "";
+  updateLogoPreview(job.brandLogoDataUrl || "");
   renderStringTests();
   renderPhotoList(installationPhotoList, job.installationPhotos, "installation");
   renderPhotoList(electricalPhotoList, job.electricalPhotos, "electrical");
@@ -693,6 +752,12 @@ function buildReportData() {
     title: job.title,
     emailTo: job.emailTo || "",
     emailCc: job.emailCc || "",
+    brandCompanyName: job.brandCompanyName || "",
+    brandCompanyAddress: job.brandCompanyAddress || "",
+    brandCompanyPhone: job.brandCompanyPhone || "",
+    brandCompanyEmail: job.brandCompanyEmail || "",
+    brandPrimaryColor: resolveBrandColor(job.brandPrimaryColor || "#0f172a"),
+    brandLogoDataUrl: job.brandLogoDataUrl || "",
     fields: job.fields,
     stringTests: job.stringTests,
     installationPhotos: job.installationPhotos,
@@ -840,6 +905,188 @@ function getImageDimensions(dataUrl) {
     img.onerror = () => reject(new Error("Image load failed"));
     img.src = dataUrl;
   });
+}
+
+function resolveBrandColor(color) {
+  const value = String(color || "").trim();
+  return /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#0f172a";
+}
+
+function hexToRgb(hexColor) {
+  const normalized = resolveBrandColor(hexColor).replace("#", "");
+  return {
+    r: parseInt(normalized.slice(0, 2), 16),
+    g: parseInt(normalized.slice(2, 4), 16),
+    b: parseInt(normalized.slice(4, 6), 16)
+  };
+}
+
+function softRgb(rgb) {
+  const lighten = (value) => Math.round(value + (255 - value) * 0.88);
+  return { r: lighten(rgb.r), g: lighten(rgb.g), b: lighten(rgb.b) };
+}
+
+async function drawBrandHeader(doc, report, pageWidth, margin, yStart) {
+  const colorRgb = hexToRgb(report.brandPrimaryColor);
+  const pale = softRgb(colorRgb);
+  const contentWidth = pageWidth - margin * 2;
+  const headerHeight = 116;
+
+  doc.setFillColor(pale.r, pale.g, pale.b);
+  doc.roundedRect(margin, yStart, contentWidth, headerHeight, 8, 8, "F");
+
+  doc.setDrawColor(colorRgb.r, colorRgb.g, colorRgb.b);
+  doc.setLineWidth(1.2);
+  doc.roundedRect(margin, yStart, contentWidth, headerHeight, 8, 8, "S");
+
+  const textX = margin + 14;
+  const topY = yStart + 24;
+  doc.setTextColor(colorRgb.r, colorRgb.g, colorRgb.b);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("ELECTRICAL CERTIFICATE OF COMPLIANCE", textX, topY);
+  doc.setFontSize(12);
+  doc.text("& COMMISSIONING REPORT", textX, topY + 18);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  doc.text(`Report generated: ${new Date().toLocaleString()}`, textX, topY + 36);
+
+  const company = report.brandCompanyName || report.fields.workerOrg || "";
+  const details = [report.brandCompanyAddress, report.brandCompanyPhone, report.brandCompanyEmail]
+    .filter(Boolean)
+    .join(" | ");
+  if (company) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text(company, textX, topY + 56);
+  }
+  if (details) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(doc.splitTextToSize(details, contentWidth - 190), textX, topY + 70);
+  }
+
+  if (report.brandLogoDataUrl) {
+    try {
+      const format = detectImageFormat(report.brandLogoDataUrl);
+      const dimensions = await getImageDimensions(report.brandLogoDataUrl);
+      const maxWidth = 148;
+      const maxHeight = 92;
+      const ratio = Math.min(maxWidth / dimensions.width, maxHeight / dimensions.height, 1);
+      const width = dimensions.width * ratio;
+      const height = dimensions.height * ratio;
+      const x = pageWidth - margin - width - 12;
+      const y = yStart + (headerHeight - height) / 2;
+      doc.addImage(report.brandLogoDataUrl, format, x, y, width, height);
+    } catch {
+      // If logo decode fails, continue rendering without logo.
+    }
+  }
+
+  return yStart + headerHeight + 12;
+}
+
+function addSectionTitle(doc, title, y, colorRgb, pageWidth, margin) {
+  const sectionHeight = 18;
+  const contentWidth = pageWidth - margin * 2;
+  doc.setFillColor(colorRgb.r, colorRgb.g, colorRgb.b);
+  doc.rect(margin, y, contentWidth, sectionHeight, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.text(title, margin + 8, y + 12);
+  doc.setTextColor(30, 41, 59);
+  return y + sectionHeight + 6;
+}
+
+async function addDeclarationPage(doc, report) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 42;
+  const contentWidth = pageWidth - margin * 2;
+  const colorRgb = hexToRgb(report.brandPrimaryColor);
+  const pale = softRgb(colorRgb);
+  let y = margin;
+
+  doc.addPage();
+
+  doc.setFillColor(pale.r, pale.g, pale.b);
+  doc.roundedRect(margin, y, contentWidth, 54, 8, 8, "F");
+  doc.setDrawColor(colorRgb.r, colorRgb.g, colorRgb.b);
+  doc.roundedRect(margin, y, contentWidth, 54, 8, 8, "S");
+  doc.setTextColor(colorRgb.r, colorRgb.g, colorRgb.b);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("FINAL DECLARATION", margin + 14, y + 23);
+  doc.setFontSize(10);
+  doc.setTextColor(30, 41, 59);
+  doc.setFont("helvetica", "normal");
+  doc.text("Responsible person sign-off and compliance statement", margin + 14, y + 40);
+  y += 72;
+
+  const declarationBlock = [
+    "I hereby certify that the prescribed electrical work and commissioning activities recorded in this report were completed lawfully and safely.",
+    "The installation complies with relevant standards and has been tested before energization and handover."
+  ];
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  declarationBlock.forEach((line) => {
+    const wrapped = doc.splitTextToSize(line, contentWidth);
+    doc.text(wrapped, margin, y);
+    y += wrapped.length * 14 + 6;
+  });
+
+  y += 6;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text(`Responsible Person: ${report.fields.declarationName || ""}`, margin, y);
+  y += 18;
+  doc.text(`Licence Number: ${report.fields.declarationLicense || ""}`, margin, y);
+  y += 18;
+  doc.text(`Declaration Date: ${report.fields.declarationDate || ""}`, margin, y);
+  y += 22;
+  doc.setFont("helvetica", "normal");
+  doc.text(`Typed Signature: ${report.fields.declarationSignature || ""}`, margin, y);
+  y += 20;
+
+  doc.setDrawColor(148, 163, 184);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 10;
+  doc.setFontSize(9);
+  doc.setTextColor(71, 85, 105);
+  doc.text("Drawn Signature", margin, y);
+  y += 10;
+
+  if (report.signatureDataUrl) {
+    try {
+      const dimensions = await getImageDimensions(report.signatureDataUrl);
+      const maxWidth = Math.min(360, contentWidth);
+      const maxHeight = 150;
+      const ratio = Math.min(maxWidth / dimensions.width, maxHeight / dimensions.height, 1);
+      const width = dimensions.width * ratio;
+      const height = dimensions.height * ratio;
+      if (y + height > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.addImage(report.signatureDataUrl, detectImageFormat(report.signatureDataUrl), margin, y, width, height);
+      y += height + 8;
+    } catch {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text("[Could not render signature image]", margin, y);
+    }
+  } else {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("No drawn signature provided.", margin, y);
+  }
+
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Certificate-style declaration page | Job: ${report.title || ""}`, margin, pageHeight - margin / 1.3);
 }
 
 async function exportPdf() {
@@ -1190,6 +1437,29 @@ function wireEvents() {
   renameJobBtn.addEventListener("click", renameCurrentJob);
   duplicateJobBtn.addEventListener("click", duplicateCurrentJob);
   deleteJobBtn.addEventListener("click", deleteCurrentJob);
+  if (jobBrandName) {
+    jobBrandName.addEventListener("input", () => {
+      persistCurrentJobFromUI();
+      saveDatabase();
+      updateJobMeta();
+    });
+  }
+  if (jobLogoInput) {
+    jobLogoInput.addEventListener("change", async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      try {
+        await uploadLogoForCurrentJob(file);
+      } catch (error) {
+        alert(`Logo upload failed: ${error.message}`);
+      } finally {
+        jobLogoInput.value = "";
+      }
+    });
+  }
+  if (clearLogoBtn) {
+    clearLogoBtn.addEventListener("click", clearBrandLogo);
+  }
   clearSignatureBtn.addEventListener("click", clearSignature);
 }
 

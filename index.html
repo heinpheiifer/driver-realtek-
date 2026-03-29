@@ -53,6 +53,23 @@
           <input id="jobEmailCc" type="text" placeholder="installer@example.com, office@example.com" />
         </label>
       </div>
+      <div class="branding-wrap">
+        <h3>Branded PDF Settings (per job)</h3>
+        <div class="grid two-col">
+          <label>
+            Company / Brand Name
+            <input id="jobBrandName" type="text" placeholder="Solar Electrix Limited" />
+          </label>
+          <label>
+            Brand Logo
+            <input id="jobLogoInput" type="file" accept="image/*" />
+          </label>
+        </div>
+        <div class="branding-preview">
+          <img id="jobLogoPreview" alt="Brand logo preview" />
+          <button id="clearLogoBtn" type="button" class="danger">Clear Logo</button>
+        </div>
+      </div>
       <p id="jobMeta" class="job-meta"></p>
     </section>
 

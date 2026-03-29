@@ -11,6 +11,7 @@ A lightweight browser-based app to capture solar installation compliance and com
 - Multi-job dashboard (create/switch/duplicate/delete jobs)
 - Drawn signature pad per job
 - PDF export and email draft workflow
+- Branded PDF header (company name + optional logo) with certificate-style declaration page
 
 ## Run
 
@@ -23,8 +24,13 @@ No build step required.
    - **Save Draft** (local browser storage)
    - **Export JSON / Import JSON** for backup/share
    - **Print Report** to generate a report-style document
-   - **Export PDF** to download a structured report PDF
+   - **Export PDF** to download a structured, branded certificate-style PDF
    - **Email Report** to open your email client with a prefilled draft summary (attach the exported PDF before sending)
+
+5. (Optional) In **Jobs Dashboard** set:
+   - **Company / Brand Name**
+   - **Brand Logo** (image upload)
+   These are applied to the PDF header and saved per job.
 
 ## Notes
 
