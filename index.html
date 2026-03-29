@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solar COC & Commissioning App</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>Solar COC & Commissioning App</h1>
+      <p class="subtitle">Capture compliance data, commissioning tests, and photo evidence in one place.</p>
+    </div>
+    <div class="header-actions">
+      <button id="saveBtn" type="button">Save Draft</button>
+      <button id="printBtn" type="button">Print Report</button>
+      <button id="pdfBtn" type="button">Export PDF</button>
+      <button id="emailBtn" type="button">Email Report</button>
+      <button id="exportBtn" type="button">Export JSON</button>
+      <label class="import-label">
+        Import JSON
+        <input id="importInput" type="file" accept="application/json" />
+      </label>
+      <button id="resetBtn" type="button" class="danger">Reset</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="card job-dashboard">
+      <div class="section-head">
+        <h2>Jobs Dashboard</h2>
+      </div>
+      <div class="grid two-col job-grid">
+        <label>
+          Select Job
+          <select id="jobSelect"></select>
+        </label>
+        <div class="job-actions">
+          <button id="newJobBtn" type="button">New Job</button>
+          <button id="renameJobBtn" type="button">Rename</button>
+          <button id="duplicateJobBtn" type="button">Duplicate</button>
+          <button id="deleteJobBtn" type="button" class="danger">Delete</button>
+        </div>
+      </div>
+      <div class="grid two-col job-email-grid">
+        <label>
+          Report Email To
+          <input id="jobEmailTo" type="email" placeholder="client@example.com" />
+        </label>
+        <label>
+          Report Email CC
+          <input id="jobEmailCc" type="text" placeholder="installer@example.com, office@example.com" />
+        </label>
+      </div>
+      <div class="branding-wrap">
+        <h3>Branded PDF Settings (per job)</h3>
+        <div class="grid two-col">
+          <label>
+            Company / Brand Name
+            <input id="jobBrandName" type="text" placeholder="Solar Electrix Limited" />
+          </label>
+          <label>
+            Brand Logo
+            <input id="jobLogoInput" type="file" accept="image/*" />
+          </label>
+        </div>
+        <div class="branding-preview">
+          <img id="jobLogoPreview" alt="Brand logo preview" />
+          <button id="clearLogoBtn" type="button" class="danger">Clear Logo</button>
+        </div>
+      </div>
+      <p id="jobMeta" class="job-meta"></p>
+    </section>
+
+    <form id="cocForm">
+      <section class="card">
+        <h2>1) Project & Installation Details</h2>
+        <div class="grid two-col">
+          <label>
+            Job Number
+            <input type="text" name="jobNumber" />
+          </label>
+          <label>
+            Installation Date
+            <input type="date" name="installDate" />
+          </label>
+          <label class="full">
+            Installation Address
+            <input type="text" name="installationAddress" />
+          </label>
+          <label>
+            Building Type
+            <input type="text" name="buildingType" placeholder="Residential Home" />
+          </label>
+          <label>
+            Meter / ICP Number
+            <input type="text" name="meterNumber" />
+          </label>
+          <label>
+            Number of Phases
+            <input type="text" name="phases" placeholder="1" />
+          </label>
+          <label>
+            Energy Retailer
+            <input type="text" name="retailer" />
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2) Customer Information</h2>
+        <div class="grid two-col">
+          <label>
+            Customer Name
+            <input type="text" name="customerName" />
+          </label>
+          <label>
+            Phone
+            <input type="text" name="customerPhone" />
+          </label>
+          <label>
+            Email
+            <input type="email" name="customerEmail" />
+          </label>
+          <label class="full">
+            Postal Address
+            <input type="text" name="customerAddress" />
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>3) Electrical Worker Information</h2>
+        <div class="grid two-col">
+          <label>
+            Worker Name
+            <input type="text" name="workerName" />
+          </label>
+          <label>
+            Registration / Practising Licence
+            <input type="text" name="workerLicense" />
+          </label>
+          <label>
+            Organisation
+            <input type="text" name="workerOrg" />
+          </label>
+          <label>
+            Worker Phone
+            <input type="text" name="workerPhone" />
+          </label>
+          <label class="full">
+            Worker Email
+            <input type="email" name="workerEmail" />
+          </label>
+        </div>
+        <h3>Supervised Electrical Worker Details (if applicable)</h3>
+        <div class="grid two-col">
+          <label>
+            Supervised Worker Name
+            <input type="text" name="supervisedWorkerName" />
+          </label>
+          <label>
+            Registration / Licence Number
+            <input type="text" name="supervisedWorkerLicense" />
+          </label>
+          <label>
+            Supervised Worker Phone
+            <input type="text" name="supervisedWorkerPhone" />
+          </label>
+          <label>
+            Supervised Worker Email
+            <input type="email" name="supervisedWorkerEmail" />
+          </label>
+          <label class="full">
+            Supervision Notes
+            <textarea name="supervisedWorkerNotes" rows="2" placeholder="Scope supervised, tasks completed, and any relevant notes."></textarea>
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>4) Work Details & Certification</h2>
+        <div class="grid three-col">
+          <label>
+            Work Type
+            <select name="workType">
+              <option value="">Select</option>
+              <option value="Additions">Additions</option>
+              <option value="Alterations">Alterations</option>
+              <option value="New Work">New Work</option>
+            </select>
+          </label>
+          <label>
+            Prescribed Electrical Work Risk
+            <select name="riskType">
+              <option value="">Select</option>
+              <option value="Low">Low</option>
+              <option value="General">General</option>
+              <option value="High">High</option>
+            </select>
+          </label>
+          <label>
+            Date of Connection
+            <input type="date" name="connectionDate" />
+          </label>
+        </div>
+
+        <div class="checklist">
+          <h3>Compliance Statements</h3>
+          <label><input type="checkbox" name="checkCertifiedDesign" /> Installed in accordance with a certified design</label>
+          <label><input type="checkbox" name="checkStandards" /> Installed in accordance with relevant standards (AS/NZS 3000, 4777, 5033, 5139, etc.)</label>
+          <label><input type="checkbox" name="checkEarthing" /> Earthing system correctly rated</label>
+          <label><input type="checkbox" name="checkSafeFittings" /> Fittings are safe to connect to power supply</label>
+          <label><input type="checkbox" name="checkSupplierDoc" /> Relies on supplier declaration of conformity</label>
+          <label><input type="checkbox" name="checkManufacturerDoc" /> Relies on manufacturer instructions</label>
+          <label><input type="checkbox" name="checkTested" /> Satisfactorily tested in accordance with regulations</label>
+          <label><input type="checkbox" name="checkSafeConnect" /> Safe to connect and safe to use</label>
+        </div>
+
+        <label>
+          Standards / References / Notes
+          <textarea name="certificationNotes" rows="3" placeholder="Include URLs, standards, and notes."></textarea>
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>5) System Details</h2>
+        <div class="grid two-col">
+          <label>
+            Panel Manufacturer
+            <input type="text" name="panelManufacturer" />
+          </label>
+          <label>
+            Panel Model
+            <input type="text" name="panelModel" />
+          </label>
+          <label>
+            Number of Panels
+            <input type="number" min="0" name="panelCount" />
+          </label>
+          <label>
+            Number of Strings
+            <input type="number" min="0" name="stringCount" />
+          </label>
+          <label>
+            Inverter Manufacturer
+            <input type="text" name="inverterManufacturer" />
+          </label>
+          <label>
+            Inverter Model
+            <input type="text" name="inverterModel" />
+          </label>
+          <label>
+            Battery Make/Model
+            <input type="text" name="batteryModel" />
+          </label>
+          <label>
+            Export Limitation (W)
+            <input type="number" min="0" name="exportLimitW" />
+          </label>
+        </div>
+        <label>
+          System Description
+          <textarea name="systemDescription" rows="3" placeholder="Describe the installed PV, inverter, battery, gateway, and backup circuits."></textarea>
+        </label>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>6) PV String Test Results</h2>
+          <button type="button" id="addStringBtn">Add String</button>
+        </div>
+        <div id="stringTestsContainer"></div>
+      </section>
+
+      <section class="card">
+        <h2>7) Inverter Settings & AC Tests</h2>
+        <div class="grid two-col">
+          <label>
+            Country Code / Grid Code
+            <input type="text" name="gridCode" placeholder="New Zealand Grid Code" />
+          </label>
+          <label>
+            10 min OVP Setting (V)
+            <input type="number" step="0.1" min="0" name="ovpSettingV" />
+          </label>
+          <label>
+            AC Open Circuit Voltage (V)
+            <input type="number" step="0.01" min="0" name="acOpenVoltage" />
+          </label>
+          <label>
+            Earth Continuity (Ω)
+            <input type="number" step="0.001" min="0" name="acEarthContinuity" />
+          </label>
+          <label>
+            Earth Fault Loop Impedance Zs (Ω)
+            <input type="number" step="0.001" min="0" name="acLoopImpedance" />
+          </label>
+          <label>
+            Prospective Fault Current (kA)
+            <input type="number" step="0.001" min="0" name="acPfc" />
+          </label>
+          <label>
+            Bonding (Ω)
+            <input type="number" step="0.001" min="0" name="acBonding" />
+          </label>
+          <label>
+            AC Cable Insulation Resistance (MΩ)
+            <input type="number" step="0.1" min="0" name="acInsulationMOhm" />
+          </label>
+        </div>
+        <label>
+          Inverter Settings Notes (Volt-Var / Volt-Watt / timings)
+          <textarea name="inverterSettingsNotes" rows="3"></textarea>
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>8) Attachments & Photo Evidence</h2>
+        <div class="grid two-col">
+          <label>
+            Upload Installation Photos
+            <input id="installationPhotoInput" type="file" accept="image/*" multiple />
+          </label>
+          <label>
+            Upload Electrical Test Photos
+            <input id="electricalPhotoInput" type="file" accept="image/*" multiple />
+          </label>
+        </div>
+        <div class="photo-sections">
+          <div>
+            <h3>Installation Photos</h3>
+            <div id="installationPhotoList" class="photo-list"></div>
+          </div>
+          <div>
+            <h3>Electrical Test Photos</h3>
+            <div id="electricalPhotoList" class="photo-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>9) Final Declaration</h2>
+        <div class="grid two-col">
+          <label>
+            Responsible Person Name
+            <input type="text" name="declarationName" />
+          </label>
+          <label>
+            Electrical Licence Number
+            <input type="text" name="declarationLicense" />
+          </label>
+          <label>
+            Signature (typed)
+            <input type="text" name="declarationSignature" />
+          </label>
+          <label>
+            Declaration Date
+            <input type="date" name="declarationDate" />
+          </label>
+        </div>
+        <div class="signature-wrap">
+          <div class="section-head">
+            <h3>Drawn Signature</h3>
+            <button id="clearSignatureBtn" type="button" class="danger">Clear Signature</button>
+          </div>
+          <canvas id="signatureCanvas" width="760" height="220"></canvas>
+          <p class="hint">Use mouse, stylus, or finger to sign. The drawn signature is saved per job and included in print/PDF reports.</p>
+        </div>
+      </section>
+    </form>
+  </main>
+
+  <template id="stringTestTemplate">
+    <article class="string-card">
+      <div class="string-head">
+        <h3 class="string-title">String Test</h3>
+        <button type="button" class="remove-string danger">Remove</button>
+      </div>
+      <div class="grid three-col">
+        <label>String Label<input type="text" data-field="label" placeholder="String 1 / PV1" /></label>
+        <label>Max Voltage (V)<input type="number" step="0.1" min="0" data-field="maxVoltage" /></label>
+        <label>Continuity / Polarity<input type="text" data-field="continuity" placeholder="Yes" /></label>
+        <label>Earth Continuity (Ω)<input type="number" step="0.001" min="0" data-field="earthContinuity" /></label>
+        <label>Insulation + (MΩ)<input type="number" step="0.1" min="0" data-field="insPlus" /></label>
+        <label>Insulation - (MΩ)<input type="number" step="0.1" min="0" data-field="insMinus" /></label>
+        <label>Open Circuit Voltage (V)<input type="number" step="0.1" min="0" data-field="ocVoltage" /></label>
+        <label>Short Circuit Current (A)<input type="number" step="0.01" min="0" data-field="scCurrent" /></label>
+        <label>Operational Voltage (V)<input type="number" step="0.1" min="0" data-field="opVoltage" /></label>
+        <label>Operational Current (A)<input type="number" step="0.01" min="0" data-field="opCurrent" /></label>
+        <label>Operational Power (W)<input type="number" step="1" min="0" data-field="opPower" /></label>
+      </div>
+    </article>
+  </template>
+
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
