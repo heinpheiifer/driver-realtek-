@@ -577,6 +577,8 @@ class StormWatchDaemon:
             self.evaluate_once()
         elif action == "reloadConfig":
             self._reload_config()
+        elif action == "sendTestNotification":
+            self._send_test_notification(cmd)
         else:
             self.log.warning("Unknown command on %s: %r", self.config["commandTopic"], cmd)
 
@@ -1021,6 +1023,68 @@ class StormWatchDaemon:
             return True
         last = int(self.last_notification_sent_ms.get(event_key, 0))
         return (now - last) >= cooldown
+
+    def _send_test_notification(self, cmd: Dict[str, Any]) -> None:
+        now = now_ms()
+        info: Dict[str, Any] = {
+            "timestamp": utc_iso(now),
+            "portalId": self.portal_id,
+            "shouldProtect": bool(self.protect_active),
+            "reason": "manual-test",
+            "matchedCount": int(self.last_eval.get("matchedCount", 0)) if self.last_eval else 0,
+            "holdUntil": self.last_eval.get("holdUntil") if self.last_eval else None,
+            "home": self.last_eval.get("home", {}) if self.last_eval else {},
+            "control": self.last_eval.get("control", {}) if self.last_eval else {},
+            "matchedAlerts": self.last_eval.get("matchedAlerts", [])[:3] if self.last_eval else [],
+        }
+        custom_subject = str(cmd.get("subject", "")).strip()
+        custom_body = str(cmd.get("body", "")).strip()
+        subject = custom_subject or self._notification_subject("test", info)
+        body = custom_body or self._notification_body("test", info)
+
+        payload = {
+            "event": "test",
+            "timestamp": info.get("timestamp"),
+            "subject": subject,
+            "reason": "manual-test",
+            "shouldProtect": info.get("shouldProtect"),
+            "matchedCount": info.get("matchedCount", 0),
+            "holdUntil": info.get("holdUntil"),
+            "stormWatch": info,
+        }
+
+        sent_email = self._send_email_notification(subject, body)
+        sent_webhook = self._send_webhook_notification(payload)
+        if sent_email or sent_webhook:
+            self.last_notification_sent_ms["test"] = now
+            self.log.info(
+                "Test notification sent (email=%s webhook=%s)",
+                sent_email,
+                sent_webhook,
+            )
+            self._publish(
+                f'{self.config["stateTopicBase"].rstrip("/")}/notification/testResult',
+                {
+                    "timestamp": info["timestamp"],
+                    "ok": True,
+                    "email": sent_email,
+                    "webhook": sent_webhook,
+                },
+                retain=True,
+            )
+        else:
+            self.log.warning("Test notification failed or no channels enabled")
+            self._publish(
+                f'{self.config["stateTopicBase"].rstrip("/")}/notification/testResult',
+                {
+                    "timestamp": info["timestamp"],
+                    "ok": False,
+                    "email": sent_email,
+                    "webhook": sent_webhook,
+                    "message": "No notification channel succeeded. Check notifications config.",
+                },
+                retain=True,
+            )
 
     def _maybe_send_notification(self, previous_should_protect: bool, previous_reason: str, info: Dict[str, Any]) -> None:
         notifications = self.config.get("notifications", {})

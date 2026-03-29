@@ -119,6 +119,8 @@ Publish JSON to `commandTopic`:
   - `{"action":"runNow"}`
 - Reload config without restart:
   - `{"action":"reloadConfig"}`
+- Send test notification (email/webhook):
+  - `{"action":"sendTestNotification"}`
 
 Status is retained under `stateTopicBase` (for dashboards/monitoring).
 Heartbeat is retained under `heartbeatTopic`.
