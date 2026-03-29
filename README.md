@@ -8,6 +8,7 @@ A lightweight, phone-friendly app for small electrical teams doing solar install
 - Includes Solar Electrix logo in app and generated PDF
 - Provides a practical risk checklist aligned to common AS/NZS + WorkSafe style controls
 - Includes a generic editable SWMS/JSA section with default solar job tasks, hazards, and controls
+- Includes a dedicated COC app with verification checklist and PDF export
 - Lets you take or attach site photos
 - Adds photo captions
 - Exports a final PDF report with checklist outcomes, notes, sign-off, and photos
@@ -35,8 +36,9 @@ This repository includes a GitHub Actions workflow to publish the app from `app/
 2. Under **Build and deployment**, set **Source** to **GitHub Actions** (if not already set)
 3. Push to `master` (or this feature branch) and wait for the **Deploy Solar Safety App to Pages** workflow
 4. Your app will be available at:
-   - `https://heinpheiifer.github.io/driver-realtek-/`
-   - (root redirects to `/app/`)
+   - Health & Safety app: `https://heinpheiifer.github.io/driver-realtek-/`
+   - Direct Health & Safety app: `https://heinpheiifer.github.io/driver-realtek-/app/`
+   - COC app: `https://heinpheiifer.github.io/driver-realtek-/coc/`
 
 Note: custom-domain config has been removed for now so the GitHub URL is the primary access method.
 

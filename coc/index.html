@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solar Electrix COC App</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <img class="company-logo" src="../app/assets/solarelectrixlogo.png" alt="Solar Electrix logo" />
+        <h1>Certificate of Compliance (COC)</h1>
+        <p class="subtext">Simple mobile COC form for electrical and solar jobs.</p>
+      </header>
+
+      <section class="card">
+        <h2>Business & Electrician Details</h2>
+        <div class="grid two-col">
+          <label>
+            Business name
+            <input id="businessName" type="text" value="Solar Electrix" />
+          </label>
+          <label>
+            Electrician name
+            <input id="electricianName" type="text" placeholder="Licensed electrician" />
+          </label>
+          <label>
+            Registration / licence number
+            <input id="licenceNumber" type="text" placeholder="Licence/registration" />
+          </label>
+          <label>
+            Contact phone
+            <input id="electricianPhone" type="text" value="0273288180" />
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Client & Site Details</h2>
+        <div class="grid two-col">
+          <label>
+            Client name
+            <input id="clientName" type="text" placeholder="Client" />
+          </label>
+          <label>
+            Job number
+            <input id="jobNumber" type="text" placeholder="Optional" />
+          </label>
+          <label>
+            Site address
+            <input id="siteAddress" type="text" placeholder="Address" />
+          </label>
+          <label>
+            Date of completion
+            <input id="completionDate" type="date" />
+          </label>
+          <label>
+            Type of work
+            <select id="workType">
+              <option value="Solar installation">Solar installation</option>
+              <option value="Electrical installation">Electrical installation</option>
+              <option value="Solar + electrical">Solar + electrical</option>
+              <option value="Maintenance / alterations">Maintenance / alterations</option>
+            </select>
+          </label>
+          <label>
+            Supply type
+            <select id="supplyType">
+              <option value="Single phase">Single phase</option>
+              <option value="Three phase">Three phase</option>
+              <option value="Other">Other</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Work Description</h2>
+        <label>
+          Description of completed work
+          <textarea
+            id="workDescription"
+            rows="4"
+            placeholder="Example: Installed 6.6kW PV array, inverter, DC isolators, labels and completed commissioning."
+          ></textarea>
+        </label>
+        <label>
+          Standards / references used
+          <input
+            id="standardsUsed"
+            type="text"
+            value="AS/NZS 3000, AS/NZS 5033 and applicable WorkSafe requirements"
+          />
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>Verification Checklist</h2>
+        <p class="small-note">Mark each item as Pass, Fail, or N/A.</p>
+        <div id="verificationContainer"></div>
+      </section>
+
+      <section class="card">
+        <h2>COC Declaration</h2>
+        <label>
+          Declaration text
+          <textarea id="declarationText" rows="4">
+I certify that the prescribed electrical work described in this certificate has been completed in accordance with applicable standards and requirements, and has been tested/verified as required.
+          </textarea>
+        </label>
+        <div class="grid two-col">
+          <label>
+            Declared by
+            <input id="declaredBy" type="text" placeholder="Name" />
+          </label>
+          <label>
+            Declaration date
+            <input id="declarationDate" type="date" />
+          </label>
+        </div>
+      </section>
+
+      <section class="actions">
+        <button id="saveDraftBtn" type="button">Save Draft</button>
+        <button id="clearDraftBtn" type="button" class="secondary">Clear Draft</button>
+        <button id="generatePdfBtn" type="button" class="primary">Generate COC PDF</button>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

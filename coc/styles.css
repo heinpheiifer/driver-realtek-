@@ -1,0 +1,172 @@
+:root {
+  color-scheme: light;
+  --bg: #f3f6f8;
+  --card-bg: #ffffff;
+  --text: #14212b;
+  --muted: #50616f;
+  --border: #d9e2e8;
+  --primary: #0c6efd;
+  --primary-dark: #0b5ed7;
+  --secondary: #f0f3f6;
+  --shadow: 0 3px 10px rgba(17, 35, 51, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.container {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.55rem;
+}
+
+.company-logo {
+  width: 180px;
+  max-width: 70%;
+  height: auto;
+  display: block;
+  margin-bottom: 0.7rem;
+}
+
+.subtext {
+  color: var(--muted);
+  margin-top: 0.35rem;
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-top: 1rem;
+  box-shadow: var(--shadow);
+}
+
+h2 {
+  margin-top: 0;
+  font-size: 1.15rem;
+}
+
+.small-note {
+  color: var(--muted);
+  margin-top: -0.2rem;
+}
+
+.grid {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.two-col {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+@media (min-width: 720px) {
+  .two-col {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+textarea {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
+  background: #fff;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.test-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.test-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.8rem;
+  background: #fafcfd;
+}
+
+.test-item-head {
+  font-weight: 700;
+  margin-bottom: 0.55rem;
+}
+
+.yes-no-row {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.yes-no-row label {
+  font-weight: 500;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 1rem 0 0.4rem;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+button.primary:hover {
+  background: var(--primary-dark);
+}
+
+button.secondary {
+  background: var(--secondary);
+}
+
+.compliance p {
+  margin-bottom: 0;
+  color: var(--muted);
+}

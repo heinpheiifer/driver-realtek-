@@ -31,10 +31,13 @@ jobs:
         with:
           enablement: true
 
+      - name: Prepare Pages bundle
+        run: mkdir -p _site && cp -R app coc index.html .nojekyll _site/
+
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./app
+          path: ./_site
 
       - name: Deploy to GitHub Pages
         id: deployment
