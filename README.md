@@ -5,10 +5,12 @@ A lightweight, phone-friendly app for small electrical teams doing solar install
 ## What it does
 
 - Captures business/job/site details
+- Includes Solar Electrix logo in app and generated PDF
 - Provides a practical risk checklist aligned to common AS/NZS + WorkSafe style controls
 - Lets you take or attach site photos
 - Adds photo captions
 - Exports a final PDF report with checklist outcomes, notes, sign-off, and photos
+- Pre-fills Health & Safety contact details for Hein Pheiffer (0273288180)
 - Saves drafts locally on the device/browser
 
 ## Run it

@@ -60,6 +60,7 @@ const photoList = document.getElementById("photoList");
 const saveDraftBtn = document.getElementById("saveDraftBtn");
 const clearDraftBtn = document.getElementById("clearDraftBtn");
 const generatePdfBtn = document.getElementById("generatePdfBtn");
+const logoImg = document.querySelector(".company-logo");
 
 function init() {
   renderChecklist();
@@ -72,8 +73,14 @@ function setDefaultDates() {
   const today = new Date().toISOString().slice(0, 10);
   const siteDate = document.getElementById("siteDate");
   const signOffDate = document.getElementById("signOffDate");
+  const businessName = document.getElementById("businessName");
+  const hsPerson = document.getElementById("hsPerson");
+  const hsPhone = document.getElementById("hsPhone");
   if (!siteDate.value) siteDate.value = today;
   if (!signOffDate.value) signOffDate.value = today;
+  if (!businessName.value) businessName.value = "Solar Electrix";
+  if (!hsPerson.value) hsPerson.value = "Hein Pheiffer";
+  if (!hsPhone.value) hsPhone.value = "0273288180";
 }
 
 function wireEvents() {
@@ -202,6 +209,8 @@ function getFormSnapshot() {
     "siteDate",
     "weather",
     "siteNotes",
+    "hsPerson",
+    "hsPhone",
     "signOffName",
     "signOffDate"
   ];
@@ -315,6 +324,20 @@ async function generatePdf() {
   const { values } = snapshot;
 
   let y = 14;
+  if (logoImg && logoImg.src) {
+    try {
+      const logoDataUrl = await imageUrlToDataUrl(logoImg.src);
+      const logoProps = doc.getImageProperties(logoDataUrl);
+      const logoWidth = 46;
+      const ratio = logoProps.height / logoProps.width;
+      const logoHeight = logoWidth * ratio;
+      doc.addImage(logoDataUrl, "PNG", 14, y - 2, logoWidth, logoHeight);
+      y += logoHeight + 2;
+    } catch (error) {
+      console.warn("Logo embed failed:", error);
+    }
+  }
+
   doc.setFontSize(16);
   doc.text("Solar Site Health & Safety Report", 14, y);
   y += 8;
@@ -328,7 +351,9 @@ async function generatePdf() {
     `Client: ${values.clientName || "-"}`,
     `Address: ${values.siteAddress || "-"}`,
     `Date: ${values.siteDate || "-"}`,
-    `Weather: ${values.weather || "-"}`
+    `Weather: ${values.weather || "-"}`,
+    `Health & Safety contact: ${values.hsPerson || "-"}`,
+    `H&S phone: ${values.hsPhone || "-"}`
   ];
 
   detailLines.forEach((line) => {
@@ -392,6 +417,17 @@ async function generatePdf() {
   const fileDate = values.siteDate || new Date().toISOString().slice(0, 10);
   const safeBusiness = (values.businessName || "solar-team").replace(/[^a-z0-9]+/gi, "-");
   doc.save(`${safeBusiness}-site-safety-${fileDate}.pdf`);
+}
+
+async function imageUrlToDataUrl(url) {
+  const response = await fetch(url);
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed reading image."));
+    reader.readAsDataURL(blob);
+  });
 }
 
 init();
