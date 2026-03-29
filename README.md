@@ -30,8 +30,8 @@ Then open `http://<your-ip>:8080/app/` on your phone (same network).
 
 This repository includes a GitHub Actions workflow to publish the app from `app/` to GitHub Pages.
 
-1. In GitHub, open **Settings -> Pages**
-2. Under **Build and deployment**, set **Source** to **GitHub Actions**
+1. In GitHub, open **Settings -> Pages** (one-time)
+2. Under **Build and deployment**, set **Source** to **GitHub Actions** (if not already set)
 3. Push to `master` (or this feature branch) and wait for the **Deploy Solar Safety App to Pages** workflow
 4. Your app will be available at:
    - `https://heinpheiifer.github.io/driver-realtek-/`
@@ -46,7 +46,7 @@ safety.solarelectrix.co.nz
 
 After deployment:
 
-1. In GitHub, open **Settings -> Pages**
+1. In GitHub, open **Settings -> Pages** (one-time)
 2. Confirm **Custom domain** is set to `safety.solarelectrix.co.nz`
 3. At your DNS provider for `solarelectrix.co.nz`, add:
    - **Type:** `CNAME`
