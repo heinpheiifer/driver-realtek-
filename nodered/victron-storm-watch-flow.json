@@ -1,0 +1,322 @@
+[
+  {
+    "id": "4e540d007f751b4d",
+    "type": "tab",
+    "label": "Victron Storm Watch",
+    "disabled": false,
+    "info": "Storm-aware ESS control for Cerbo GX.\n\nPolls a CAP feed, checks if your home GPS is inside an affected area, then enables storm battery protection by setting ForceCharge and a higher MinimumSocLimit."
+  },
+  {
+    "id": "68449ee300f9510c",
+    "type": "comment",
+    "z": "4e540d007f751b4d",
+    "name": "Edit configuration in \"Evaluate CAP alerts + geofence\" function",
+    "info": "",
+    "x": 330,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "d95d6168f488fdf6",
+    "type": "inject",
+    "z": "4e540d007f751b4d",
+    "name": "Poll CAP (every 5 min)",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "300",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "8",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 160,
+    "y": 120,
+    "wires": [
+      [
+        "4836f19d2399f7bf"
+      ]
+    ]
+  },
+  {
+    "id": "4836f19d2399f7bf",
+    "type": "function",
+    "z": "4e540d007f751b4d",
+    "name": "Build CAP request",
+    "func": "const cfg = flow.get(\"stormConfig\") || {};\nconst capUrl = cfg.capFeedUrl || \"https://alerts.metservice.com/cap/rss\";\nmsg.method = \"GET\";\nmsg.url = `${capUrl}${capUrl.includes(\"?\") ? \"&\" : \"?\"}_ts=${Date.now()}`;\nmsg.headers = {\n    \"User-Agent\": \"victron-storm-watch/1.0\"\n};\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 380,
+    "y": 120,
+    "wires": [
+      [
+        "9b9248938b5ac7cd"
+      ]
+    ]
+  },
+  {
+    "id": "9b9248938b5ac7cd",
+    "type": "http request",
+    "z": "4e540d007f751b4d",
+    "name": "Fetch CAP RSS",
+    "method": "use",
+    "ret": "txt",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "insecureHTTPParser": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "x": 590,
+    "y": 120,
+    "wires": [
+      [
+        "4fce35ec4878f664"
+      ]
+    ]
+  },
+  {
+    "id": "4fce35ec4878f664",
+    "type": "xml",
+    "z": "4e540d007f751b4d",
+    "name": "XML -> JS object",
+    "property": "payload",
+    "attr": "",
+    "chr": "",
+    "x": 800,
+    "y": 120,
+    "wires": [
+      [
+        "6c2b0dc73b2954f2"
+      ]
+    ]
+  },
+  {
+    "id": "6c2b0dc73b2954f2",
+    "type": "function",
+    "z": "4e540d007f751b4d",
+    "name": "Evaluate CAP alerts + geofence",
+    "func": "const CONFIG = {\n    // CAP feed to poll\n    capFeedUrl: \"https://alerts.metservice.com/cap/rss\",\n\n    // Optional fixed portal ID fallback if topic discovery has not happened yet.\n    // Example: \"ABCD1234EF56\". Leave empty to auto-discover from N/<portalId>/... topics.\n    portalId: \"\",\n\n    // Home location fallback (used when GPS topics are unavailable)\n    home: {\n        lat: null,\n        lon: null,\n        name: \"Home\"\n    },\n\n    // If true, prefer live Victron GPS values when available.\n    useVictronGps: true,\n\n    // If CAP item has no geometry, optionally match this against area text.\n    // Example: [\"Auckland\", \"Northland\"]\n    homeAreaKeywords: [],\n\n    // If true, alerts without geometry/area matching are treated as in-zone.\n    matchAllWithoutGeometry: false,\n\n    // Include future alerts this many minutes before onset/effective time.\n    leadMinutes: 30,\n\n    // Keep protection active this long after last alert expiry.\n    clearHoldMinutes: 60,\n\n    // Minimum SOC values to enforce when inactive/active.\n    normalMinSoc: 20,\n    stormMinSoc: 80,\n\n    // CAP severity filter. Leave empty to accept any severity.\n    acceptedSeverities: [\"Moderate\", \"Severe\", \"Extreme\"],\n\n    // Storm-ish keywords looked up in event/title/description.\n    stormKeywords: [\n        \"storm\",\n        \"thunderstorm\",\n        \"severe weather\",\n        \"heavy rain\",\n        \"flood\",\n        \"wind\",\n        \"gale\",\n        \"squall\",\n        \"cyclone\",\n        \"tornado\",\n        \"hail\",\n        \"snow\",\n        \"ice\"\n    ]\n};\n\nflow.set(\"stormConfig\", CONFIG);\n\nfunction asArray(v) {\n    if (v === undefined || v === null) return [];\n    return Array.isArray(v) ? v : [v];\n}\n\nfunction firstText(v) {\n    if (Array.isArray(v)) {\n        for (const item of v) {\n            const t = firstText(item);\n            if (t) return t;\n        }\n        return \"\";\n    }\n    if (typeof v === \"object\" && v !== null) {\n        if (v._ !== undefined) return String(v._).trim();\n        return \"\";\n    }\n    return String(v).trim();\n}\n\nfunction num(v) {\n    const n = Number(v);\n    return Number.isFinite(n) ? n : null;\n}\n\nfunction parseDateMs(v) {\n    const t = firstText(v);\n    if (!t) return null;\n    const ms = Date.parse(t);\n    return Number.isFinite(ms) ? ms : null;\n}\n\nfunction normalize(s) {\n    return firstText(s).toLowerCase();\n}\n\nfunction clampSocStep5(v, fallback) {\n    const n = num(v);\n    const base = Number.isFinite(n) ? n : fallback;\n    const clipped = Math.max(0, Math.min(100, base));\n    return Math.round(clipped / 5) * 5;\n}\n\nfunction parsePolygon(polyText) {\n    const t = firstText(polyText);\n    if (!t) return [];\n    const pairs = t.trim().split(/\\s+/);\n    const points = [];\n    for (const pair of pairs) {\n        const parts = pair.split(\",\");\n        if (parts.length !== 2) continue;\n        const lat = num(parts[0]);\n        const lon = num(parts[1]);\n        if (lat === null || lon === null) continue;\n        points.push([lat, lon]);\n    }\n    return points;\n}\n\nfunction pointInPolygon(lat, lon, points) {\n    // Ray casting in lon/lat plane.\n    let inside = false;\n    const x = lon;\n    const y = lat;\n    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {\n        const yi = points[i][0];\n        const xi = points[i][1];\n        const yj = points[j][0];\n        const xj = points[j][1];\n\n        const intersects = ((yi > y) !== (yj > y)) &&\n            (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-12) + xi);\n        if (intersects) inside = !inside;\n    }\n    return inside;\n}\n\nfunction parseCircle(circleText) {\n    // CAP circle format: \"lat,lon radiusKm\"\n    const t = firstText(circleText);\n    if (!t) return null;\n    const parts = t.trim().split(/\\s+/);\n    if (parts.length < 2) return null;\n    const center = parts[0].split(\",\");\n    if (center.length !== 2) return null;\n    const lat = num(center[0]);\n    const lon = num(center[1]);\n    const radiusKm = num(parts[1]);\n    if (lat === null || lon === null || radiusKm === null || radiusKm < 0) return null;\n    return { lat, lon, radiusKm };\n}\n\nfunction haversineKm(lat1, lon1, lat2, lon2) {\n    const toRad = (d) => d * Math.PI / 180;\n    const R = 6371;\n    const dLat = toRad(lat2 - lat1);\n    const dLon = toRad(lon2 - lon1);\n    const a = Math.sin(dLat / 2) ** 2 +\n        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;\n    return 2 * R * Math.asin(Math.sqrt(a));\n}\n\nconst gpsLat = num(flow.get(\"gpsLatitude\"));\nconst gpsLon = num(flow.get(\"gpsLongitude\"));\nconst cfgLat = num(CONFIG.home.lat);\nconst cfgLon = num(CONFIG.home.lon);\n\nlet homeLat = cfgLat;\nlet homeLon = cfgLon;\nlet homeSource = \"config\";\n\nif (CONFIG.useVictronGps && gpsLat !== null && gpsLon !== null) {\n    homeLat = gpsLat;\n    homeLon = gpsLon;\n    homeSource = \"victron-gps\";\n}\n\nconst hasHome = (homeLat !== null && homeLon !== null);\nconst acceptedSeverity = new Set(asArray(CONFIG.acceptedSeverities).map((s) => firstText(s).toLowerCase()).filter(Boolean));\nconst stormKeywords = asArray(CONFIG.stormKeywords).map((k) => firstText(k).toLowerCase()).filter(Boolean);\nconst areaKeywords = asArray(CONFIG.homeAreaKeywords).map((k) => firstText(k).toLowerCase()).filter(Boolean);\n\nconst now = Date.now();\nconst leadMs = Math.max(0, (num(CONFIG.leadMinutes) || 0) * 60000);\nconst holdMs = Math.max(0, (num(CONFIG.clearHoldMinutes) || 0) * 60000);\n\nconst p = msg.payload || {};\nlet items = [];\n\nif (p.rss && p.rss.channel) {\n    const channel = asArray(p.rss.channel)[0] || {};\n    items = asArray(channel.item);\n} else if (p.feed && p.feed.entry) {\n    // Some feeds may be Atom instead of RSS.\n    items = asArray(p.feed.entry);\n}\n\nconst matched = [];\n\nfor (const item of items) {\n    const title = firstText(item.title);\n    const event = firstText(item[\"cap:event\"]) || title;\n    const desc = firstText(item.description) || firstText(item.summary) || \"\";\n    const severity = firstText(item[\"cap:severity\"]);\n    const areaDesc = firstText(item[\"cap:areaDesc\"]) || firstText(item[\"cap:area\"]);\n\n    const searchable = `${event} ${title} ${desc}`.toLowerCase();\n    const hasStormKeyword = stormKeywords.length === 0 || stormKeywords.some((k) => searchable.includes(k));\n    if (!hasStormKeyword) continue;\n\n    if (acceptedSeverity.size > 0) {\n        const sevNorm = severity.toLowerCase();\n        if (!acceptedSeverity.has(sevNorm)) continue;\n    }\n\n    const onsetMs = parseDateMs(item[\"cap:onset\"]) || parseDateMs(item[\"cap:effective\"]);\n    const effectiveMs = parseDateMs(item[\"cap:effective\"]);\n    const expiresMs = parseDateMs(item[\"cap:expires\"]) || parseDateMs(item.pubDate);\n\n    const startsMs = onsetMs || effectiveMs || now;\n    if (startsMs - leadMs > now) continue;\n    if (expiresMs !== null && expiresMs < now) continue;\n\n    let inZone = false;\n    let zoneType = \"none\";\n\n    if (hasHome) {\n        const polygons = asArray(item[\"cap:polygon\"]);\n        for (const poly of polygons) {\n            const pts = parsePolygon(poly);\n            if (pts.length >= 3 && pointInPolygon(homeLat, homeLon, pts)) {\n                inZone = true;\n                zoneType = \"polygon\";\n                break;\n            }\n        }\n\n        if (!inZone) {\n            const circles = asArray(item[\"cap:circle\"]);\n            for (const c of circles) {\n                const circle = parseCircle(c);\n                if (!circle) continue;\n                const dKm = haversineKm(homeLat, homeLon, circle.lat, circle.lon);\n                if (dKm <= circle.radiusKm) {\n                    inZone = true;\n                    zoneType = \"circle\";\n                    break;\n                }\n            }\n        }\n    }\n\n    if (!inZone && areaKeywords.length > 0) {\n        const areaNorm = areaDesc.toLowerCase();\n        inZone = areaKeywords.some((k) => areaNorm.includes(k));\n        if (inZone) zoneType = \"area-keyword\";\n    }\n\n    if (!inZone && CONFIG.matchAllWithoutGeometry && !firstText(item[\"cap:polygon\"]) && !firstText(item[\"cap:circle\"])) {\n        inZone = true;\n        zoneType = \"no-geometry-fallback\";\n    }\n\n    if (!inZone) continue;\n\n    matched.push({\n        title,\n        event,\n        severity: severity || \"Unknown\",\n        area: areaDesc,\n        zoneType,\n        startsAt: startsMs ? new Date(startsMs).toISOString() : null,\n        expiresAt: expiresMs ? new Date(expiresMs).toISOString() : null,\n        expiresTs: expiresMs\n    });\n}\n\nlet holdUntil = num(flow.get(\"stormHoldUntil\")) || 0;\nlet shouldProtect = matched.length > 0;\nlet reason = shouldProtect ? \"active-alert\" : \"clear\";\n\nif (shouldProtect) {\n    let furthestExpiry = 0;\n    for (const m of matched) {\n        if (m.expiresTs && m.expiresTs > furthestExpiry) {\n            furthestExpiry = m.expiresTs;\n        }\n    }\n    holdUntil = (furthestExpiry || now) + holdMs;\n    flow.set(\"stormHoldUntil\", holdUntil);\n} else if (holdUntil > now) {\n    shouldProtect = true;\n    reason = \"hold-timer\";\n} else {\n    flow.set(\"stormHoldUntil\", 0);\n}\n\nconst discoveredPortalId = flow.get(\"portalId\") || \"\";\nconst portalId = CONFIG.portalId || discoveredPortalId;\n\nmsg.stormWatch = {\n    timestamp: new Date(now).toISOString(),\n    shouldProtect,\n    reason,\n    matchedCount: matched.length,\n    matchedAlerts: matched.slice(0, 10),\n    holdUntil: holdUntil ? new Date(holdUntil).toISOString() : null,\n    portalId: portalId || null,\n    home: {\n        lat: homeLat,\n        lon: homeLon,\n        source: hasHome ? homeSource : \"missing\"\n    },\n    control: {\n        normalMinSoc: clampSocStep5(CONFIG.normalMinSoc, 20),\n        stormMinSoc: clampSocStep5(CONFIG.stormMinSoc, 80)\n    }\n};\n\nif (!hasHome) {\n    msg.stormWatch.warning = \"Home location is missing. Set CONFIG.home.lat/lon or provide Victron GPS topics.\";\n}\n\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1070,
+    "y": 120,
+    "wires": [
+      [
+        "8b5df8a4d5bbcb44"
+      ]
+    ]
+  },
+  {
+    "id": "8b5df8a4d5bbcb44",
+    "type": "function",
+    "z": "4e540d007f751b4d",
+    "name": "Set ForceCharge + MinimumSoc on state change",
+    "func": "const info = msg.stormWatch || {};\nconst prev = !!flow.get(\"stormProtectActive\");\nconst next = !!info.shouldProtect;\nconst portalId = info.portalId || flow.get(\"portalId\") || \"\";\n\nfunction clampSocStep5(v, fallback) {\n    const n = Number(v);\n    const base = Number.isFinite(n) ? n : fallback;\n    const clipped = Math.max(0, Math.min(100, base));\n    return Math.round(clipped / 5) * 5;\n}\n\nconst normalMinSoc = clampSocStep5(info.control && info.control.normalMinSoc, 20);\nconst stormMinSoc = clampSocStep5(info.control && info.control.stormMinSoc, 80);\n\nfunction settingTopic(path) {\n    return `W/${portalId}/settings/0/${path}`;\n}\n\nfunction settingMsg(path, value) {\n    return {\n        topic: settingTopic(path),\n        payload: JSON.stringify({ value })\n    };\n}\n\nif (!portalId) {\n    node.status({ fill: \"yellow\", shape: \"ring\", text: \"waiting for portalId\" });\n    return [null, {\n        payload: {\n            level: \"warn\",\n            text: \"Portal ID not known yet. Waiting for Victron telemetry topic N/<portalId>/...\",\n            stormWatch: info\n        }\n    }];\n}\n\nif (next && !prev) {\n    flow.set(\"stormProtectActive\", true);\n    node.status({ fill: \"red\", shape: \"dot\", text: `protect ${stormMinSoc}%` });\n    return [[\n        settingMsg(\"Settings/CGwacs/BatteryLife/MinimumSocLimit\", stormMinSoc),\n        settingMsg(\"Settings/CGwacs/BatteryLife/ForceCharge\", 1)\n    ], {\n        payload: {\n            level: \"info\",\n            text: `Storm protection ENABLED. MinimumSoc=${stormMinSoc}, ForceCharge=1`,\n            stormWatch: info\n        }\n    }];\n}\n\nif (!next && prev) {\n    flow.set(\"stormProtectActive\", false);\n    node.status({ fill: \"green\", shape: \"dot\", text: `normal ${normalMinSoc}%` });\n    return [[\n        settingMsg(\"Settings/CGwacs/BatteryLife/ForceCharge\", 0),\n        settingMsg(\"Settings/CGwacs/BatteryLife/MinimumSocLimit\", normalMinSoc)\n    ], {\n        payload: {\n            level: \"info\",\n            text: `Storm protection DISABLED. ForceCharge=0, MinimumSoc=${normalMinSoc}`,\n            stormWatch: info\n        }\n    }];\n}\n\nnode.status({ fill: next ? \"red\" : \"green\", shape: \"ring\", text: next ? \"protect active\" : \"normal\" });\nreturn [null, {\n    payload: {\n        level: \"debug\",\n        text: next ? \"No change (already in protect mode).\" : \"No change (normal mode).\",\n        stormWatch: info\n    }\n}];",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 1350,
+    "y": 120,
+    "wires": [
+      [
+        "18f3a4e49f3f3872"
+      ],
+      [
+        "ef21743ee9546a79"
+      ]
+    ]
+  },
+  {
+    "id": "18f3a4e49f3f3872",
+    "type": "mqtt out",
+    "z": "4e540d007f751b4d",
+    "name": "Victron MQTT settings writes",
+    "topic": "",
+    "qos": "1",
+    "retain": "false",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "b8ab2d8f6bd6a0be",
+    "x": 1660,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "ef21743ee9546a79",
+    "type": "debug",
+    "z": "4e540d007f751b4d",
+    "name": "Storm controller status",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1660,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "e95149f6e3d6c8e1",
+    "type": "comment",
+    "z": "4e540d007f751b4d",
+    "name": "Telemetry listeners (portal ID, SOC, GPS)",
+    "info": "",
+    "x": 250,
+    "y": 260,
+    "wires": []
+  },
+  {
+    "id": "ceeaabdf2ea9f4f6",
+    "type": "mqtt in",
+    "z": "4e540d007f751b4d",
+    "name": "Battery SoC",
+    "topic": "N/+/battery/+/Soc",
+    "qos": "1",
+    "datatype": "auto-detect",
+    "broker": "b8ab2d8f6bd6a0be",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 140,
+    "y": 300,
+    "wires": [
+      [
+        "c59dc788cd17d056"
+      ]
+    ]
+  },
+  {
+    "id": "c59dc788cd17d056",
+    "type": "function",
+    "z": "4e540d007f751b4d",
+    "name": "Store portal ID + SOC",
+    "func": "const t = String(msg.topic || \"\");\nconst m = t.match(/^N\\/([^/]+)\\//);\nif (m) {\n    flow.set(\"portalId\", m[1]);\n}\n\nlet value = msg.payload;\nif (value && typeof value === \"object\" && value.value !== undefined) {\n    value = value.value;\n}\nconst soc = Number(value);\nif (Number.isFinite(soc)) {\n    flow.set(\"batterySoc\", soc);\n}\n\nreturn null;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 390,
+    "y": 300,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "91d75c2a46aaf3c4",
+    "type": "mqtt in",
+    "z": "4e540d007f751b4d",
+    "name": "System GPS",
+    "topic": "N/+/system/0/Gps/#",
+    "qos": "1",
+    "datatype": "auto-detect",
+    "broker": "b8ab2d8f6bd6a0be",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 130,
+    "y": 360,
+    "wires": [
+      [
+        "4f46b5fcfe7e0b84"
+      ]
+    ]
+  },
+  {
+    "id": "6e2a2188f9a010da",
+    "type": "mqtt in",
+    "z": "4e540d007f751b4d",
+    "name": "GPS service (alt path)",
+    "topic": "N/+/gps/+/#",
+    "qos": "1",
+    "datatype": "auto-detect",
+    "broker": "b8ab2d8f6bd6a0be",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 160,
+    "y": 420,
+    "wires": [
+      [
+        "4f46b5fcfe7e0b84"
+      ]
+    ]
+  },
+  {
+    "id": "4f46b5fcfe7e0b84",
+    "type": "function",
+    "z": "4e540d007f751b4d",
+    "name": "Store GPS lat/lon + portal ID",
+    "func": "const t = String(msg.topic || \"\");\nconst m = t.match(/^N\\/([^/]+)\\//);\nif (m) {\n    flow.set(\"portalId\", m[1]);\n}\n\nlet value = msg.payload;\nif (value && typeof value === \"object\" && value.value !== undefined) {\n    value = value.value;\n}\n\nfunction storeIfFinite(key, maybeNumber) {\n    const n = Number(maybeNumber);\n    if (Number.isFinite(n)) {\n        flow.set(key, n);\n        return true;\n    }\n    return false;\n}\n\nconst topicLc = t.toLowerCase();\nlet updated = false;\n\nif (topicLc.endsWith(\"/latitude\") || topicLc.endsWith(\"/lat\")) {\n    updated = storeIfFinite(\"gpsLatitude\", value) || updated;\n}\nif (topicLc.endsWith(\"/longitude\") || topicLc.endsWith(\"/lon\")) {\n    updated = storeIfFinite(\"gpsLongitude\", value) || updated;\n}\n\nif (value && typeof value === \"object\") {\n    updated = storeIfFinite(\"gpsLatitude\", value.latitude) || updated;\n    updated = storeIfFinite(\"gpsLatitude\", value.lat) || updated;\n    updated = storeIfFinite(\"gpsLongitude\", value.longitude) || updated;\n    updated = storeIfFinite(\"gpsLongitude\", value.lon) || updated;\n    updated = storeIfFinite(\"gpsLongitude\", value.lng) || updated;\n}\n\nif (updated) {\n    const lat = flow.get(\"gpsLatitude\");\n    const lon = flow.get(\"gpsLongitude\");\n    node.status({ fill: \"blue\", shape: \"dot\", text: `GPS ${lat},${lon}` });\n}\n\nreturn null;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 420,
+    "y": 390,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "b8ab2d8f6bd6a0be",
+    "type": "mqtt-broker",
+    "name": "Cerbo local MQTT",
+    "broker": "127.0.0.1",
+    "port": "1883",
+    "clientid": "nodered-storm-watch",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true,
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthRetain": "false",
+    "birthPayload": "",
+    "birthMsg": {},
+    "closeTopic": "",
+    "closeQos": "0",
+    "closeRetain": "false",
+    "closePayload": "",
+    "closeMsg": {},
+    "willTopic": "",
+    "willQos": "0",
+    "willRetain": "false",
+    "willPayload": "",
+    "willMsg": {},
+    "userProps": "",
+    "sessionExpiry": ""
+  }
+]
