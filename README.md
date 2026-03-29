@@ -7,6 +7,7 @@ A lightweight, phone-friendly app for small electrical teams doing solar install
 - Captures business/job/site details
 - Includes Solar Electrix logo in app and generated PDF
 - Provides a practical risk checklist aligned to common AS/NZS + WorkSafe style controls
+- Includes a generic editable SWMS/JSA section with default solar job tasks, hazards, and controls
 - Lets you take or attach site photos
 - Adds photo captions
 - Exports a final PDF report with checklist outcomes, notes, sign-off, and photos

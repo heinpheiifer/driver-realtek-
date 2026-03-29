@@ -48,13 +48,54 @@ const CHECKLIST_SECTIONS = [
   }
 ];
 
+const DEFAULT_SWMS_ITEMS = [
+  {
+    activity: "Unload materials and tools",
+    hazards: "Manual handling strain, slips/trips in driveway or access paths",
+    controls:
+      "Use team lift for heavy items, clear walk paths, wear PPE (boots/gloves), keep work area tidy",
+    responsible: "Installer team"
+  },
+  {
+    activity: "Access roof and set up work area",
+    hazards: "Falls from height, unstable ladder, fragile roof sections",
+    controls:
+      "Inspect ladder condition and angle, secure ladder, use fall restraint where required, identify fragile areas",
+    responsible: "Team leader"
+  },
+  {
+    activity: "Install rails and PV panels",
+    hazards: "Dropped objects, cuts, tool injury, weather exposure",
+    controls:
+      "Establish exclusion zone below, use tool lanyards where practical, gloves/eye protection, stop work in unsafe weather",
+    responsible: "Installer team"
+  },
+  {
+    activity: "Run DC cabling and connect isolators/inverter",
+    hazards: "Electric shock, arc risk, incorrect polarity, damaged cable insulation",
+    controls:
+      "Follow isolation procedure, verify polarity and terminations, inspect cable routing/protection, use compliant components",
+    responsible: "Licensed electrician"
+  },
+  {
+    activity: "Testing, commissioning and handover",
+    hazards: "Unexpected energization, incomplete documentation, client not informed",
+    controls:
+      "Perform final tests, complete labels/signage, provide shutdown instructions, issue required compliance documents",
+    responsible: "Supervisor"
+  }
+];
+
 const STORAGE_KEY = "solar-safety-app-draft-v1";
 
 const state = {
-  photos: [] // { id, name, caption, dataUrl }
+  photos: [], // { id, name, caption, dataUrl }
+  swmsItems: []
 };
 
 const checklistContainer = document.getElementById("checklistContainer");
+const swmsContainer = document.getElementById("swmsContainer");
+const addSwmsItemBtn = document.getElementById("addSwmsItemBtn");
 const photoInput = document.getElementById("photoInput");
 const photoList = document.getElementById("photoList");
 const saveDraftBtn = document.getElementById("saveDraftBtn");
@@ -63,7 +104,9 @@ const generatePdfBtn = document.getElementById("generatePdfBtn");
 const logoImg = document.querySelector(".company-logo");
 
 function init() {
+  state.swmsItems = DEFAULT_SWMS_ITEMS.map((item) => ({ ...item }));
   renderChecklist();
+  renderSwms();
   wireEvents();
   setDefaultDates();
   loadDraft();
@@ -85,6 +128,7 @@ function setDefaultDates() {
 
 function wireEvents() {
   photoInput.addEventListener("change", handlePhotoPick);
+  addSwmsItemBtn.addEventListener("click", addSwmsItem);
   saveDraftBtn.addEventListener("click", saveDraft);
   clearDraftBtn.addEventListener("click", clearDraft);
   generatePdfBtn.addEventListener("click", generatePdf);
@@ -136,6 +180,81 @@ function renderChecklist() {
 
     checklistContainer.appendChild(sectionEl);
   });
+}
+
+function addSwmsItem() {
+  state.swmsItems.push({
+    activity: "",
+    hazards: "",
+    controls: "",
+    responsible: ""
+  });
+  renderSwms();
+}
+
+function renderSwms() {
+  swmsContainer.innerHTML = "";
+  state.swmsItems.forEach((item, index) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "swms-item";
+
+    const header = document.createElement("div");
+    header.className = "swms-item-header";
+
+    const title = document.createElement("div");
+    title.className = "swms-item-title";
+    title.textContent = `Task ${index + 1}`;
+    header.appendChild(title);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "remove-photo";
+    removeBtn.textContent = "Remove";
+    removeBtn.addEventListener("click", () => {
+      state.swmsItems = state.swmsItems.filter((_, itemIdx) => itemIdx !== index);
+      renderSwms();
+    });
+    header.appendChild(removeBtn);
+    wrapper.appendChild(header);
+
+    wrapper.appendChild(
+      createSwmsField("Activity / Job step", item.activity, (value) => {
+        item.activity = value;
+      })
+    );
+    wrapper.appendChild(
+      createSwmsField("Hazards", item.hazards, (value) => {
+        item.hazards = value;
+      })
+    );
+    wrapper.appendChild(
+      createSwmsField("Controls", item.controls, (value) => {
+        item.controls = value;
+      })
+    );
+    wrapper.appendChild(
+      createSwmsField("Responsible person", item.responsible, (value) => {
+        item.responsible = value;
+      })
+    );
+
+    swmsContainer.appendChild(wrapper);
+  });
+}
+
+function createSwmsField(labelText, value, onInput) {
+  const label = document.createElement("label");
+  label.textContent = labelText;
+
+  const input = document.createElement("textarea");
+  input.rows = 2;
+  input.value = value;
+  input.addEventListener("input", (event) => {
+    onInput(event.target.value);
+  });
+
+  label.appendChild(input);
+  return label;
 }
 
 function createPhotoId() {
@@ -239,6 +358,7 @@ function getFormSnapshot() {
   return {
     values,
     checklist,
+    swmsItems: state.swmsItems,
     photos: state.photos
   };
 }
@@ -263,6 +383,18 @@ function applySnapshot(snapshot) {
     const comment = document.querySelector(`input[data-comment-key="${key}"]`);
     if (comment) comment.value = data.note || "";
   });
+
+  if (Array.isArray(snapshot.swmsItems) && snapshot.swmsItems.length > 0) {
+    state.swmsItems = snapshot.swmsItems.map((item) => ({
+      activity: item.activity || "",
+      hazards: item.hazards || "",
+      controls: item.controls || "",
+      responsible: item.responsible || ""
+    }));
+  } else {
+    state.swmsItems = DEFAULT_SWMS_ITEMS.map((item) => ({ ...item }));
+  }
+  renderSwms();
 
   state.photos = Array.isArray(snapshot.photos) ? snapshot.photos : [];
   renderPhotos();
@@ -305,6 +437,29 @@ function formatChecklistForPdf() {
       const note = document.querySelector(`input[data-comment-key="${key}"]`)?.value?.trim();
       lines.push(`- ${item} -> ${result}${note ? ` | Note: ${note}` : ""}`);
     });
+    lines.push("");
+  });
+  return lines;
+}
+
+function formatSwmsForPdf() {
+  const rows = state.swmsItems.filter((item) =>
+    [item.activity, item.hazards, item.controls, item.responsible].some(
+      (value) => String(value || "").trim() !== ""
+    )
+  );
+
+  if (rows.length === 0) {
+    return ["No SWMS/JSA rows entered."];
+  }
+
+  const lines = [];
+  rows.forEach((item, index) => {
+    lines.push(`Task ${index + 1}`);
+    lines.push(`- Activity: ${item.activity || "-"}`);
+    lines.push(`- Hazards: ${item.hazards || "-"}`);
+    lines.push(`- Controls: ${item.controls || "-"}`);
+    lines.push(`- Responsible: ${item.responsible || "-"}`);
     lines.push("");
   });
   return lines;
@@ -368,6 +523,24 @@ async function generatePdf() {
 
   const checklistLines = formatChecklistForPdf();
   for (const line of checklistLines) {
+    if (y > 275) {
+      doc.addPage();
+      y = 14;
+    }
+    y = addWrappedText(doc, line, 14, y, 182);
+  }
+
+  if (y > 245) {
+    doc.addPage();
+    y = 14;
+  }
+  y += 2;
+  doc.setFontSize(12);
+  doc.text("Generic SWMS / JSA", 14, y);
+  y += 6;
+  doc.setFontSize(10);
+  const swmsLines = formatSwmsForPdf();
+  for (const line of swmsLines) {
     if (y > 275) {
       doc.addPage();
       y = 14;

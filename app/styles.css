@@ -119,6 +119,31 @@ textarea {
   font-size: 1rem;
 }
 
+.swms-list {
+  display: grid;
+  gap: 0.8rem;
+  margin-bottom: 0.8rem;
+}
+
+.swms-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.8rem;
+  background: #fafcfd;
+}
+
+.swms-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.6rem;
+}
+
+.swms-item-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
 .check-item {
   display: flex;
   flex-direction: column;
