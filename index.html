@@ -16,6 +16,7 @@
       <button id="saveBtn" type="button">Save Draft</button>
       <button id="printBtn" type="button">Print Report</button>
       <button id="pdfBtn" type="button">Export PDF</button>
+      <button id="emailBtn" type="button">Email Report</button>
       <button id="exportBtn" type="button">Export JSON</button>
       <label class="import-label">
         Import JSON
@@ -41,6 +42,16 @@
           <button id="duplicateJobBtn" type="button">Duplicate</button>
           <button id="deleteJobBtn" type="button" class="danger">Delete</button>
         </div>
+      </div>
+      <div class="grid two-col job-email-grid">
+        <label>
+          Report Email To
+          <input id="jobEmailTo" type="email" placeholder="client@example.com" />
+        </label>
+        <label>
+          Report Email CC
+          <input id="jobEmailCc" type="text" placeholder="installer@example.com, office@example.com" />
+        </label>
       </div>
       <p id="jobMeta" class="job-meta"></p>
     </section>

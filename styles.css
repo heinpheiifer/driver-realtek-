@@ -61,6 +61,10 @@ body {
   font-size: 0.88rem;
 }
 
+.email-grid {
+  margin-top: 0.5rem;
+}
+
 button,
 .import-label {
   border: 1px solid #cbd5e1;

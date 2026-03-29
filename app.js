@@ -17,6 +17,7 @@ const exportBtn = document.getElementById("exportBtn");
 const importInput = document.getElementById("importInput");
 const printBtn = document.getElementById("printBtn");
 const pdfBtn = document.getElementById("pdfBtn");
+const emailBtn = document.getElementById("emailBtn");
 const resetBtn = document.getElementById("resetBtn");
 
 const jobSelect = document.getElementById("jobSelect");
@@ -25,6 +26,8 @@ const renameJobBtn = document.getElementById("renameJobBtn");
 const duplicateJobBtn = document.getElementById("duplicateJobBtn");
 const deleteJobBtn = document.getElementById("deleteJobBtn");
 const jobMeta = document.getElementById("jobMeta");
+const jobEmailTo = document.getElementById("jobEmailTo");
+const jobEmailCc = document.getElementById("jobEmailCc");
 
 const signatureCanvas = document.getElementById("signatureCanvas");
 const clearSignatureBtn = document.getElementById("clearSignatureBtn");
@@ -76,6 +79,8 @@ function createEmptyJob(title = "") {
     createdAt,
     updatedAt: createdAt,
     fields: {},
+    emailTo: "",
+    emailCc: "",
     stringTests: [createBlankStringTest()],
     installationPhotos: [],
     electricalPhotos: [],
@@ -127,6 +132,8 @@ function normalizeJob(rawJob, index = 0) {
     createdAt: rawJob?.createdAt || nowIso(),
     updatedAt: rawJob?.updatedAt || nowIso(),
     fields: rawJob?.fields && typeof rawJob.fields === "object" ? rawJob.fields : {},
+    emailTo: typeof rawJob?.emailTo === "string" ? rawJob.emailTo : "",
+    emailCc: typeof rawJob?.emailCc === "string" ? rawJob.emailCc : "",
     stringTests: normalizeStringTests(rawJob?.stringTests),
     installationPhotos: normalizePhotoArray(rawJob?.installationPhotos),
     electricalPhotos: normalizePhotoArray(rawJob?.electricalPhotos),
@@ -213,6 +220,8 @@ function persistCurrentJobFromUI(touchUpdated = true) {
   const job = getActiveJob();
   if (!job) return;
   job.fields = serializeForm();
+  job.emailTo = (jobEmailTo?.value || "").trim();
+  job.emailCc = (jobEmailCc?.value || "").trim();
   if (touchUpdated) {
     job.updatedAt = nowIso();
   }
@@ -254,7 +263,8 @@ function updateJobMeta() {
     jobMeta.textContent = "";
     return;
   }
-  jobMeta.textContent = `Created: ${new Date(job.createdAt).toLocaleString()} | Updated: ${new Date(job.updatedAt).toLocaleString()} | Strings: ${job.stringTests.length} | Installation photos: ${job.installationPhotos.length} | Electrical photos: ${job.electricalPhotos.length}`;
+  const emailInfo = job.emailTo ? ` | Email To: ${job.emailTo}` : "";
+  jobMeta.textContent = `Created: ${new Date(job.createdAt).toLocaleString()} | Updated: ${new Date(job.updatedAt).toLocaleString()} | Strings: ${job.stringTests.length} | Installation photos: ${job.installationPhotos.length} | Electrical photos: ${job.electricalPhotos.length}${emailInfo}`;
 }
 
 function renderStringTests() {
@@ -498,6 +508,8 @@ function loadActiveJobIntoUI() {
   const job = getActiveJob();
   if (!job) return;
   hydrateForm(job.fields);
+  if (jobEmailTo) jobEmailTo.value = job.emailTo || "";
+  if (jobEmailCc) jobEmailCc.value = job.emailCc || "";
   renderStringTests();
   renderPhotoList(installationPhotoList, job.installationPhotos, "installation");
   renderPhotoList(electricalPhotoList, job.electricalPhotos, "electrical");
@@ -679,12 +691,54 @@ function buildReportData() {
   if (!job) return null;
   return {
     title: job.title,
+    emailTo: job.emailTo || "",
+    emailCc: job.emailCc || "",
     fields: job.fields,
     stringTests: job.stringTests,
     installationPhotos: job.installationPhotos,
     electricalPhotos: job.electricalPhotos,
     signatureDataUrl: job.signatureDataUrl
   };
+}
+
+function buildEmailBody(report) {
+  const lines = [
+    "Hello,",
+    "",
+    "Please find the Solar COC & Commissioning report summary below.",
+    "",
+    `Job: ${report.title || ""}`,
+    `Job Number: ${report.fields.jobNumber || ""}`,
+    `Installation Address: ${report.fields.installationAddress || ""}`,
+    `Installation Date: ${report.fields.installDate || ""}`,
+    `Customer: ${report.fields.customerName || ""}`,
+    `Worker: ${report.fields.workerName || ""}`,
+    "",
+    `PV Strings Recorded: ${report.stringTests.length}`,
+    `Installation Photos: ${report.installationPhotos.length}`,
+    `Electrical Test Photos: ${report.electricalPhotos.length}`,
+    "",
+    "Please attach the generated PDF report from the app to this email before sending.",
+    "",
+    "Regards"
+  ];
+  return lines.join("\n");
+}
+
+function openEmailReportDraft() {
+  const report = buildReportData();
+  if (!report) return;
+  saveDatabase();
+  updateJobMeta();
+
+  const to = encodeURIComponent(report.emailTo || "");
+  const cc = encodeURIComponent(report.emailCc || "");
+  const subject = encodeURIComponent(
+    `Solar COC Report - ${report.fields.jobNumber || report.title || "Solar Job"}`
+  );
+  const body = encodeURIComponent(buildEmailBody(report));
+  const mailto = `mailto:${to}?cc=${cc}&subject=${subject}&body=${body}`;
+  window.location.href = mailto;
 }
 
 function printReport() {
@@ -1086,6 +1140,18 @@ function wireEvents() {
     alert("Draft saved for the current job.");
   });
 
+  jobEmailTo.addEventListener("input", () => {
+    persistCurrentJobFromUI();
+    saveDatabase();
+    updateJobMeta();
+  });
+
+  jobEmailCc.addEventListener("input", () => {
+    persistCurrentJobFromUI();
+    saveDatabase();
+    updateJobMeta();
+  });
+
   exportBtn.addEventListener("click", () => {
     persistCurrentJobFromUI();
     saveDatabase();
@@ -1115,6 +1181,7 @@ function wireEvents() {
       alert(`PDF export failed: ${error.message}`);
     }
   });
+  emailBtn.addEventListener("click", openEmailReportDraft);
 
   resetBtn.addEventListener("click", resetCurrentJob);
 
