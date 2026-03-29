@@ -35,10 +35,11 @@ This repository includes a GitHub Actions workflow to publish the app from `app/
 3. Push to `master` (or this feature branch) and wait for the **Deploy Solar Safety App to Pages** workflow
 4. Your app will be available at:
    - `https://heinpheiifer.github.io/driver-realtek-/`
+   - (root redirects to `/app/`)
 
 ## Custom subdomain setup (`safety.solarelectrix.co.nz`)
 
-This project includes `app/CNAME` with:
+This project includes `CNAME` (repo root) and `app/CNAME` with:
 
 ```text
 safety.solarelectrix.co.nz
