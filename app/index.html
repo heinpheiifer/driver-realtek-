@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solar Site Safety</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>Solar Site Health &amp; Safety</h1>
+        <p class="subtext">
+          Simple mobile form for small teams. Checklist structure aligns with common
+          AS/NZS and WorkSafe practices for solar installations.
+        </p>
+      </header>
+
+      <section class="card">
+        <h2>Business &amp; Job Details</h2>
+        <div class="grid two-col">
+          <label>
+            Business name
+            <input id="businessName" type="text" placeholder="Your electrical business" />
+          </label>
+          <label>
+            Team leader
+            <input id="teamLeader" type="text" placeholder="Name" />
+          </label>
+          <label>
+            Team members
+            <input id="teamMembers" type="text" placeholder="Up to 4 names" />
+          </label>
+          <label>
+            Job number
+            <input id="jobNumber" type="text" placeholder="Optional" />
+          </label>
+          <label>
+            Client name
+            <input id="clientName" type="text" placeholder="Client" />
+          </label>
+          <label>
+            Site address
+            <input id="siteAddress" type="text" placeholder="Installation address" />
+          </label>
+          <label>
+            Date
+            <input id="siteDate" type="date" />
+          </label>
+          <label>
+            Weather conditions
+            <input id="weather" type="text" placeholder="Sunny, windy, rain risk..." />
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Risk Checklist</h2>
+        <p class="small-note">
+          Mark each item as <strong>Yes</strong> (controlled), <strong>No</strong> (not controlled),
+          or <strong>N/A</strong>.
+        </p>
+        <div id="checklistContainer"></div>
+      </section>
+
+      <section class="card">
+        <h2>Photos</h2>
+        <p class="small-note">Take site photos and include them in the final PDF.</p>
+        <label class="photo-picker">
+          <span>Add photos</span>
+          <input id="photoInput" type="file" accept="image/*" capture="environment" multiple />
+        </label>
+        <div id="photoList" class="photo-list"></div>
+      </section>
+
+      <section class="card">
+        <h2>Site Notes &amp; Sign-off</h2>
+        <label>
+          Notes
+          <textarea id="siteNotes" rows="5" placeholder="Incidents, controls applied, extra details..."></textarea>
+        </label>
+        <div class="grid two-col">
+          <label>
+            Supervisor sign-off
+            <input id="signOffName" type="text" placeholder="Name" />
+          </label>
+          <label>
+            Sign-off date
+            <input id="signOffDate" type="date" />
+          </label>
+        </div>
+      </section>
+
+      <section class="actions">
+        <button id="saveDraftBtn" type="button">Save Draft</button>
+        <button id="clearDraftBtn" type="button" class="secondary">Clear Draft</button>
+        <button id="generatePdfBtn" type="button" class="primary">Generate PDF</button>
+      </section>
+
+      <section class="card compliance">
+        <h2>Compliance Reminder</h2>
+        <p>
+          This template is a practical field tool and should be reviewed against your local
+          obligations, including relevant parts of AS/NZS 3000, AS/NZS 5033, and your state
+          WorkSafe guidance.
+        </p>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
