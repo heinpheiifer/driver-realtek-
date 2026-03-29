@@ -136,6 +136,35 @@ VRM/alarm bridge state is retained under `vrmTopicBase`.
 - Dry-run mode (`dryRun`) to test logic without writing ESS settings
 - Geofence buffer around polygons/circles (`geofenceBufferKm`)
 - Health topics (last success, failures, poll duration, stale flag)
+- Email + webhook notifications with cooldown (`notifications`, `notificationCooldownSeconds`)
+
+### Notifications (email/webhook)
+
+Notifications are sent on:
+
+- state changes (`normal <-> protect`)
+- stale state transitions (optional)
+- error states (optional)
+
+Configure in `config.json`:
+
+- `notifications.enabled`
+- `notifications.notifyOnStateChange`
+- `notifications.notifyOnStale`
+- `notifications.notifyOnError`
+- `notificationCooldownSeconds`
+
+Email section:
+
+- `notifications.email.enabled`
+- `from`, `to[]`, `subjectPrefix`
+- `smtpHost`, `smtpPort`, `username`, `password`
+- `useTls`/`useSsl`
+
+Webhook section:
+
+- `notifications.webhook.enabled`
+- `url`, `method`, `timeoutSeconds`
 
 ---
 

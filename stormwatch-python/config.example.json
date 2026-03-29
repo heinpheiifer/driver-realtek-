@@ -50,6 +50,34 @@
   "simulateMode": false,
   "simulationFile": "",
   "dryRun": false,
+  "notificationCooldownSeconds": 300,
+  "notifications": {
+    "enabled": false,
+    "notifyOnStateChange": true,
+    "notifyOnStale": true,
+    "notifyOnError": true,
+    "email": {
+      "enabled": false,
+      "from": "alerts@example.com",
+      "to": [
+        "you@example.com"
+      ],
+      "subjectPrefix": "[StormWatch]",
+      "smtpHost": "smtp.example.com",
+      "smtpPort": 587,
+      "username": "alerts@example.com",
+      "password": "",
+      "useTls": true,
+      "useSsl": false,
+      "timeoutSeconds": 20
+    },
+    "webhook": {
+      "enabled": false,
+      "url": "",
+      "method": "POST",
+      "timeoutSeconds": 10
+    }
+  },
   "stateTopicBase": "N/custom/stormwatch",
   "vrmTopicBase": "N/custom/stormwatch/vrm",
   "heartbeatTopic": "N/custom/stormwatch/heartbeat",

@@ -20,6 +20,8 @@ import json
 import logging
 import math
 import signal
+import smtplib
+import ssl
 import threading
 import time
 import urllib.error
@@ -27,6 +29,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from email.message import EmailMessage
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -217,6 +220,8 @@ class StormWatchDaemon:
         self.last_cap_sources: List[str] = []
         self.consecutive_cap_failures: int = 0
         self.last_poll_duration_ms: int = 0
+        self.last_notification_sent_ms: Dict[str, int] = {}
+        self.last_notification_state_key: str = ""
 
         mqtt_cfg = self.config["mqtt"]
         self.mqtt_client = mqtt.Client(
@@ -263,6 +268,7 @@ class StormWatchDaemon:
             "dry_run": "dryRun",
             "geofence_buffer_km": "geofenceBufferKm",
             "log_level": "logLevel",
+            "notification_cooldown_seconds": "notificationCooldownSeconds",
         }
         for old_key, new_key in alias.items():
             if old_key in cfg and new_key not in cfg:
@@ -317,6 +323,34 @@ class StormWatchDaemon:
         cfg.setdefault("simulationFile", "")
         cfg.setdefault("dryRun", False)
         cfg.setdefault("logLevel", "INFO")
+        cfg.setdefault("notificationCooldownSeconds", 300)
+        cfg.setdefault(
+            "notifications",
+            {
+                "enabled": False,
+                "notifyOnStateChange": True,
+                "notifyOnStale": True,
+                "notifyOnError": True,
+                "email": {
+                    "enabled": False,
+                    "from": "",
+                    "to": [],
+                    "subjectPrefix": "[StormWatch]",
+                    "smtpHost": "",
+                    "smtpPort": 587,
+                    "username": "",
+                    "password": "",
+                    "useTls": True,
+                    "useSsl": False,
+                    "timeoutSeconds": 20,
+                },
+                "webhook": {
+                    "enabled": False,
+                    "url": "",
+                    "timeoutSeconds": 10,
+                },
+            },
+        )
         cfg.setdefault(
             "mqtt",
             {"host": "127.0.0.1", "port": 1883, "qos": 1, "clientId": "stormwatchd"},
@@ -340,6 +374,9 @@ class StormWatchDaemon:
 
         cfg["pollSeconds"] = max(30, int(to_num(cfg.get("pollSeconds")) or 300))
         cfg["capFetchTimeoutSeconds"] = max(3, int(to_num(cfg.get("capFetchTimeoutSeconds")) or 20))
+        cfg["notificationCooldownSeconds"] = max(
+            0, int(to_num(cfg.get("notificationCooldownSeconds")) or 300)
+        )
         cfg["leadMinutes"] = max(0, int(to_num(cfg.get("leadMinutes")) or 30))
         cfg["clearHoldMinutes"] = max(0, int(to_num(cfg.get("clearHoldMinutes")) or 60))
         cfg["maxStaleMinutes"] = max(1, int(to_num(cfg.get("maxStaleMinutes")) or 60))
@@ -411,6 +448,42 @@ class StormWatchDaemon:
         mqtt_cfg["qos"] = max(0, min(2, int(to_num(mqtt_cfg.get("qos")) or 1)))
         mqtt_cfg.setdefault("clientId", "stormwatchd")
         cfg["mqtt"] = mqtt_cfg
+
+        notifications = cfg.get("notifications", {})
+        if not isinstance(notifications, dict):
+            notifications = {}
+        notifications["enabled"] = to_bool(notifications.get("enabled"), False)
+        notifications["notifyOnStateChange"] = to_bool(
+            notifications.get("notifyOnStateChange"), True
+        )
+        notifications["notifyOnStale"] = to_bool(notifications.get("notifyOnStale"), True)
+        notifications["notifyOnError"] = to_bool(notifications.get("notifyOnError"), True)
+
+        email_cfg = notifications.get("email", {})
+        if not isinstance(email_cfg, dict):
+            email_cfg = {}
+        email_cfg["enabled"] = to_bool(email_cfg.get("enabled"), False)
+        email_cfg["from"] = str(email_cfg.get("from", "")).strip()
+        email_cfg["to"] = normalize_list(email_cfg.get("to"))
+        email_cfg["subjectPrefix"] = str(email_cfg.get("subjectPrefix", "[StormWatch]")).strip()
+        email_cfg["smtpHost"] = str(email_cfg.get("smtpHost", "")).strip()
+        email_cfg["smtpPort"] = int(to_num(email_cfg.get("smtpPort")) or 587)
+        email_cfg["username"] = str(email_cfg.get("username", "")).strip()
+        email_cfg["password"] = str(email_cfg.get("password", ""))
+        email_cfg["useTls"] = to_bool(email_cfg.get("useTls"), True)
+        email_cfg["useSsl"] = to_bool(email_cfg.get("useSsl"), False)
+        email_cfg["timeoutSeconds"] = max(3, int(to_num(email_cfg.get("timeoutSeconds")) or 20))
+        notifications["email"] = email_cfg
+
+        webhook_cfg = notifications.get("webhook", {})
+        if not isinstance(webhook_cfg, dict):
+            webhook_cfg = {}
+        webhook_cfg["enabled"] = to_bool(webhook_cfg.get("enabled"), False)
+        webhook_cfg["url"] = str(webhook_cfg.get("url", "")).strip()
+        webhook_cfg["timeoutSeconds"] = max(3, int(to_num(webhook_cfg.get("timeoutSeconds")) or 10))
+        webhook_cfg["method"] = str(webhook_cfg.get("method", "POST")).strip().upper() or "POST"
+        notifications["webhook"] = webhook_cfg
+        cfg["notifications"] = notifications
 
     def on_connect(self, client: mqtt.Client, userdata: Any, flags: Dict[str, Any], rc: int):
         if rc != 0:
@@ -831,6 +904,173 @@ class StormWatchDaemon:
         self._publish(f"{vrm}/MatchedCount", str(payload.get("matchedCount", 0)), retain=True)
         self._publish(f"{vrm}/LastUpdate", str(payload.get("timestamp", "")), retain=True)
 
+    def _notification_subject(self, event: str, info: Dict[str, Any]) -> str:
+        prefix = str(self.config.get("notifications", {}).get("email", {}).get("subjectPrefix", "[StormWatch]")).strip() or "[StormWatch]"
+        mode = "PROTECT" if info.get("shouldProtect") else "NORMAL"
+        reason = str(info.get("reason", "-")).strip()
+        return f"{prefix} {event}: {mode} ({reason})"
+
+    def _notification_body(self, event: str, info: Dict[str, Any]) -> str:
+        lines = [
+            f"Event: {event}",
+            f"Timestamp: {info.get('timestamp')}",
+            f"Mode: {'PROTECT' if info.get('shouldProtect') else 'NORMAL'}",
+            f"Reason: {info.get('reason')}",
+            f"Matched alerts: {info.get('matchedCount', 0)}",
+            f"Hold until: {info.get('holdUntil')}",
+            f"Portal ID: {info.get('portalId')}",
+        ]
+        home = info.get("home", {})
+        lines.append(f"Home: {home.get('lat')}, {home.get('lon')} ({home.get('source')})")
+        control = info.get("control", {})
+        lines.append(
+            f"Control: normal={control.get('normalMinSoc')} stormTarget={control.get('stormTargetMinSoc')} stormRamped={control.get('stormRampedMinSoc')}"
+        )
+        if info.get("error"):
+            lines.append(f"Error: {info.get('error')}")
+        alerts = info.get("matchedAlerts", []) or []
+        if alerts:
+            lines.append("")
+            lines.append("Top alerts:")
+            for a in alerts[:3]:
+                lines.append(
+                    f"- {a.get('event') or a.get('title')} | {a.get('severity')} | {a.get('zoneType')} | expires={a.get('expiresAt')}"
+                )
+        return "\n".join(str(x) for x in lines)
+
+    def _send_email_notification(self, subject: str, body: str) -> bool:
+        ncfg = self.config.get("notifications", {})
+        email_cfg = ncfg.get("email", {}) if isinstance(ncfg, dict) else {}
+        if not to_bool(email_cfg.get("enabled"), False):
+            return False
+
+        sender = str(email_cfg.get("from", "")).strip()
+        recipients = normalize_list(email_cfg.get("to"))
+        smtp_host = str(email_cfg.get("smtpHost", "")).strip()
+        smtp_port = int(to_num(email_cfg.get("smtpPort")) or 587)
+        username = str(email_cfg.get("username", "")).strip()
+        password = str(email_cfg.get("password", ""))
+        use_tls = to_bool(email_cfg.get("useTls"), True)
+        use_ssl = to_bool(email_cfg.get("useSsl"), False)
+        timeout = max(3, int(to_num(email_cfg.get("timeoutSeconds")) or 20))
+
+        if not sender or not recipients or not smtp_host:
+            self.log.warning("Email notification config incomplete; skipping")
+            return False
+
+        msg = EmailMessage()
+        msg["From"] = sender
+        msg["To"] = ", ".join(recipients)
+        msg["Subject"] = subject
+        msg.set_content(body)
+
+        try:
+            if use_ssl:
+                context = ssl.create_default_context()
+                with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=timeout, context=context) as server:
+                    if username:
+                        server.login(username, password)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(smtp_host, smtp_port, timeout=timeout) as server:
+                    if use_tls:
+                        context = ssl.create_default_context()
+                        server.starttls(context=context)
+                    if username:
+                        server.login(username, password)
+                    server.send_message(msg)
+            return True
+        except Exception as e:
+            self.log.error("Email notification failed: %s", e)
+            return False
+
+    def _send_webhook_notification(self, payload: Dict[str, Any]) -> bool:
+        ncfg = self.config.get("notifications", {})
+        webhook_cfg = ncfg.get("webhook", {}) if isinstance(ncfg, dict) else {}
+        if not to_bool(webhook_cfg.get("enabled"), False):
+            return False
+
+        url = str(webhook_cfg.get("url", "")).strip()
+        method = str(webhook_cfg.get("method", "POST")).strip().upper() or "POST"
+        timeout = max(3, int(to_num(webhook_cfg.get("timeoutSeconds")) or 10))
+        if not url:
+            self.log.warning("Webhook URL missing; skipping")
+            return False
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url=url,
+            data=data,
+            method=method,
+            headers={"Content-Type": "application/json", "User-Agent": "stormwatchd/2.0"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                code = getattr(resp, "status", 200)
+                if int(code) >= 400:
+                    self.log.error("Webhook notification HTTP %s", code)
+                    return False
+            return True
+        except Exception as e:
+            self.log.error("Webhook notification failed: %s", e)
+            return False
+
+    def _notification_allowed(self, event_key: str, now: int) -> bool:
+        cooldown = int(self.config.get("notificationCooldownSeconds", 300)) * 1000
+        if cooldown <= 0:
+            return True
+        last = int(self.last_notification_sent_ms.get(event_key, 0))
+        return (now - last) >= cooldown
+
+    def _maybe_send_notification(self, previous_should_protect: bool, previous_reason: str, info: Dict[str, Any]) -> None:
+        notifications = self.config.get("notifications", {})
+        if not isinstance(notifications, dict) or not to_bool(notifications.get("enabled"), False):
+            return
+
+        now = now_ms()
+        reason = str(info.get("reason", ""))
+        should_protect = bool(info.get("shouldProtect"))
+
+        event = ""
+        if to_bool(notifications.get("notifyOnStateChange"), True) and should_protect != previous_should_protect:
+            event = "state-change"
+        elif to_bool(notifications.get("notifyOnStale"), True) and str(reason).startswith("stale"):
+            event = "stale"
+        elif to_bool(notifications.get("notifyOnError"), True) and bool(info.get("error")):
+            event = "error"
+
+        if not event:
+            return
+
+        state_key = f"{event}:{int(should_protect)}:{reason}"
+        if event == "state-change" and state_key == self.last_notification_state_key:
+            return
+        if not self._notification_allowed(event, now):
+            return
+
+        subject = self._notification_subject(event, info)
+        body = self._notification_body(event, info)
+        payload = {
+            "event": event,
+            "timestamp": info.get("timestamp"),
+            "subject": subject,
+            "reason": reason,
+            "shouldProtect": should_protect,
+            "matchedCount": info.get("matchedCount", 0),
+            "holdUntil": info.get("holdUntil"),
+            "error": info.get("error"),
+            "stormWatch": info,
+        }
+
+        sent_any = False
+        sent_any = self._send_email_notification(subject, body) or sent_any
+        sent_any = self._send_webhook_notification(payload) or sent_any
+
+        if sent_any:
+            self.last_notification_sent_ms[event] = now
+            self.last_notification_state_key = state_key
+            self.log.info("Notification sent for event=%s", event)
+
     def _write_setting(self, path: str, value: Any) -> bool:
         if to_bool(self.config.get("dryRun"), False):
             self.log.warning("dryRun=true, skipped write %s <= %s", path, value)
@@ -1031,6 +1271,10 @@ class StormWatchDaemon:
         }
         if fetch_error_text:
             info["error"] = fetch_error_text
+
+        previous_should_protect = bool(self.last_eval.get("shouldProtect", self.protect_active))
+        previous_reason = str(self.last_eval.get("reason", ""))
+        self._maybe_send_notification(previous_should_protect, previous_reason, info)
 
         self._publish_state(info)
         self.last_eval = info
