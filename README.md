@@ -26,6 +26,16 @@ python3 -m http.server 8080
 
 Then open `http://<your-ip>:8080/app/` on your phone (same network).
 
+## Permanent web link (GitHub Pages)
+
+This repository includes a GitHub Actions workflow to publish the app from `app/` to GitHub Pages.
+
+1. In GitHub, open **Settings -> Pages**
+2. Under **Build and deployment**, set **Source** to **GitHub Actions**
+3. Push to `master` (or this feature branch) and wait for the **Deploy Solar Safety App to Pages** workflow
+4. Your app will be available at:
+   - `https://heinpheiifer.github.io/driver-realtek-/`
+
 ## Compliance note
 
 This app is a practical field form and **not legal advice**. You should review your process against the relevant standards and guidance for your jurisdiction, including (where applicable):
