@@ -32,6 +32,10 @@ No build step required.
    - **Brand Logo** (image upload)
    These are applied to the PDF header and saved per job.
 
+6. To test with sample data and output:
+   - Import `examples/example-job-data.json` using **Import JSON**
+   - Review `examples/example-generated-report.md` for a representative report structure/content
+
 ## Notes
 
 - Data is saved in your browser under local storage key `solar-coc-commissioning-data-v1`.
