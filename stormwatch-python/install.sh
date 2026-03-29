@@ -38,6 +38,15 @@ fi
 EOF
 chmod +x "${LOCALSERVICE}"
 
+echo "[install] validating config syntax"
+/usr/bin/env python3 - << 'PY'
+import json
+from pathlib import Path
+path = Path("/data/stormwatch/config.json")
+json.loads(path.read_text(encoding="utf-8"))
+print("config.json: OK")
+PY
+
 echo "[install] done"
 echo "[install] edit config: ${APP_DIR}/config.json"
 echo "[install] start now: ${APP_DIR}/start-stormwatch.sh"

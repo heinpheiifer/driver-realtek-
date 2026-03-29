@@ -218,9 +218,9 @@
     "id": "fd9660333cf5af96",
     "type": "function",
     "z": "f6cf3f41548fa7cf",
-    "name": "Build dashboard messages",
-    "func": "const sw = msg.stormWatch || {};\nconst cfg = flow.get(\"stormConfig\") || {};\nconst manualMode = sw.manualMode || flow.get(\"stormManualMode\") || \"auto\";\n\nconst home = sw.home || {};\nconst homeStr = (home.lat !== null && home.lat !== undefined && home.lon !== null && home.lon !== undefined)\n    ? `${Number(home.lat).toFixed(5)}, ${Number(home.lon).toFixed(5)} (${home.source || \"unknown\"})`\n    : \"Home location missing\";\n\nconst settingsPreset = {\n    capFeedUrl: cfg.capFeedUrl || \"\",\n    homeLat: (cfg.home && cfg.home.lat !== null && cfg.home.lat !== undefined) ? String(cfg.home.lat) : \"\",\n    homeLon: (cfg.home && cfg.home.lon !== null && cfg.home.lon !== undefined) ? String(cfg.home.lon) : \"\",\n    normalMinSoc: cfg.normalMinSoc || 20,\n    stormMinSoc: cfg.stormMinSoc || 80,\n    leadMinutes: cfg.leadMinutes || 30,\n    clearHoldMinutes: cfg.clearHoldMinutes || 60,\n    acceptedSeverities: (cfg.acceptedSeverities || []).join(\", \"),\n    stormKeywords: (cfg.stormKeywords || []).join(\", \"),\n    homeAreaKeywords: (cfg.homeAreaKeywords || []).join(\", \"),\n    useVictronGps: String(!!cfg.useVictronGps),\n    matchAllWithoutGeometry: String(!!cfg.matchAllWithoutGeometry)\n};\n\nreturn [\n    { payload: sw.shouldProtect ? \"PROTECT ACTIVE\" : \"NORMAL\" },\n    { payload: sw.reason || \"-\" },\n    { payload: String(sw.matchedCount || 0) },\n    { payload: homeStr },\n    { payload: sw.holdUntil || \"-\" },\n    { payload: sw.portalId || flow.get(\"portalId\") || \"(discovering)\" },\n    { payload: { home: sw.home || {}, alerts: sw.matchedAlerts || [] } },\n    { payload: { alerts: sw.matchedAlerts || [] } },\n    { payload: settingsPreset },\n    { payload: manualMode }\n];",
-    "outputs": 10,
+    "name": "Build dashboard messages + insights",
+    "func": "const sw = msg.stormWatch || {};\nconst cfg = flow.get(\"stormConfig\") || {};\nconst manualMode = sw.manualMode || flow.get(\"stormManualMode\") || \"auto\";\n\nconst home = sw.home || {};\nconst homeStr = (home.lat !== null && home.lat !== undefined && home.lon !== null && home.lon !== undefined)\n    ? `${Number(home.lat).toFixed(5)}, ${Number(home.lon).toFixed(5)} (${home.source || \"unknown\"})`\n    : \"Home location missing\";\n\nconst settingsPreset = {\n    capFeedUrl: cfg.capFeedUrl || \"\",\n    homeLat: (cfg.home && cfg.home.lat !== null && cfg.home.lat !== undefined) ? String(cfg.home.lat) : \"\",\n    homeLon: (cfg.home && cfg.home.lon !== null && cfg.home.lon !== undefined) ? String(cfg.home.lon) : \"\",\n    normalMinSoc: cfg.normalMinSoc || 20,\n    stormMinSoc: cfg.stormMinSoc || 80,\n    leadMinutes: cfg.leadMinutes || 30,\n    clearHoldMinutes: cfg.clearHoldMinutes || 60,\n    acceptedSeverities: (cfg.acceptedSeverities || []).join(\", \"),\n    stormKeywords: (cfg.stormKeywords || []).join(\", \"),\n    homeAreaKeywords: (cfg.homeAreaKeywords || []).join(\", \"),\n    useVictronGps: String(!!cfg.useVictronGps),\n    matchAllWithoutGeometry: String(!!cfg.matchAllWithoutGeometry)\n};\n\nconst alerts = sw.matchedAlerts || [];\nconst top = alerts.length ? alerts[0] : null;\nconst insight = {\n    shouldProtect: !!sw.shouldProtect,\n    reason: sw.reason || \"-\",\n    matchedCount: Number(sw.matchedCount || 0),\n    holdUntil: sw.holdUntil || null,\n    manualMode,\n    warning: sw.warning || null,\n    topAlert: top ? {\n        event: top.event || top.title || \"-\",\n        severity: top.severity || \"Unknown\",\n        zoneType: top.zoneType || \"-\",\n        area: top.area || \"-\",\n        startsAt: top.startsAt || null,\n        expiresAt: top.expiresAt || null\n    } : null\n};\n\nconst chartPayload = {\n    topic: \"protect\",\n    payload: sw.shouldProtect ? 1 : 0,\n    timestamp: Date.now()\n};\n\nreturn [\n    { payload: sw.shouldProtect ? \"PROTECT ACTIVE\" : \"NORMAL\" },\n    { payload: sw.reason || \"-\" },\n    { payload: String(sw.matchedCount || 0) },\n    { payload: homeStr },\n    { payload: sw.holdUntil || \"-\" },\n    { payload: sw.portalId || flow.get(\"portalId\") || \"(discovering)\" },\n    { payload: { home: sw.home || {}, alerts } },\n    { payload: { alerts } },\n    { payload: settingsPreset },\n    { payload: manualMode },\n    chartPayload,\n    { payload: insight }\n];",
+    "outputs": 12,
     "timeout": 0,
     "noerr": 0,
     "initialize": "",
@@ -258,6 +258,12 @@
       ],
       [
         "c807f8a55b66b68d"
+      ],
+      [
+        "f0f451266f0c8e67"
+      ],
+      [
+        "af0af81ac1570455"
       ]
     ]
   },
@@ -852,5 +858,70 @@
     "width": "12",
     "collapse": false,
     "className": ""
+  },
+  {
+    "id": "f0f451266f0c8e67",
+    "type": "ui_chart",
+    "z": "f6cf3f41548fa7cf",
+    "name": "Protect trend",
+    "group": "9f4b812a8429f952",
+    "order": 7,
+    "width": "12",
+    "height": "4",
+    "label": "Protect mode trend (1=protect)",
+    "chartType": "line",
+    "legend": "false",
+    "xformat": "HH:mm",
+    "interpolate": "linear",
+    "nodata": "No data",
+    "dot": false,
+    "ymin": "0",
+    "ymax": "1",
+    "removeOlder": "24",
+    "removeOlderPoints": "",
+    "removeOlderUnit": "3600",
+    "cutout": 0,
+    "useOneColor": true,
+    "useUTC": false,
+    "colors": [
+      "#009688",
+      "#cccccc",
+      "#cccccc",
+      "#cccccc",
+      "#cccccc",
+      "#cccccc",
+      "#cccccc",
+      "#cccccc",
+      "#cccccc"
+    ],
+    "outputs": 1,
+    "useOldStyle": false,
+    "className": "",
+    "x": 2080,
+    "y": 460,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "af0af81ac1570455",
+    "type": "ui_template",
+    "z": "f6cf3f41548fa7cf",
+    "group": "6b938fd4cec85f6b",
+    "name": "Trigger insights",
+    "order": 2,
+    "width": "12",
+    "height": "6",
+    "format": "<div style=\"padding:8px; font-size:13px;\">\n  <div><b>Reason:</b> {{msg.payload.reason}}</div>\n  <div><b>Manual mode:</b> {{msg.payload.manualMode}}</div>\n  <div><b>Matched alerts:</b> {{msg.payload.matchedCount}}</div>\n  <div><b>Hold until:</b> {{msg.payload.holdUntil || \"-\"}}</div>\n  <div ng-if=\"msg.payload.warning\" style=\"color:#ff9800;\"><b>Warning:</b> {{msg.payload.warning}}</div>\n  <hr style=\"border-color:#444;\"/>\n  <div ng-if=\"msg.payload.topAlert\">\n    <div><b>Top trigger:</b> {{msg.payload.topAlert.event}}</div>\n    <div><b>Severity:</b> {{msg.payload.topAlert.severity}}</div>\n    <div><b>Zone match:</b> {{msg.payload.topAlert.zoneType}}</div>\n    <div><b>Area:</b> {{msg.payload.topAlert.area}}</div>\n    <div><b>Starts:</b> {{msg.payload.topAlert.startsAt || \"-\"}}</div>\n    <div><b>Expires:</b> {{msg.payload.topAlert.expiresAt || \"-\"}}</div>\n  </div>\n  <div ng-if=\"!msg.payload.topAlert\">No active top trigger.</div>\n</div>",
+    "storeOutMessages": true,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 2060,
+    "y": 540,
+    "wires": [
+      []
+    ]
   }
 ]

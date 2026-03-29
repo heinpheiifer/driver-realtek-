@@ -2,14 +2,16 @@
 """
 Storm Watch daemon for Victron Venus OS.
 
-Features:
-- Poll CAP feed (RSS/Atom XML)
-- Parse CAP geometry (polygon/circle)
-- Match installation location (GPS from MQTT or configured fallback)
-- Apply ESS controls via Victron MQTT writes:
-  - Settings/CGwacs/BatteryLife/MinimumSocLimit
-  - Settings/CGwacs/BatteryLife/ForceCharge
-- Publish daemon state to MQTT for dashboards/monitoring
+Improvements included:
+- Multi-feed CAP failover + merge/dedupe
+- Data staleness/fail-safe policies
+- Severity-tiered reserve control with optional ramping
+- Manual override with timeout
+- VRM-friendly alarm/status topic bridge
+- Health/heartbeat publishing
+- Config validation and normalization
+- Simulation mode + dry-run control writes
+- Geofence buffer support
 """
 
 from __future__ import annotations
@@ -33,17 +35,27 @@ import paho.mqtt.client as mqtt
 
 
 CAP_NS = {"cap": "urn:oasis:names:tc:emergency:cap:1.2"}
+ATOM_NS = "{http://www.w3.org/2005/Atom}"
+SEVERITY_RANK_DEFAULT = {"unknown": 0, "minor": 1, "moderate": 2, "severe": 3, "extreme": 4}
 
 
 @dataclass
 class AlertMatch:
+    identifier: str
     title: str
     event: str
     severity: str
+    severity_rank: int
     area: str
     zone_type: str
     starts_at: Optional[int]
     expires_at: Optional[int]
+    target_min_soc: int
+    source: str
+
+
+def now_ms() -> int:
+    return int(time.time() * 1000)
 
 
 def utc_iso(ts_ms: Optional[int]) -> Optional[str]:
@@ -59,7 +71,6 @@ def parse_time_ms(text: Optional[str]) -> Optional[int]:
     if not text:
         return None
     try:
-        # datetime.fromisoformat handles offsets in Python 3.11+
         dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
         return int(dt.timestamp() * 1000)
     except Exception:
@@ -81,11 +92,39 @@ def to_num(value: Any) -> Optional[float]:
         return None
 
 
+def to_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    s = str(value).strip().lower()
+    if s in {"1", "true", "yes", "on"}:
+        return True
+    if s in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 def clamp_soc_step5(value: Any, fallback: int) -> int:
     n = to_num(value)
     base = n if n is not None else fallback
     clipped = max(0.0, min(100.0, base))
     return int(round(clipped / 5.0) * 5)
+
+
+def normalize_list(values: Any) -> List[str]:
+    if values is None:
+        return []
+    if isinstance(values, str):
+        return [x.strip() for x in values.split(",") if x.strip()]
+    if isinstance(values, list):
+        out: List[str] = []
+        for v in values:
+            s = str(v).strip()
+            if s:
+                out.append(s)
+        return out
+    return []
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -118,21 +157,66 @@ def point_in_polygon(lat: float, lon: float, points: List[Tuple[float, float]]) 
     return inside
 
 
+def _xy_km(lat: float, lon: float, ref_lat: float) -> Tuple[float, float]:
+    x = lon * 111.320 * math.cos(math.radians(ref_lat))
+    y = lat * 110.574
+    return x, y
+
+
+def point_segment_distance_km(
+    p_lat: float, p_lon: float, a_lat: float, a_lon: float, b_lat: float, b_lon: float
+) -> float:
+    ref_lat = (p_lat + a_lat + b_lat) / 3.0
+    px, py = _xy_km(p_lat, p_lon, ref_lat)
+    ax, ay = _xy_km(a_lat, a_lon, ref_lat)
+    bx, by = _xy_km(b_lat, b_lon, ref_lat)
+
+    abx = bx - ax
+    aby = by - ay
+    apx = px - ax
+    apy = py - ay
+    ab2 = abx * abx + aby * aby
+    if ab2 <= 1e-12:
+        return math.hypot(px - ax, py - ay)
+    t = max(0.0, min(1.0, (apx * abx + apy * aby) / ab2))
+    cx = ax + t * abx
+    cy = ay + t * aby
+    return math.hypot(px - cx, py - cy)
+
+
+def point_near_polygon(lat: float, lon: float, points: List[Tuple[float, float]], buffer_km: float) -> bool:
+    if len(points) < 2 or buffer_km <= 0:
+        return False
+    for i in range(len(points)):
+        a_lat, a_lon = points[i]
+        b_lat, b_lon = points[(i + 1) % len(points)]
+        if point_segment_distance_km(lat, lon, a_lat, a_lon, b_lat, b_lon) <= buffer_km:
+            return True
+    return False
+
+
 class StormWatchDaemon:
     def __init__(self, config_path: Path) -> None:
+        self.log = logging.getLogger("stormwatchd")
         self.config_path = config_path
         self.config = self._load_config(config_path)
-        self.log = logging.getLogger("stormwatchd")
         self.stop_event = threading.Event()
         self.state_lock = threading.Lock()
 
+        self.started_ms = now_ms()
         self.portal_id: Optional[str] = self.config.get("portalId") or None
         self.gps_lat: Optional[float] = None
         self.gps_lon: Optional[float] = None
         self.last_eval: Dict[str, Any] = {}
         self.protect_active: bool = False
         self.storm_hold_until_ms: int = 0
+        self.last_applied_min_soc: Optional[int] = None
         self.force_manual: Optional[bool] = None
+        self.force_manual_until_ms: int = 0
+        self.last_cap_success_ms: int = 0
+        self.last_cap_sources: List[str] = []
+        self.consecutive_cap_failures: int = 0
+        self.last_poll_duration_ms: int = 0
 
         mqtt_cfg = self.config["mqtt"]
         self.mqtt_client = mqtt.Client(
@@ -150,9 +234,10 @@ class StormWatchDaemon:
     def _load_config(self, path: Path) -> Dict[str, Any]:
         with path.open("r", encoding="utf-8") as f:
             cfg = json.load(f)
-        # Accept both snake_case and camelCase keys.
+
         alias = {
             "cap_feed_url": "capFeedUrl",
+            "cap_feed_urls": "capFeedUrls",
             "portal_id": "portalId",
             "use_victron_gps": "useVictronGps",
             "home_area_keywords": "homeAreaKeywords",
@@ -166,27 +251,39 @@ class StormWatchDaemon:
             "storm_keywords": "stormKeywords",
             "status_topic": "stateTopicBase",
             "command_topic": "commandTopic",
+            "max_stale_minutes": "maxStaleMinutes",
+            "stale_policy": "stalePolicy",
+            "severity_min_soc": "severityMinSoc",
+            "storm_soc_ramp_per_poll": "stormSocRampPerPoll",
+            "default_manual_override_minutes": "defaultManualOverrideMinutes",
+            "vrm_topic_base": "vrmTopicBase",
+            "heartbeat_topic": "heartbeatTopic",
+            "simulate_mode": "simulateMode",
+            "simulation_file": "simulationFile",
+            "dry_run": "dryRun",
+            "geofence_buffer_km": "geofenceBufferKm",
+            "log_level": "logLevel",
         }
         for old_key, new_key in alias.items():
             if old_key in cfg and new_key not in cfg:
                 cfg[new_key] = cfg[old_key]
 
-        cfg.setdefault("capFeedUrl", "https://alerts.metservice.com/cap/rss")
+        if "capFeedUrls" not in cfg and "capFeedUrl" in cfg:
+            cfg["capFeedUrls"] = [cfg["capFeedUrl"]]
+
+        cfg.setdefault("capFeedUrls", ["https://alerts.metservice.com/cap/rss"])
+        cfg.setdefault("capFetchTimeoutSeconds", 20)
         cfg.setdefault("portalId", "")
         cfg.setdefault("home", {"lat": None, "lon": None, "name": "Home"})
         cfg.setdefault("useVictronGps", True)
         cfg.setdefault("homeAreaKeywords", [])
         cfg.setdefault("matchAllWithoutGeometry", False)
+        cfg.setdefault("geofenceBufferKm", 0.0)
         cfg.setdefault("leadMinutes", 30)
         cfg.setdefault("clearHoldMinutes", 60)
         cfg.setdefault("pollSeconds", 300)
         cfg.setdefault("normalMinSoc", 20)
         cfg.setdefault("stormMinSoc", 80)
-        if "home" in cfg and isinstance(cfg["home"], dict):
-            if "latitude" in cfg["home"] and "lat" not in cfg["home"]:
-                cfg["home"]["lat"] = cfg["home"]["latitude"]
-            if "longitude" in cfg["home"] and "lon" not in cfg["home"]:
-                cfg["home"]["lon"] = cfg["home"]["longitude"]
         cfg.setdefault("acceptedSeverities", ["Moderate", "Severe", "Extreme"])
         cfg.setdefault(
             "stormKeywords",
@@ -206,22 +303,125 @@ class StormWatchDaemon:
                 "ice",
             ],
         )
+        cfg.setdefault("severityRank", dict(SEVERITY_RANK_DEFAULT))
+        cfg.setdefault("severityMinSoc", {"Moderate": 60, "Severe": 80, "Extreme": 90})
+        cfg.setdefault("stormSocRampPerPoll", 10)
+        cfg.setdefault("maxStaleMinutes", 60)
+        cfg.setdefault("stalePolicy", "hold_last")  # hold_last | force_protect | force_normal
+        cfg.setdefault("defaultManualOverrideMinutes", 0)
         cfg.setdefault("stateTopicBase", "N/custom/stormwatch")
         cfg.setdefault("commandTopic", "R/custom/stormwatch/command")
+        cfg.setdefault("vrmTopicBase", f'{cfg["stateTopicBase"].rstrip("/")}/vrm')
+        cfg.setdefault("heartbeatTopic", f'{cfg["stateTopicBase"].rstrip("/")}/heartbeat')
+        cfg.setdefault("simulateMode", False)
+        cfg.setdefault("simulationFile", "")
+        cfg.setdefault("dryRun", False)
+        cfg.setdefault("logLevel", "INFO")
         cfg.setdefault(
-            "mqtt", {"host": "127.0.0.1", "port": 1883, "clientId": "stormwatchd"}
+            "mqtt",
+            {"host": "127.0.0.1", "port": 1883, "qos": 1, "clientId": "stormwatchd"},
         )
+
+        if "home" in cfg and isinstance(cfg["home"], dict):
+            if "latitude" in cfg["home"] and "lat" not in cfg["home"]:
+                cfg["home"]["lat"] = cfg["home"]["latitude"]
+            if "longitude" in cfg["home"] and "lon" not in cfg["home"]:
+                cfg["home"]["lon"] = cfg["home"]["longitude"]
+
+        self._validate_config(cfg)
         return cfg
+
+    def _validate_config(self, cfg: Dict[str, Any]) -> None:
+        urls = normalize_list(cfg.get("capFeedUrls"))
+        cfg["capFeedUrls"] = urls if urls else ["https://alerts.metservice.com/cap/rss"]
+        cfg["acceptedSeverities"] = normalize_list(cfg.get("acceptedSeverities"))
+        cfg["stormKeywords"] = normalize_list(cfg.get("stormKeywords"))
+        cfg["homeAreaKeywords"] = normalize_list(cfg.get("homeAreaKeywords"))
+
+        cfg["pollSeconds"] = max(30, int(to_num(cfg.get("pollSeconds")) or 300))
+        cfg["capFetchTimeoutSeconds"] = max(3, int(to_num(cfg.get("capFetchTimeoutSeconds")) or 20))
+        cfg["leadMinutes"] = max(0, int(to_num(cfg.get("leadMinutes")) or 30))
+        cfg["clearHoldMinutes"] = max(0, int(to_num(cfg.get("clearHoldMinutes")) or 60))
+        cfg["maxStaleMinutes"] = max(1, int(to_num(cfg.get("maxStaleMinutes")) or 60))
+        cfg["stormSocRampPerPoll"] = max(0, int(to_num(cfg.get("stormSocRampPerPoll")) or 10))
+        cfg["defaultManualOverrideMinutes"] = max(
+            0, int(to_num(cfg.get("defaultManualOverrideMinutes")) or 0)
+        )
+        cfg["geofenceBufferKm"] = max(0.0, float(to_num(cfg.get("geofenceBufferKm")) or 0.0))
+
+        cfg["normalMinSoc"] = clamp_soc_step5(cfg.get("normalMinSoc"), 20)
+        cfg["stormMinSoc"] = clamp_soc_step5(cfg.get("stormMinSoc"), 80)
+        if cfg["stormMinSoc"] < cfg["normalMinSoc"]:
+            self.log.warning("stormMinSoc < normalMinSoc, auto-correcting stormMinSoc")
+            cfg["stormMinSoc"] = cfg["normalMinSoc"]
+
+        stp = str(cfg.get("stalePolicy", "hold_last")).strip().lower()
+        if stp not in {"hold_last", "force_protect", "force_normal"}:
+            self.log.warning("Unknown stalePolicy=%r, using hold_last", stp)
+            stp = "hold_last"
+        cfg["stalePolicy"] = stp
+
+        cfg["useVictronGps"] = to_bool(cfg.get("useVictronGps"), True)
+        cfg["matchAllWithoutGeometry"] = to_bool(cfg.get("matchAllWithoutGeometry"), False)
+        cfg["simulateMode"] = to_bool(cfg.get("simulateMode"), False)
+        cfg["dryRun"] = to_bool(cfg.get("dryRun"), False)
+
+        home = cfg.get("home", {})
+        if not isinstance(home, dict):
+            home = {"lat": None, "lon": None, "name": "Home"}
+        lat = to_num(home.get("lat"))
+        lon = to_num(home.get("lon"))
+        if lat is not None and (lat < -90 or lat > 90):
+            self.log.warning("Invalid home.lat=%s, clearing", lat)
+            lat = None
+        if lon is not None and (lon < -180 or lon > 180):
+            self.log.warning("Invalid home.lon=%s, clearing", lon)
+            lon = None
+        home["lat"] = lat
+        home["lon"] = lon
+        home.setdefault("name", "Home")
+        cfg["home"] = home
+
+        rank_map = cfg.get("severityRank", {})
+        if not isinstance(rank_map, dict):
+            rank_map = {}
+        norm_rank: Dict[str, int] = dict(SEVERITY_RANK_DEFAULT)
+        for k, v in rank_map.items():
+            kk = str(k).strip().lower()
+            vv = int(to_num(v) or 0)
+            norm_rank[kk] = vv
+        cfg["severityRank"] = norm_rank
+
+        tier_map = cfg.get("severityMinSoc", {})
+        if not isinstance(tier_map, dict):
+            tier_map = {}
+        norm_tier: Dict[str, int] = {}
+        for k, v in tier_map.items():
+            kk = str(k).strip().lower()
+            norm_tier[kk] = clamp_soc_step5(v, cfg["stormMinSoc"])
+        for req in ["moderate", "severe", "extreme"]:
+            norm_tier.setdefault(req, cfg["stormMinSoc"])
+        cfg["severityMinSoc"] = norm_tier
+
+        mqtt_cfg = cfg.get("mqtt", {})
+        if not isinstance(mqtt_cfg, dict):
+            mqtt_cfg = {}
+        mqtt_cfg.setdefault("host", "127.0.0.1")
+        mqtt_cfg["port"] = int(to_num(mqtt_cfg.get("port")) or 1883)
+        mqtt_cfg["qos"] = max(0, min(2, int(to_num(mqtt_cfg.get("qos")) or 1)))
+        mqtt_cfg.setdefault("clientId", "stormwatchd")
+        cfg["mqtt"] = mqtt_cfg
 
     def on_connect(self, client: mqtt.Client, userdata: Any, flags: Dict[str, Any], rc: int):
         if rc != 0:
             self.log.error("MQTT connect failed rc=%s", rc)
             return
         self.log.info("MQTT connected")
-        client.subscribe("N/+/battery/+/Soc", qos=1)
-        client.subscribe("N/+/system/0/Gps/#", qos=1)
-        client.subscribe("N/+/gps/+/#", qos=1)
-        client.subscribe(self.config["commandTopic"], qos=1)
+        qos = int(self.config["mqtt"].get("qos", 1))
+        client.subscribe("N/+/battery/+/Soc", qos=qos)
+        client.subscribe("N/+/system/0/Gps/#", qos=qos)
+        client.subscribe("N/+/gps/+/#", qos=qos)
+        client.subscribe(self.config["commandTopic"], qos=qos)
 
     def on_disconnect(self, client: mqtt.Client, userdata: Any, rc: int):
         self.log.warning("MQTT disconnected rc=%s", rc)
@@ -234,8 +434,7 @@ class StormWatchDaemon:
                 return data["value"]
             return data
         except Exception:
-            text = payload.decode("utf-8", errors="ignore").strip()
-            return text
+            return payload.decode("utf-8", errors="ignore").strip()
 
     def _maybe_set_portal_id(self, topic: str) -> None:
         if self.portal_id:
@@ -255,55 +454,94 @@ class StormWatchDaemon:
             return
 
         tl = topic.lower()
-        if tl.endswith("/latitude") or tl.endswith("/lat"):
-            lat = to_num(value)
-            if lat is not None:
-                self.gps_lat = lat
-            return
-        if tl.endswith("/longitude") or tl.endswith("/lon") or tl.endswith("/lng"):
-            lon = to_num(value)
-            if lon is not None:
-                self.gps_lon = lon
-            return
+        with self.state_lock:
+            if tl.endswith("/latitude") or tl.endswith("/lat"):
+                lat = to_num(value)
+                if lat is not None:
+                    self.gps_lat = lat
+                return
+            if tl.endswith("/longitude") or tl.endswith("/lon") or tl.endswith("/lng"):
+                lon = to_num(value)
+                if lon is not None:
+                    self.gps_lon = lon
+                return
 
-        if isinstance(value, dict):
-            lat = to_num(value.get("latitude", value.get("lat")))
-            lon = to_num(value.get("longitude", value.get("lon", value.get("lng"))))
-            if lat is not None:
-                self.gps_lat = lat
-            if lon is not None:
-                self.gps_lon = lon
+            if isinstance(value, dict):
+                lat = to_num(value.get("latitude", value.get("lat")))
+                lon = to_num(value.get("longitude", value.get("lon", value.get("lng"))))
+                if lat is not None:
+                    self.gps_lat = lat
+                if lon is not None:
+                    self.gps_lon = lon
 
     def _handle_command(self, value: Any) -> None:
-        # command payload examples:
-        # {"action":"forceProtect","enabled":true}
-        # {"action":"forceProtect","enabled":false}
-        # {"action":"clearManualOverride"}
-        # {"action":"runNow"}
         cmd = value if isinstance(value, dict) else {}
         action = str(cmd.get("action", "")).strip()
+        now = now_ms()
+
         if action == "forceProtect":
             enabled = bool(cmd.get("enabled", False))
-            self.force_manual = enabled
-            self.log.warning("Manual override forceProtect=%s", enabled)
+            ttl = to_num(cmd.get("ttlMinutes"))
+            ttl_minutes = int(ttl) if ttl is not None else int(self.config.get("defaultManualOverrideMinutes", 0))
+            with self.state_lock:
+                self.force_manual = enabled
+                if ttl_minutes > 0:
+                    self.force_manual_until_ms = now + ttl_minutes * 60000
+                else:
+                    self.force_manual_until_ms = 0
+            self.log.warning(
+                "Manual override forceProtect=%s ttlMinutes=%s",
+                enabled,
+                ttl_minutes if ttl_minutes > 0 else "none",
+            )
         elif action == "clearManualOverride":
-            self.force_manual = None
+            with self.state_lock:
+                self.force_manual = None
+                self.force_manual_until_ms = 0
             self.log.warning("Manual override cleared")
         elif action == "runNow":
             self.log.info("Immediate poll requested")
             self.evaluate_once()
+        elif action == "reloadConfig":
+            self._reload_config()
         else:
             self.log.warning("Unknown command on %s: %r", self.config["commandTopic"], cmd)
 
-    def _fetch_cap_xml(self) -> str:
-        url = f'{self.config["capFeedUrl"]}{"&" if "?" in self.config["capFeedUrl"] else "?"}_ts={int(time.time()*1000)}'
+    def _reload_config(self) -> None:
+        self.log.info("Reloading config from %s", self.config_path)
+        self.config = self._load_config(self.config_path)
+        self.log.info("Config reloaded")
+
+    def _fetch_text_url(self, url: str, timeout_seconds: int) -> str:
         req = urllib.request.Request(
-            url,
-            headers={"User-Agent": "stormwatchd/1.0"},
+            f'{url}{"&" if "?" in url else "?"}_ts={now_ms()}',
+            headers={"User-Agent": "stormwatchd/2.0"},
             method="GET",
         )
-        with urllib.request.urlopen(req, timeout=30) as response:
+        with urllib.request.urlopen(req, timeout=timeout_seconds) as response:
             return response.read().decode("utf-8", errors="ignore")
+
+    def _fetch_cap_documents(self) -> Tuple[List[Tuple[str, str]], List[str]]:
+        # Simulation mode can ingest a static CAP XML file.
+        if to_bool(self.config.get("simulateMode"), False):
+            sim_file = str(self.config.get("simulationFile", "")).strip()
+            if not sim_file:
+                raise RuntimeError("simulateMode=true but simulationFile is empty")
+            text = Path(sim_file).read_text(encoding="utf-8")
+            return [("simulation://" + sim_file, text)], []
+
+        urls = normalize_list(self.config.get("capFeedUrls"))
+        timeout_seconds = int(self.config.get("capFetchTimeoutSeconds", 20))
+        documents: List[Tuple[str, str]] = []
+        errors: List[str] = []
+        for url in urls:
+            try:
+                documents.append((url, self._fetch_text_url(url, timeout_seconds)))
+            except Exception as e:
+                errors.append(f"{url}: {e}")
+        if not documents:
+            raise RuntimeError("All CAP feeds failed: " + "; ".join(errors))
+        return documents, errors
 
     def _text(self, node: Optional[ET.Element], default: str = "") -> str:
         if node is None:
@@ -331,7 +569,6 @@ class StormWatchDaemon:
         return points
 
     def _parse_circle(self, text: str) -> Optional[Tuple[float, float, float]]:
-        # CAP format: "lat,lon radiusKm"
         parts = text.split()
         if len(parts) < 2:
             return None
@@ -346,33 +583,38 @@ class StormWatchDaemon:
         return (lat, lon, radius)
 
     def _home_position(self) -> Tuple[Optional[float], Optional[float], str]:
+        with self.state_lock:
+            gps_lat = self.gps_lat
+            gps_lon = self.gps_lon
         cfg_lat = to_num(self.config.get("home", {}).get("lat"))
         cfg_lon = to_num(self.config.get("home", {}).get("lon"))
         use_gps = bool(self.config.get("useVictronGps", True))
-        if use_gps and self.gps_lat is not None and self.gps_lon is not None:
-            return self.gps_lat, self.gps_lon, "victron-gps"
+        if use_gps and gps_lat is not None and gps_lon is not None:
+            return gps_lat, gps_lon, "victron-gps"
         if cfg_lat is not None and cfg_lon is not None:
             return cfg_lat, cfg_lon, "config"
         return None, None, "missing"
 
-    def _parse_items(self, xml_text: str) -> List[Dict[str, Any]]:
+    def _parse_items(self, xml_text: str, source_url: str) -> List[Dict[str, Any]]:
         root = ET.fromstring(xml_text)
         items: List[ET.Element] = []
-        # RSS
         items.extend(root.findall("./channel/item"))
-        # Atom fallback
-        items.extend(root.findall(".//{http://www.w3.org/2005/Atom}entry"))
+        items.extend(root.findall(f".//{ATOM_NS}entry"))
 
         parsed: List[Dict[str, Any]] = []
         for item in items:
-            title = self._find_first_text(item, ["title", "{http://www.w3.org/2005/Atom}title"])
+            title = self._find_first_text(item, ["title", f"{ATOM_NS}title"])
             event = self._find_first_text(item, ["cap:event"]) or title
             desc = self._find_first_text(
                 item,
-                ["description", "{http://www.w3.org/2005/Atom}summary", "{http://www.w3.org/2005/Atom}content"],
+                ["description", f"{ATOM_NS}summary", f"{ATOM_NS}content"],
             )
-            severity = self._find_first_text(item, ["cap:severity"])
+            severity = self._find_first_text(item, ["cap:severity"]) or "Unknown"
             area_desc = self._find_first_text(item, ["cap:areaDesc", "cap:area"])
+            identifier = self._find_first_text(item, ["cap:identifier", "guid", f"{ATOM_NS}id"])
+            if not identifier:
+                identifier = f"{event}|{title}|{area_desc}"
+
             onset = parse_time_ms(self._find_first_text(item, ["cap:onset"]))
             effective = parse_time_ms(self._find_first_text(item, ["cap:effective"]))
             expires = parse_time_ms(self._find_first_text(item, ["cap:expires"]))
@@ -384,6 +626,7 @@ class StormWatchDaemon:
 
             parsed.append(
                 {
+                    "id": identifier,
                     "title": title,
                     "event": event,
                     "description": desc,
@@ -394,12 +637,38 @@ class StormWatchDaemon:
                     "expires": expires,
                     "polygons": polygons,
                     "circles": circles,
+                    "source": source_url,
                 }
             )
         return parsed
 
+    def _dedupe_alerts(self, alerts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        out: Dict[str, Dict[str, Any]] = {}
+        for a in alerts:
+            key = f'{a.get("id","")}::{a.get("event","")}::{a.get("area","")}::{a.get("expires")}'
+            prev = out.get(key)
+            if prev is None:
+                out[key] = a
+                continue
+            prev_exp = to_num(prev.get("expires")) or 0
+            cur_exp = to_num(a.get("expires")) or 0
+            if cur_exp > prev_exp:
+                out[key] = a
+        return list(out.values())
+
+    def _alert_target_soc(self, severity_text: str) -> int:
+        sev = str(severity_text or "unknown").strip().lower()
+        tier = self.config.get("severityMinSoc", {})
+        default_soc = int(self.config.get("stormMinSoc", 80))
+        return clamp_soc_step5(tier.get(sev, default_soc), default_soc)
+
+    def _severity_rank(self, severity_text: str) -> int:
+        sev = str(severity_text or "unknown").strip().lower()
+        rank_map = self.config.get("severityRank", SEVERITY_RANK_DEFAULT)
+        return int(to_num(rank_map.get(sev)) or 0)
+
     def _matches(self, alerts: List[Dict[str, Any]]) -> List[AlertMatch]:
-        now = int(time.time() * 1000)
+        now = now_ms()
         lead_ms = int(max(0, int(self.config.get("leadMinutes", 30))) * 60000)
         accepted = {
             str(s).strip().lower()
@@ -416,17 +685,20 @@ class StormWatchDaemon:
             for k in self.config.get("homeAreaKeywords", [])
             if str(k).strip()
         ]
+        buffer_km = float(self.config.get("geofenceBufferKm", 0.0))
         home_lat, home_lon, _ = self._home_position()
         has_home = home_lat is not None and home_lon is not None
 
         out: List[AlertMatch] = []
         for a in alerts:
-            searchable = f'{a["event"]} {a["title"]} {a["description"]}'.lower()
+            searchable = f'{a.get("event","")} {a.get("title","")} {a.get("description","")}'.lower()
             if keywords and not any(k in searchable for k in keywords):
                 continue
-            if accepted:
-                if str(a.get("severity", "")).strip().lower() not in accepted:
-                    continue
+
+            severity_text = str(a.get("severity", "")).strip()
+            sev_norm = severity_text.lower()
+            if accepted and sev_norm not in accepted:
+                continue
 
             starts = a.get("onset") or a.get("effective") or now
             expires = a.get("expires")
@@ -440,9 +712,15 @@ class StormWatchDaemon:
             if has_home:
                 for p in a.get("polygons", []):
                     pts = self._parse_polygon(p)
-                    if len(pts) >= 3 and point_in_polygon(home_lat, home_lon, pts):
+                    if len(pts) < 3:
+                        continue
+                    if point_in_polygon(home_lat, home_lon, pts):
                         in_zone = True
                         zone_type = "polygon"
+                        break
+                    if point_near_polygon(home_lat, home_lon, pts, buffer_km):
+                        in_zone = True
+                        zone_type = "polygon-buffer"
                         break
                 if not in_zone:
                     for c in a.get("circles", []):
@@ -450,9 +728,9 @@ class StormWatchDaemon:
                         if not parsed:
                             continue
                         clat, clon, rkm = parsed
-                        if haversine_km(home_lat, home_lon, clat, clon) <= rkm:
+                        if haversine_km(home_lat, home_lon, clat, clon) <= (rkm + buffer_km):
                             in_zone = True
-                            zone_type = "circle"
+                            zone_type = "circle-buffer" if buffer_km > 0 else "circle"
                             break
 
             if not in_zone and area_keywords:
@@ -475,144 +753,295 @@ class StormWatchDaemon:
 
             out.append(
                 AlertMatch(
-                    title=a.get("title", ""),
-                    event=a.get("event", ""),
-                    severity=a.get("severity", "Unknown") or "Unknown",
-                    area=a.get("area", ""),
+                    identifier=str(a.get("id", "")),
+                    title=str(a.get("title", "")),
+                    event=str(a.get("event", "")),
+                    severity=severity_text or "Unknown",
+                    severity_rank=self._severity_rank(severity_text),
+                    area=str(a.get("area", "")),
                     zone_type=zone_type,
                     starts_at=starts,
                     expires_at=expires,
+                    target_min_soc=self._alert_target_soc(severity_text),
+                    source=str(a.get("source", "")),
                 )
             )
         return out
 
+    def _is_stale(self, now: int) -> bool:
+        if self.last_cap_success_ms <= 0:
+            return True
+        max_stale_ms = int(self.config.get("maxStaleMinutes", 60)) * 60000
+        return (now - self.last_cap_success_ms) > max_stale_ms
+
+    def _publish(self, topic: str, payload: Any, retain: bool = True) -> None:
+        qos = int(self.config["mqtt"].get("qos", 1))
+        data = payload if isinstance(payload, str) else json.dumps(payload)
+        self.mqtt_client.publish(topic, data, qos=qos, retain=retain)
+
     def _publish_state(self, payload: Dict[str, Any]) -> None:
         base = self.config["stateTopicBase"].rstrip("/")
-        self.mqtt_client.publish(f"{base}/json", json.dumps(payload), qos=1, retain=True)
-        self.mqtt_client.publish(
-            f"{base}/active", "1" if payload.get("shouldProtect") else "0", qos=1, retain=True
-        )
-        self.mqtt_client.publish(
-            f"{base}/reason", str(payload.get("reason", "")), qos=1, retain=True
-        )
-        self.mqtt_client.publish(
-            f"{base}/matchedCount", str(payload.get("matchedCount", 0)), qos=1, retain=True
-        )
-        hold = payload.get("holdUntil") or ""
-        self.mqtt_client.publish(f"{base}/holdUntil", str(hold), qos=1, retain=True)
-        home = payload.get("home", {})
-        self.mqtt_client.publish(
-            f"{base}/home/source", str(home.get("source", "missing")), qos=1, retain=True
-        )
-        if home.get("lat") is not None:
-            self.mqtt_client.publish(f"{base}/home/lat", str(home.get("lat")), qos=1, retain=True)
-        if home.get("lon") is not None:
-            self.mqtt_client.publish(f"{base}/home/lon", str(home.get("lon")), qos=1, retain=True)
+        self._publish(f"{base}/json", payload, retain=True)
+        self._publish(f"{base}/active", "1" if payload.get("shouldProtect") else "0", retain=True)
+        self._publish(f"{base}/reason", str(payload.get("reason", "")), retain=True)
+        self._publish(f"{base}/matchedCount", str(payload.get("matchedCount", 0)), retain=True)
+        self._publish(f"{base}/holdUntil", str(payload.get("holdUntil") or ""), retain=True)
 
-    def _write_setting(self, path: str, value: Any) -> None:
+        home = payload.get("home", {})
+        self._publish(f"{base}/home/source", str(home.get("source", "missing")), retain=True)
+        if home.get("lat") is not None:
+            self._publish(f"{base}/home/lat", str(home.get("lat")), retain=True)
+        if home.get("lon") is not None:
+            self._publish(f"{base}/home/lon", str(home.get("lon")), retain=True)
+
+        health = payload.get("health", {})
+        for key in [
+            "stale",
+            "consecutiveFailures",
+            "lastPollDurationMs",
+            "lastCapSuccess",
+            "uptimeSeconds",
+            "sources",
+            "fetchErrors",
+        ]:
+            if key in health:
+                value = health[key]
+                if isinstance(value, (dict, list)):
+                    self._publish(f"{base}/health/{key}", value, retain=True)
+                else:
+                    self._publish(f"{base}/health/{key}", str(value), retain=True)
+
+        # Heartbeat endpoint for external watchdogs.
+        heartbeat = {
+            "timestamp": payload.get("timestamp"),
+            "shouldProtect": payload.get("shouldProtect"),
+            "reason": payload.get("reason"),
+            "portalId": payload.get("portalId"),
+        }
+        self._publish(self.config["heartbeatTopic"], heartbeat, retain=True)
+
+        # VRM-friendly bridge topics.
+        vrm = self.config["vrmTopicBase"].rstrip("/")
+        should_protect = bool(payload.get("shouldProtect"))
+        stale = bool(health.get("stale", False))
+        alarm_level = 2 if should_protect else (1 if stale else 0)
+        self._publish(f"{vrm}/State", str(1 if should_protect else 0), retain=True)
+        self._publish(f"{vrm}/AlarmLevel", str(alarm_level), retain=True)
+        self._publish(f"{vrm}/AlarmText", str(payload.get("reason", "")), retain=True)
+        self._publish(f"{vrm}/MatchedCount", str(payload.get("matchedCount", 0)), retain=True)
+        self._publish(f"{vrm}/LastUpdate", str(payload.get("timestamp", "")), retain=True)
+
+    def _write_setting(self, path: str, value: Any) -> bool:
+        if to_bool(self.config.get("dryRun"), False):
+            self.log.warning("dryRun=true, skipped write %s <= %s", path, value)
+            return True
         if not self.portal_id:
             self.log.warning("Cannot write %s, portalId unknown", path)
-            return
+            return False
         topic = f"W/{self.portal_id}/settings/0/{path}"
         payload = json.dumps({"value": value})
-        self.mqtt_client.publish(topic, payload, qos=1, retain=False)
-        self.log.info("Write %s <= %s", topic, value)
+        qos = int(self.config["mqtt"].get("qos", 1))
+        result = self.mqtt_client.publish(topic, payload, qos=qos, retain=False)
+        ok = (result.rc == mqtt.MQTT_ERR_SUCCESS)
+        if ok:
+            self.log.info("Write %s <= %s", topic, value)
+        else:
+            self.log.error("Write failed rc=%s for %s", result.rc, topic)
+        return ok
 
-    def _apply_control(self, should_protect: bool, normal_soc: int, storm_soc: int) -> None:
+    def _ramped_storm_soc(self, target_soc: int) -> int:
+        target_soc = clamp_soc_step5(target_soc, int(self.config.get("stormMinSoc", 80)))
+        ramp_step = int(self.config.get("stormSocRampPerPoll", 10))
+        if ramp_step <= 0 or self.last_applied_min_soc is None:
+            return target_soc
+        if target_soc <= self.last_applied_min_soc:
+            return target_soc
+        return min(target_soc, self.last_applied_min_soc + ramp_step)
+
+    def _apply_control(self, should_protect: bool, normal_soc: int, target_storm_soc: int) -> None:
+        storm_soc = self._ramped_storm_soc(target_storm_soc)
+
         if should_protect and not self.protect_active:
-            self._write_setting("Settings/CGwacs/BatteryLife/MinimumSocLimit", storm_soc)
-            self._write_setting("Settings/CGwacs/BatteryLife/ForceCharge", 1)
-            self.protect_active = True
-            self.log.warning("Storm protection ENABLED (%s%%)", storm_soc)
-        elif (not should_protect) and self.protect_active:
-            self._write_setting("Settings/CGwacs/BatteryLife/ForceCharge", 0)
-            self._write_setting("Settings/CGwacs/BatteryLife/MinimumSocLimit", normal_soc)
-            self.protect_active = False
-            self.log.warning("Storm protection DISABLED (%s%%)", normal_soc)
+            ok1 = self._write_setting("Settings/CGwacs/BatteryLife/MinimumSocLimit", storm_soc)
+            ok2 = self._write_setting("Settings/CGwacs/BatteryLife/ForceCharge", 1)
+            if ok1 and ok2:
+                self.protect_active = True
+                self.last_applied_min_soc = storm_soc
+                self.log.warning("Storm protection ENABLED (%s%%)", storm_soc)
+            return
+
+        if should_protect and self.protect_active:
+            if self.last_applied_min_soc != storm_soc:
+                if self._write_setting("Settings/CGwacs/BatteryLife/MinimumSocLimit", storm_soc):
+                    self.last_applied_min_soc = storm_soc
+                    self.log.warning("Storm protection reserve adjusted to %s%%", storm_soc)
+            return
+
+        if (not should_protect) and self.protect_active:
+            ok1 = self._write_setting("Settings/CGwacs/BatteryLife/ForceCharge", 0)
+            ok2 = self._write_setting("Settings/CGwacs/BatteryLife/MinimumSocLimit", normal_soc)
+            if ok1 and ok2:
+                self.protect_active = False
+                self.last_applied_min_soc = normal_soc
+                self.log.warning("Storm protection DISABLED (%s%%)", normal_soc)
+
+    def _evaluate_alerts(self) -> Tuple[List[AlertMatch], List[str], List[str]]:
+        docs, fetch_errors = self._fetch_cap_documents()
+        parse_errors: List[str] = []
+        alerts: List[Dict[str, Any]] = []
+        sources: List[str] = []
+
+        for source_url, xml_text in docs:
+            try:
+                alerts.extend(self._parse_items(xml_text, source_url))
+                sources.append(source_url)
+            except Exception as e:
+                parse_errors.append(f"{source_url}: {e}")
+
+        if not alerts:
+            errors = fetch_errors + parse_errors
+            raise RuntimeError("No usable CAP alerts from any source: " + "; ".join(errors))
+
+        deduped = self._dedupe_alerts(alerts)
+        return self._matches(deduped), sources, fetch_errors + parse_errors
 
     def evaluate_once(self) -> None:
-        now = int(time.time() * 1000)
+        start = now_ms()
+        now = start
         normal_soc = clamp_soc_step5(self.config.get("normalMinSoc"), 20)
-        storm_soc = clamp_soc_step5(self.config.get("stormMinSoc"), 80)
+        default_storm_soc = clamp_soc_step5(self.config.get("stormMinSoc"), 80)
         hold_ms = int(max(0, int(self.config.get("clearHoldMinutes", 60))) * 60000)
+
+        with self.state_lock:
+            if self.force_manual is not None and self.force_manual_until_ms > 0 and now >= self.force_manual_until_ms:
+                self.log.info("Manual override expired")
+                self.force_manual = None
+                self.force_manual_until_ms = 0
+            manual_force = self.force_manual
+            manual_until = self.force_manual_until_ms
 
         info: Dict[str, Any] = {
             "timestamp": utc_iso(now),
             "portalId": self.portal_id,
-            "control": {"normalMinSoc": normal_soc, "stormMinSoc": storm_soc},
+            "control": {
+                "normalMinSoc": normal_soc,
+                "stormMinSocDefault": default_storm_soc,
+            },
         }
         home_lat, home_lon, home_source = self._home_position()
         info["home"] = {"lat": home_lat, "lon": home_lon, "source": home_source}
+        info["manualOverride"] = {
+            "mode": "force_on" if manual_force is True else ("force_off" if manual_force is False else "auto"),
+            "until": utc_iso(manual_until) if manual_until else None,
+        }
+
+        should_protect = self.protect_active
+        reason = "hold-last"
+        target_storm_soc = default_storm_soc
+        matches: List[AlertMatch] = []
+        fetch_error_text = ""
+        sources: List[str] = []
+        health_errors: List[str] = []
 
         try:
-            xml_text = self._fetch_cap_xml()
-            parsed_alerts = self._parse_items(xml_text)
-            matches = self._matches(parsed_alerts)
-            info["matchedCount"] = len(matches)
-            info["matchedAlerts"] = [
-                {
-                    "title": m.title,
-                    "event": m.event,
-                    "severity": m.severity,
-                    "area": m.area,
-                    "zoneType": m.zone_type,
-                    "startsAt": utc_iso(m.starts_at),
-                    "expiresAt": utc_iso(m.expires_at),
-                }
-                for m in matches[:10]
-            ]
+            matches, sources, health_errors = self._evaluate_alerts()
+            self.last_cap_success_ms = now
+            self.last_cap_sources = sources
+            self.consecutive_cap_failures = 0
 
-            should_protect = len(matches) > 0
-            reason = "active-alert" if should_protect else "clear"
-
-            if should_protect:
+            if matches:
+                should_protect = True
+                reason = "active-alert"
+                target_storm_soc = max(m.target_min_soc for m in matches)
                 furthest_exp = max((m.expires_at or now) for m in matches)
                 self.storm_hold_until_ms = furthest_exp + hold_ms
-            elif self.storm_hold_until_ms > now:
-                should_protect = True
-                reason = "hold-timer"
             else:
-                self.storm_hold_until_ms = 0
-
-            if self.force_manual is True:
-                should_protect = True
-                reason = "manual-force-on"
-            elif self.force_manual is False:
                 should_protect = False
-                reason = "manual-force-off"
-
-            info["holdUntil"] = utc_iso(self.storm_hold_until_ms) if self.storm_hold_until_ms else None
-            info["reason"] = reason
-            info["shouldProtect"] = should_protect
-
-            self._apply_control(should_protect, normal_soc, storm_soc)
-            self._publish_state(info)
-            self.last_eval = info
-        except (urllib.error.URLError, TimeoutError) as e:
-            self.log.error("CAP fetch failed: %s", e)
-            info["shouldProtect"] = self.protect_active
-            info["reason"] = "error-fetch-cap"
-            info["error"] = str(e)
-            self._publish_state(info)
-            self.last_eval = info
-        except ET.ParseError as e:
-            self.log.error("CAP parse failed: %s", e)
-            info["shouldProtect"] = self.protect_active
-            info["reason"] = "error-parse-cap"
-            info["error"] = str(e)
-            self._publish_state(info)
-            self.last_eval = info
+                reason = "clear"
+                if self.storm_hold_until_ms > now:
+                    should_protect = True
+                    reason = "hold-timer"
+                else:
+                    self.storm_hold_until_ms = 0
         except Exception as e:
-            self.log.exception("Unhandled evaluate error: %s", e)
-            info["shouldProtect"] = self.protect_active
-            info["reason"] = "error-unhandled"
-            info["error"] = str(e)
-            self._publish_state(info)
-            self.last_eval = info
+            fetch_error_text = str(e)
+            self.log.error("CAP evaluation failed: %s", e)
+            self.consecutive_cap_failures += 1
+            stale = self._is_stale(now)
+            if stale:
+                policy = str(self.config.get("stalePolicy", "hold_last"))
+                if policy == "force_protect":
+                    should_protect = True
+                    reason = "stale-force-protect"
+                elif policy == "force_normal":
+                    should_protect = False
+                    reason = "stale-force-normal"
+                else:
+                    should_protect = self.protect_active
+                    reason = "stale-hold-last"
+            else:
+                should_protect = self.protect_active
+                reason = "error-hold-last"
+
+        if manual_force is True:
+            should_protect = True
+            reason = "manual-force-on"
+        elif manual_force is False:
+            should_protect = False
+            reason = "manual-force-off"
+
+        info["matchedCount"] = len(matches)
+        info["matchedAlerts"] = [
+            {
+                "id": m.identifier,
+                "title": m.title,
+                "event": m.event,
+                "severity": m.severity,
+                "severityRank": m.severity_rank,
+                "targetMinSoc": m.target_min_soc,
+                "area": m.area,
+                "zoneType": m.zone_type,
+                "source": m.source,
+                "startsAt": utc_iso(m.starts_at),
+                "expiresAt": utc_iso(m.expires_at),
+            }
+            for m in matches[:10]
+        ]
+        info["holdUntil"] = utc_iso(self.storm_hold_until_ms) if self.storm_hold_until_ms else None
+        info["reason"] = reason
+        info["shouldProtect"] = should_protect
+        info["sources"] = sources or self.last_cap_sources
+
+        ramped_soc = self._ramped_storm_soc(target_storm_soc)
+        info["control"]["stormTargetMinSoc"] = target_storm_soc
+        info["control"]["stormRampedMinSoc"] = ramped_soc
+
+        self._apply_control(should_protect, normal_soc, target_storm_soc)
+
+        self.last_poll_duration_ms = max(0, now_ms() - start)
+        stale_now = self._is_stale(now_ms())
+        info["health"] = {
+            "stale": stale_now,
+            "consecutiveFailures": self.consecutive_cap_failures,
+            "lastPollDurationMs": self.last_poll_duration_ms,
+            "lastCapSuccess": utc_iso(self.last_cap_success_ms) if self.last_cap_success_ms else None,
+            "uptimeSeconds": int((now_ms() - self.started_ms) / 1000),
+            "sources": sources or self.last_cap_sources,
+            "fetchErrors": health_errors,
+        }
+        if fetch_error_text:
+            info["error"] = fetch_error_text
+
+        self._publish_state(info)
+        self.last_eval = info
 
     def run(self) -> None:
         mqtt_cfg = self.config["mqtt"]
-        self.mqtt_client.connect(mqtt_cfg.get("host", "127.0.0.1"), int(mqtt_cfg.get("port", 1883)), 60)
+        self.mqtt_client.connect(
+            mqtt_cfg.get("host", "127.0.0.1"),
+            int(mqtt_cfg.get("port", 1883)),
+            60,
+        )
         self.mqtt_client.loop_start()
         self.log.info("StormWatch daemon started")
 
@@ -645,14 +1074,16 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    daemon = StormWatchDaemon(Path(args.config))
-    config_log_level = str(daemon.config.get("logLevel", "")).upper().strip()
-    final_log_level = config_log_level or str(args.log_level).upper()
-
+    # Bootstrap logger so config load errors are visible.
     logging.basicConfig(
-        level=getattr(logging, final_log_level, logging.INFO),
+        level=getattr(logging, str(args.log_level).upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    daemon = StormWatchDaemon(Path(args.config))
+
+    config_log_level = str(daemon.config.get("logLevel", "")).upper().strip()
+    if config_log_level:
+        logging.getLogger().setLevel(getattr(logging, config_log_level, logging.INFO))
 
     def _sig_handler(signum, frame):
         logging.getLogger("stormwatchd").info("Signal %s received, shutting down", signum)

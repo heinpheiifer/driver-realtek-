@@ -78,14 +78,24 @@ Edit:
 
 Important keys:
 
-- `capFeedUrl`
+- `capFeedUrls` (list of primary + fallback feeds)
+- `capFetchTimeoutSeconds`
 - `home.lat`, `home.lon`
 - `useVictronGps`
 - `leadMinutes`, `clearHoldMinutes`
 - `normalMinSoc`, `stormMinSoc`
-- `acceptedSeverities`, `stormKeywords`
+- `severityMinSoc` (tiered reserve by severity)
+- `stormSocRampPerPoll` (smooth reserve ramp-up)
+- `maxStaleMinutes`, `stalePolicy` (`hold_last`, `force_protect`, `force_normal`)
+- `acceptedSeverities`, `stormKeywords`, `homeAreaKeywords`
+- `geofenceBufferKm`
+- `defaultManualOverrideMinutes`
+- `simulateMode`, `simulationFile`, `dryRun`
 - `stateTopicBase` (status publish root)
+- `vrmTopicBase` (VRM-friendly status bridge topics)
+- `heartbeatTopic` (watchdog heartbeat)
 - `commandTopic` (manual command input topic)
+- `logLevel`
 
 ### Start now
 
@@ -99,14 +109,33 @@ Publish JSON to `commandTopic`:
 
 - Force on:
   - `{"action":"forceProtect","enabled":true}`
+- Force on (with 12h timeout):
+  - `{"action":"forceProtect","enabled":true,"ttlMinutes":720}`
 - Force off:
   - `{"action":"forceProtect","enabled":false}`
 - Back to auto:
   - `{"action":"clearManualOverride"}`
 - Trigger immediate evaluation:
   - `{"action":"runNow"}`
+- Reload config without restart:
+  - `{"action":"reloadConfig"}`
 
 Status is retained under `stateTopicBase` (for dashboards/monitoring).
+Heartbeat is retained under `heartbeatTopic`.
+VRM/alarm bridge state is retained under `vrmTopicBase`.
+
+### Hardening features in Python daemon
+
+- Multi-source CAP fetch + dedupe (`capFeedUrls`)
+- Staleness detection (`maxStaleMinutes`)
+- Fail-safe behavior (`stalePolicy`)
+- Severity-tiered reserve (`severityMinSoc`)
+- Controlled ramp to target reserve (`stormSocRampPerPoll`)
+- Manual override timeout (`ttlMinutes` or `defaultManualOverrideMinutes`)
+- Optional simulation mode from local CAP XML (`simulateMode`, `simulationFile`)
+- Dry-run mode (`dryRun`) to test logic without writing ESS settings
+- Geofence buffer around polygons/circles (`geofenceBufferKm`)
+- Health topics (last success, failures, poll duration, stale flag)
 
 ---
 
@@ -127,11 +156,13 @@ Dashboard includes:
   - Storm Min SOC
   - Lead minutes
   - Hold minutes
-- Map payload output for worldmap node (`msg.payload.markers` and `msg.payload.polygons`)
+- Trigger insights panel (why it triggered, top alert details)
+- Protect trend chart (0/1 over time)
+- Interactive map (Leaflet) showing home + CAP geometry
 
 Notes:
 
-- Map requires worldmap node installed.
+- Map is built into dashboard via Leaflet template.
 - Settings panel updates runtime config in flow context.
 
 ---

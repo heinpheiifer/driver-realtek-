@@ -1,5 +1,8 @@
 {
-  "capFeedUrl": "https://alerts.metservice.com/cap/rss",
+  "capFeedUrls": [
+    "https://alerts.metservice.com/cap/rss"
+  ],
+  "capFetchTimeoutSeconds": 20,
   "portalId": "",
   "home": {
     "lat": null,
@@ -9,11 +12,20 @@
   "useVictronGps": true,
   "homeAreaKeywords": [],
   "matchAllWithoutGeometry": false,
+  "geofenceBufferKm": 0.0,
   "leadMinutes": 30,
   "clearHoldMinutes": 60,
   "pollSeconds": 300,
+  "maxStaleMinutes": 60,
+  "stalePolicy": "hold_last",
   "normalMinSoc": 20,
   "stormMinSoc": 80,
+  "severityMinSoc": {
+    "Moderate": 60,
+    "Severe": 80,
+    "Extreme": 90
+  },
+  "stormSocRampPerPoll": 10,
   "acceptedSeverities": [
     "Moderate",
     "Severe",
@@ -34,11 +46,19 @@
     "snow",
     "ice"
   ],
+  "defaultManualOverrideMinutes": 0,
+  "simulateMode": false,
+  "simulationFile": "",
+  "dryRun": false,
   "stateTopicBase": "N/custom/stormwatch",
+  "vrmTopicBase": "N/custom/stormwatch/vrm",
+  "heartbeatTopic": "N/custom/stormwatch/heartbeat",
   "commandTopic": "R/custom/stormwatch/command",
+  "logLevel": "INFO",
   "mqtt": {
     "host": "127.0.0.1",
     "port": 1883,
+    "qos": 1,
     "clientId": "stormwatchd"
   }
 }
