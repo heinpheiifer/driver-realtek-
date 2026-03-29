@@ -8,6 +8,9 @@ A lightweight browser-based app to capture solar installation compliance and com
 - Inverter/AC test values
 - Installation and electrical test photos with captions
 - Local autosave, JSON export/import, and printable report output
+- Multi-job dashboard (create/switch/duplicate/delete jobs)
+- Drawn signature pad per job
+- PDF export and email draft workflow
 
 ## Run
 
@@ -19,7 +22,9 @@ No build step required.
 4. Use:
    - **Save Draft** (local browser storage)
    - **Export JSON / Import JSON** for backup/share
-   - **Print Report** to generate a report-style document.
+   - **Print Report** to generate a report-style document
+   - **Export PDF** to download a structured report PDF
+   - **Email Report** to open your email client with a prefilled draft summary (attach the exported PDF before sending)
 
 ## Notes
 
