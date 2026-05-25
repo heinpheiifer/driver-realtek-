@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>Private Search</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="logo" aria-hidden="true">◉</div>
+      <h1>Private Search</h1>
+      <p class="tagline">Your index. Your machine. No Google. No Microsoft.</p>
+    </header>
+
+    <main>
+      <form id="search-form" class="search-form" role="search">
+        <input
+          id="query"
+          name="q"
+          type="search"
+          autocomplete="off"
+          placeholder="Search your private web index…"
+          autofocus
+          required
+        />
+        <button type="submit">Search</button>
+      </form>
+
+      <div id="stats" class="stats" aria-live="polite"></div>
+      <div id="status" class="status" aria-live="polite"></div>
+      <ol id="results" class="results" aria-label="Search results"></ol>
+    </main>
+
+    <footer class="footer">
+      <p>
+        Results come from pages your crawler has indexed locally.
+        Run <code>python crawler.py</code> to discover more of the web.
+      </p>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
