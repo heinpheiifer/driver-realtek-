@@ -70,7 +70,7 @@
 </p>
 
 <div class="disclaimer">
-  <strong>Disclaimer:</strong> This document is an educational summary for homeowners, designers, and electrical workers. It is not legal advice and does not replace the full text of cited standards, regulations, or network rules. Always use the current editions of AS/NZS 3000 (with applicable amendments), the Electricity (Safety) Regulations 2010, WorkSafe guidance, and your electricity distributor’s requirements. Confirm transition dates and local rules with a licensed electrical worker and, where needed, a electrical inspector.
+  <strong>Disclaimer:</strong> This document is an educational summary for homeowners, designers, and electrical workers. It is not legal advice and does not replace the full text of cited standards, regulations, or network rules. Always use the current editions of AS/NZS 3000 (with applicable amendments), the Electricity (Safety) Regulations 2010, WorkSafe guidance, and your electricity distributor’s requirements. Confirm transition dates and local rules with a licensed electrical worker and, where needed, an electrical inspector.
 </div>
 
 <div class="toc">
@@ -163,7 +163,7 @@
   <tr><td>NOTE</td><td>If equipment &gt; 20 A single-phase: consider upgrading mains and/or <strong>load management</strong></td></tr>
 </table>
 <p><strong>Also:</strong> Clause 7.9.2.2 — socket-outlets shall <strong>not</strong> be installed for <strong>Mode 1</strong> charging.</p>
-<p><strong>New domestic installations with garage:</strong> Clause 7.9.3.1 may require provision for EV charging in new builds with enclosed vehicle accommodation (either Mode 2 or Mode 3/4 facility).</p>
+<p><strong>New domestic installations with garage:</strong> Clause 7.9.3.1 <strong>requires</strong> a facility for electric vehicle charging in every new domestic installation that has a garage (fully enclosed space with a door for a motor vehicle, incorporated in the main dwelling). That facility must comply with either Clause 7.9.3.2 (Mode 2) or Clause 7.9.3.3 (Mode 3/4).</p>
 
 <h2 id="s5">5. WorkSafe EV guidelines and January 2026 Addendum</h2>
 <p>WorkSafe’s <em>Electric vehicle charging safety guidelines</em> (3rd edition) plus the <strong>January 2026 Addendum</strong> should be read alongside AS/NZS 3000. Highlights for <strong>residential EVSE</strong>:</p>
@@ -172,7 +172,7 @@
   <tr><td>RCD</td><td>Residential charging final subcircuit: <strong>Type B RCD</strong></td></tr>
   <tr><td>Origin</td><td>Subcircuit shall originate from a <strong>MEN switchboard</strong></td></tr>
   <tr><td>RDC-DD</td><td>Type A + IEC 62955 RDC-DD allowed as alternative to Type B (per standards)</td></tr>
-  <tr><td>Built-in Type B in EVSE</td><td>EVSE incorporating Type B may avoid duplicate board-mounted Type B if compliant</td></tr>
+  <tr><td>Built-in Type B in EVSE</td><td>Addendum does not require a duplicate board-mounted Type B if the EVSE incorporates one; the <strong>final subcircuit</strong> must still have compliant RCD protection on all live conductors per 7.9.3.3 and 2.6.3.3.1 (often Type A at the board minimum)</td></tr>
   <tr><td>32 A socket for IC-CPD</td><td>Not banned domestically; <strong>max demand assessment</strong> and <strong>load management recommended</strong></td></tr>
   <tr><td>32 A plug-in leads</td><td>Should include warning about sustained 32 A on older installations</td></tr>
   <tr><td>Equipment</td><td>IEC 61851 (EVSE), IEC 62955 (RDC-DD), IEC 62752 (IC-CPD)</td></tr>
@@ -247,7 +247,7 @@
   <strong>Options (in order of preference):</strong>
   <ol>
     <li><strong>Dynamic load management</strong> (CT on mains, EVSE throttles to 6–16 A when house load high) — meets WorkSafe recommendation; may avoid supply upgrade.</li>
-    <li><strong>Limitation method</strong> (documented in industry guidance): cap total installation at main breaker; user education on scheduling.</li>
+    <li><strong>Limitation method</strong> (per AS/NZS 3000 maximum-demand rules): documented design cap on total installation demand; user education on scheduling.</li>
     <li><strong>Supply upgrade</strong> (distributor): new mains, larger main switch, possibly three-phase.</li>
     <li>Lower-rate charger (e.g. 16 A / 3.7 kW) on 20 A subcircuit if 7.9.3.2 Mode 2 socket route chosen — slower but smaller demand increment.</li>
   </ol>
@@ -259,8 +259,9 @@
   <strong>Scenario:</strong> House MSB on dwelling; <strong>submain</strong> to garage distribution board 25 m away; charger mounted on garage wall.<br /><br />
   <strong>Additional requirements:</strong>
   <ul>
+    <li>Confirm the charging final subcircuit originates from a <strong>MEN switchboard</strong> (WorkSafe Jan 2026 addendum). This is often the dwelling main switchboard; a detached garage distribution board only qualifies if the outbuilding supply and MEN arrangement comply with Clause 7.2.4.5 — confirm in design before issuing a CoC.</li>
     <li>Size <strong>submain</strong> for garage loads + 32 A EV (voltage drop over full path).</li>
-    <li>EV final subcircuit originates at <strong>garage subboard</strong> — RCBO/RCD at that board (origin of final subcircuit).</li>
+    <li>Install EV protection (Type B or Type A + RDC-DD) at the <strong>origin of the final subcircuit</strong> — whichever board that is.</li>
     <li>Outbuilding MEN rules: polarity and MEN connection testing per Amendment 2 (8.3.9).</li>
     <li>Main switch still at dwelling MSB for whole installation (2.3.3).</li>
     <li>Local <strong>32 A isolator</strong> at EVSE strongly recommended (board not visible from charger).</li>
@@ -275,13 +276,14 @@
   <tr><td>B</td><td>Type A RCD/RCBO 30 mA, 2-pole</td><td>Built-in IEC 62955 RDC-DD</td><td>Lower board cost</td><td>Must verify RDC-DD in SDoC; common on quality wallboxes</td></tr>
 </table>
 <p>Both options must disconnect <strong>active and neutral</strong>. Single-pole RCBOs are not suitable.</p>
+<p>If the EVSE incorporates a Type B RCD, you may not need a second Type B at the board (WorkSafe addendum), but protection must still cover the <strong>entire final subcircuit</strong> from its origin to the EVSE — not only the charger enclosure.</p>
 
 <h2 id="s13">13. Testing, certification, and records</h2>
 <ol>
   <li>Visual inspection: IP rating, height, labelling, dedicated circuit, isolator.</li>
   <li>Tests per AS/NZS 3000 Section 8: continuity, insulation, polarity, earth fault-loop impedance where required.</li>
-  <li><strong>RCD operation test</strong> — including <strong>DC leakage</strong> per modified 8.3.10 (2025 ESR).</li>
-  <li>EVSE functional tests: earth continuity monitoring, RDC-DD if applicable.</li>
+  <li><strong>RCD operation test</strong> — including <strong>DC leakage</strong> per modified 8.3.10 (2025 ESR). This verifies correct installation; it is not full product-type testing of an RDC-DD.</li>
+  <li>EVSE functional checks per manufacturer (e.g. earth continuity monitoring) where applicable.</li>
   <li>Record date of energization at switchboard (2018 edition requirement).</li>
   <li>Issue <strong>Certificate of Compliance</strong> to customer; retain test records.</li>
 </ol>
@@ -291,7 +293,7 @@
   <li>Design to AS/NZS 3000:2018 + Amendments 1, 2, 3</li>
   <li>Clause 7.9.3.3: 32 A dedicated subcircuit, direct connect, 800 mm height, 32 A isolator</li>
   <li>Type B 30 mA (2-pole) OR Type A + IEC 62955 RDC-DD documented</li>
-  <li>Circuit originates from MEN switchboard (WorkSafe Addendum)</li>
+  <li>Charging final subcircuit originates from a MEN switchboard (WorkSafe addendum; confirm for detached garages)</li>
   <li>Maximum demand assessed; load management or upgrade if needed</li>
   <li>Cable sized per AS/NZS 3008; voltage drop ≤ 5%</li>
   <li>EVSE SDoC, IEC 61851, RDC-DD evidence if applicable</li>
@@ -317,7 +319,7 @@
   <li>MBIE — Updating ESR standard citations — <a href="https://www.mbie.govt.nz/dmsdocument/30545-updating-energy-safety-standards-citations-in-regulations-proactiverelease-pdf">mbie.govt.nz</a></li>
   <li>EWRB — Guidance on 2025 ESR changes — <a href="https://www.ewrb.govt.nz/about-us/news-and-notices/guidance-changes-to-electricity-safety-regulations-2010/">ewrb.govt.nz</a></li>
   <li>Building CodeHub — AS/NZS 3000:2018 resource — <a href="https://codehub.building.govt.nz/resources/30002018-asnzs">building.govt.nz</a></li>
-  <li>Electric Vehicle Council — EVSE installation guideline — <a href="http://www.electricvehiclecouncil.com.au/wp-content/uploads/2022/12/EVSE-installation-guideline-23NOV202276.pdf">electricvehiclecouncil.com.au</a></li>
+  <li>Electric Vehicle Council (Australia) — supplementary EVSE installation guideline, not NZ law — <a href="http://www.electricvehiclecouncil.com.au/wp-content/uploads/2022/12/EVSE-installation-guideline-23NOV202276.pdf">electricvehiclecouncil.com.au</a></li>
 </ol>
 </div>
 
