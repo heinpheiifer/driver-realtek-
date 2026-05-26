@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NZ Residential EV Charger — Detailed Electrician Guide</title>
+  <style>
+    @page { margin: 18mm 16mm; size: A4; }
+    body {
+      font-family: "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 10pt;
+      line-height: 1.42;
+      color: #1a1a1a;
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 10mm 0;
+    }
+    h1 { font-size: 20pt; color: #003366; border-bottom: 3px solid #003366; padding-bottom: 6px; margin-top: 0; }
+    h2 { font-size: 13pt; color: #004080; margin-top: 20px; page-break-after: avoid; }
+    h3 { font-size: 11pt; color: #00509e; margin-top: 12px; page-break-after: avoid; }
+    .subtitle { font-size: 10.5pt; color: #444; margin-bottom: 14px; }
+    .disclaimer {
+      background: #fff8e6;
+      border-left: 4px solid #e6a800;
+      padding: 10px 12px;
+      margin: 12px 0;
+      font-size: 9pt;
+    }
+    .quick-ref {
+      background: #e8f4fc;
+      border: 2px solid #004080;
+      padding: 12px 14px;
+      margin: 14px 0;
+      font-size: 9.5pt;
+    }
+    .quick-ref h2 { margin-top: 0; font-size: 12pt; }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 9pt; }
+    th, td { border: 1px solid #bbb; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #e8f0f8; font-weight: 600; }
+    tr:nth-child(even) td { background: #f7fafc; }
+    .ok { background: #e8f5e9; }
+    .no { background: #ffebee; }
+    .warn { background: #fff3e0; }
+    .example {
+      background: #f0f7ff;
+      border: 1px solid #b8d4f0;
+      border-radius: 4px;
+      padding: 10px 12px;
+      margin: 10px 0;
+      font-size: 9pt;
+    }
+    pre {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 8.5pt;
+      background: #f4f4f4;
+      border: 1px solid #ddd;
+      padding: 8px;
+      white-space: pre-wrap;
+    }
+    ul, ol { margin: 4px 0 10px; padding-left: 20px; }
+    li { margin-bottom: 3px; }
+    .toc { background: #f5f5f5; padding: 12px 16px; margin: 12px 0; font-size: 9.5pt; }
+    .toc a { color: #004080; text-decoration: none; }
+    .checklist li { list-style: none; margin-left: -8px; }
+    .checklist li::before { content: "☐ "; }
+    .sources { font-size: 8.5pt; }
+    .sources a { color: #004080; word-break: break-all; }
+    .page-break { page-break-before: always; }
+    .footer-note { font-size: 8pt; color: #666; margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; }
+    .fact { font-size: 8.5pt; color: #555; font-style: italic; }
+  </style>
+</head>
+<body>
+
+<h1>NZ Residential EV Charger — Detailed Electrician Guide</h1>
+<p class="subtitle">
+  <strong>Mode 3 EVSE up to 32 A / ~7.4 kW single-phase and up to ~22 kW three-phase</strong><br />
+  Quick reference, location rules, compliance checklist, and worked examples<br />
+  Document version: 1.0 &nbsp;|&nbsp; May 2026 &nbsp;|&nbsp; For registered electrical workers in New Zealand
+</p>
+
+<div class="disclaimer">
+  <strong>Disclaimer:</strong> Educational field guide only — not legal advice. Mandatory requirements come from the Electricity (Safety) Regulations 2010 (ESR), cited AS/NZS 3000:2018 + Amendments 1–3 (legally cited from 13 November 2025 per SL 2025/225), and WorkSafe EV charging guidance. Purchase current standards; confirm distributor rules and CoC obligations before work.
+</div>
+
+<div class="quick-ref" id="qr">
+  <h2>Installer quick reference (tear-out summary)</h2>
+  <table>
+    <tr><th>Item</th><th>Requirement</th><th>Clause / source</th></tr>
+    <tr><td>Who may install</td><td>Registered electrical worker only; issue CoC</td><td>ESR; EWRB</td></tr>
+    <tr><td>Wiring Rules edition</td><td>AS/NZS 3000:2018 + Amd 1, 2, 3 (use now; mandatory for new work after 12 Nov 2026)</td><td>ESR Sch 2; WorkSafe Dec 2025</td></tr>
+    <tr><td>Domestic Mode 3/4</td><td>Dedicated final subcircuit; Type B 30 mA (all poles) OR Type A + IEC 62955 RDC-DD; direct fixed connection</td><td>7.9.3.3 (NZ)</td></tr>
+    <tr><td>Single-phase subcircuit</td><td>Minimum <strong>32 A</strong> current-carrying capacity</td><td>7.9.3.3(a)</td></tr>
+    <tr><td>Three-phase subcircuit</td><td>7.9.3.3(a) states 32 A minimum for <strong>single-phase</strong> only — size 3-phase per EVSE rating + AS/NZS 3008; still apply 7.9.3.3(b)–(f)</td><td>7.9.3.3; 3.4</td></tr>
+    <tr><td>Height</td><td>Socket / EVSE cable outlet ≥ <strong>800 mm</strong> above floor or ground</td><td>7.9.3.3(f)</td></tr>
+    <tr><td>Isolator</td><td>≥ 32 A, adjacent to charging facility</td><td>7.9.3.3(e); 2.3.2.2.1</td></tr>
+    <tr><td>Origin</td><td>From <strong>MEN switchboard</strong> (WorkSafe Jan 2026 addendum)</td><td>WorkSafe addendum §3</td></tr>
+    <tr><td>Mode 1</td><td><strong>No</strong> socket-outlets for Mode 1 charging</td><td>7.9.2.2</td></tr>
+    <tr><td>Max demand</td><td>Assess full load; LMS often required for 32 A continuous</td><td>2.2.2; WorkSafe addendum</td></tr>
+    <tr><td>RCD test</td><td>Include DC leakage in function test where applicable</td><td>ESR mod. 8.3.10</td></tr>
+    <tr><td>Product</td><td>SDoC; IEC 61851; 230/400 V 50 Hz; RDC-DD if Type A path</td><td>ESR; WorkSafe</td></tr>
+  </table>
+</div>
+
+<div class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#s1">Regulatory stack</a></li>
+    <li><a href="#s2">Power levels: single-phase vs three-phase</a></li>
+    <li><a href="#s3">Mandatory NZ rules (Clause 7.9)</a></li>
+    <li><a href="#s4">Protection: Type B vs Type A + RDC-DD</a></li>
+    <li><a href="#s5">Where NOT to install (restricted zones)</a></li>
+    <li><a href="#s6">Heights, clearances, and mounting</a></li>
+    <li><a href="#s7">Recommended locations and examples</a></li>
+    <li><a href="#s8">Cable, submain, and capacity</a></li>
+    <li><a href="#s9">Testing, CoC, and records</a></li>
+    <li><a href="#s10">Worked examples (5 scenarios)</a></li>
+    <li><a href="#s11">Master installer checklist</a></li>
+    <li><a href="#s12">References (fact-checked)</a></li>
+  </ol>
+</div>
+
+<h2 id="s1">1. Regulatory stack</h2>
+<table>
+  <tr><th>Instrument</th><th>Role for residential EVSE</th></tr>
+  <tr><td>Electricity Act 1992</td><td>Overarching electrical safety duties</td></tr>
+  <tr><td>Electricity (Safety) Regulations 2010</td><td>Installation work, product conformity, CoC</td></tr>
+  <tr><td>ESR Reg 59 + Schedule 2</td><td>Low-voltage installations must comply with Part 2 of cited AS/NZS 3000</td></tr>
+  <tr><td>AS/NZS 3000:2018 + Amd 1, 2, 3</td><td>Wiring Rules — Clause <strong>7.9 (NZ only)</strong> for EV supplies</td></tr>
+  <tr><td>WorkSafe EV Charging Safety Guidelines (3rd ed.) + Jan 2026 Addendum</td><td>Regulator expectations (MEN board, load management, 32 A sockets)</td></tr>
+  <tr><td>AS/NZS 3008.1.1</td><td>Cable current capacity and voltage drop</td></tr>
+  <tr><td>IEC 61851-1 / -22</td><td>Mode 3 EVSE product safety</td></tr>
+  <tr><td>IEC 62955</td><td>RDC-DD (Type A alternative path)</td></tr>
+  <tr><td>SNZ PAS 6011:2023</td><td>Voluntary consumer/installer good practice (not cited in ESR)</td></tr>
+  <tr><td>Distributor Service &amp; Installation Rules</td><td>Notification, capacity, controlled loads</td></tr>
+</table>
+<p class="fact">Fact check: ESR citation update and transition dates verified against WorkSafe (19 Dec 2025) and EWRB guidance (Mar 2026).</p>
+
+<h2 id="s2">2. Power levels: single-phase vs three-phase</h2>
+<p>Residential Mode 3 chargers in NZ are commonly supplied at 230 V single-phase or 400 V three-phase (line-to-line). The on-board charger limits what the vehicle accepts.</p>
+<table>
+  <tr><th>Supply</th><th>Typical installer setting</th><th>Approx. AC power</th><th>Notes</th></tr>
+  <tr><td>1-phase, 16 A</td><td>16 A circuit (Mode 2 path 7.9.3.2 uses 20 A min.)</td><td>~3.7 kW</td><td>Lower demand; not full 7.9.3.3 single-phase 32 A path</td></tr>
+  <tr><td>1-phase, 32 A</td><td>32 A dedicated subcircuit</td><td>~7.4 kW</td><td>7.9.3.3(a) minimum capacity for single-phase Mode 3/4</td></tr>
+  <tr><td>3-phase, 16 A / phase</td><td>Subcircuit sized per load (e.g. 20 A or 32 A per phase per design)</td><td>~11 kW</td><td>Common “fast AC” residential cap; verify EVSE SDoC</td></tr>
+  <tr><td>3-phase, 32 A / phase</td><td>Heavy demand; submain and mains upgrade often required</td><td>~22 kW</td><td>Maximum typical residential AC; full max-demand study essential</td></tr>
+</table>
+<p><strong>Important distinction:</strong> Clause 7.9.3.3(a) explicitly requires a minimum <strong>32 A current-carrying capacity for single-phase</strong> final subcircuits. It does not state the same numeric minimum for three-phase. Three-phase installations must still comply with 7.9.3.3(b)–(f), general cable sizing (Section 3 / AS/NZS 3008), maximum demand (2.2.2), and WorkSafe principles (equipment rated 230 V or 400 V as applicable).</p>
+<p>WorkSafe’s Jan 2026 addendum notes that with load management, a 32 A (7.5 kW) charger can often satisfy daily driving without exceeding typical domestic peak demand — but this is <strong>not</strong> permission to skip design.</p>
+
+<div class="page-break"></div>
+
+<h2 id="s3">3. Mandatory NZ rules (Clause 7.9)</h2>
+<h3>3.1 Clause 7.9.3.3 — Domestic Mode 3 and Mode 4 (verified text)</h3>
+<table>
+  <tr><th>Ref</th><th>Requirement</th></tr>
+  <tr><td>(a)</td><td>Single-phase final subcircuits: minimum <strong>32 A</strong> current-carrying capacity</td></tr>
+  <tr><td>(b)</td><td>Final subcircuit shall supply <strong>no other point</strong> in the wiring</td></tr>
+  <tr><td>(c)</td><td>Separate <strong>Type B</strong> RCD 30 mA, all live conductors (active and neutral); RCBO allowed</td></tr>
+  <tr><td>(c) exc.</td><td><strong>Type A</strong> 30 mA + <strong>RDC-DD</strong> per IEC 62955 (≥ 6 mA DC detected)</td></tr>
+  <tr><td>(d)</td><td><strong>Direct connection</strong> (fixed wiring) — not a general-purpose socket circuit</td></tr>
+  <tr><td>(e)</td><td>Isolator ≥ <strong>32 A</strong>, adjacent to charging facility (Clause 2.3.2.2.1)</td></tr>
+  <tr><td>(f)</td><td>Socket-outlet or EVSE cable ≥ <strong>800 mm</strong> above floor/ground</td></tr>
+  <tr><td>NOTE</td><td>If equipment &gt; 20 A single-phase: consider mains upgrade and/or load management</td></tr>
+</table>
+<p class="fact">Source: AS/NZS 3000:2018 Amendment 1, Clause 7.9 (NZ only) — electrotraining / Standards extract.</p>
+
+<h3>3.2 Other Clause 7.9 items</h3>
+<ul>
+  <li><strong>7.9.2.2:</strong> Socket-outlets shall <strong>not</strong> be installed for Mode 1 charging.</li>
+  <li><strong>7.9.3.1:</strong> New domestic installations with defined integral garage <strong>shall</strong> provide a Mode 2 or Mode 3/4 charging facility.</li>
+  <li><strong>7.9.3.2:</strong> Mode 2 — 20 A minimum dedicated subcircuit; approved socket types; 800 mm height.</li>
+  <li><strong>7.9.4:</strong> Non-residential — Type B (or Type A + RDC-DD for Mode 3) on final subcircuit.</li>
+</ul>
+
+<h3>3.3 Transition (ESR 2025)</h3>
+<table>
+  <tr><th>When</th><th>Rule</th></tr>
+  <tr><td>From 13 Nov 2025</td><td>May use AS/NZS 3000:2018 + Amd 1–3 for alterations/new work</td></tr>
+  <tr><td>New construction after 12 Nov 2026</td><td><strong>Must</strong> use cited 2018 edition + amendments</td></tr>
+  <tr><td>Alteration started after 13 Nov 2025, unfinished by 12 Nov 2026</td><td>CoC completed portion; balance to new standard</td></tr>
+</table>
+
+<h2 id="s4">4. Protection: Type B vs Type A + RDC-DD</h2>
+<table>
+  <tr><th>Board</th><th>EVSE</th><th>Compliance path</th></tr>
+  <tr><td>2-pole Type B RCBO/RCD 30 mA</td><td>Any compliant Mode 3</td><td>7.9.3.3(c) — simplest</td></tr>
+  <tr><td>2-pole Type A RCBO/RCD 30 mA</td><td>Built-in IEC 62955 RDC-DD (verify SDoC)</td><td>7.9.3.3 exception</td></tr>
+  <tr><td>EVSE with integrated Type B</td><td>Per manufacturer</td><td>WorkSafe addendum: no duplicate Type B required at board, but subcircuit still needs RCD coverage per 3000 note</td></tr>
+</table>
+<p>Protection must cover the <strong>entire final subcircuit</strong> from origin to EVSE (cable between board and charger included). Single-pole devices are not acceptable where all poles must be protected.</p>
+<p>RCD function testing per modified <strong>8.3.10</strong> must include DC leakage checks where applicable (2025 ESR). This verifies installation — not factory certification of the RDC-DD.</p>
+
+<h2 id="s5">5. Where NOT to install (restricted zones)</h2>
+<p>Use this table on site before mounting. “Mandatory” items derive from AS/NZS 3000 or ESR; “Do not” items are strong guidance from Appendix P, WorkSafe, or related clauses.</p>
+
+<table>
+  <tr><th>Zone / condition</th><th>EVSE / socket?</th><th>Basis</th></tr>
+  <tr class="no"><td>Bathroom, shower, or bath <strong>Zone 0, 1, or 2</strong> (wet areas per Section 6, Table 6.1)</td><td><strong>Not permitted</strong> (socket-outlets excluded; EVSE is fixed electrical equipment — treat as prohibited in wet zones unless full IP and clause-by-clause compliance)</td><td>AS/NZS 3000 Section 6</td></tr>
+  <tr class="no"><td>Within 0.6 m of bath edge, 0.4 m above basin, shower Zone 2 without IPX4</td><td><strong>Not permitted</strong> for standard accessories</td><td>Figs 6.1, 6.8, 6.13</td></tr>
+  <tr class="no"><td>Swimming pool zones 0, 1, 2</td><td><strong>Not permitted</strong> without pool-specific compliance</td><td>Section 6 pool rules</td></tr>
+  <tr class="no"><td><strong>Mode 1</strong> charging from general socket-outlets</td><td><strong>Prohibited</strong> — no sockets for Mode 1</td><td>7.9.2.2 (NZ)</td></tr>
+  <tr class="no"><td>Below <strong>800 mm</strong> above floor or ground</td><td><strong>Non-compliant</strong> for 7.9.3.2 / 7.9.3.3</td><td>7.9.3.3(f)</td></tr>
+  <tr class="no"><td>Shared final subcircuit with other loads (lights, power, HWS)</td><td><strong>Non-compliant</strong> for Mode 3/4 domestic</td><td>7.9.3.3(b)</td></tr>
+  <tr class="no"><td>Hazardous area (flammable gas/vapour/dust) without appropriate Ex equipment</td><td><strong>Not permitted</strong> unless classified and designed to AS/NZS 60079 series</td><td>Section 7 hazardous installations</td></tr>
+  <tr class="no"><td>Immediately behind vehicle bumper path, tight driveway turn, or unprotected car wash bay</td><td><strong>Do not install</strong> without mechanical protection (bollards, barriers)</td><td>Appendix P (informative)</td></tr>
+  <tr class="no"><td>Outdoor exposed weather without adequate IP (see Section 6)</td><td><strong>Non-compliant</strong> if IP rating inadequate for location</td><td>4.1.3; Section 6</td></tr>
+  <tr class="no"><td>Inside cupboard storing chemicals, pool chlorine, or flammable liquids (poor ventilation + corrosion)</td><td><strong>Do not install</strong> — manufacturer environment limits</td><td>Risk assessment; PAS 6011 good practice</td></tr>
+  <tr class="no"><td>Where cable could be damaged by doors, gates, or vehicle doors</td><td><strong>Do not install</strong> without mechanical protection</td><td>Appendix H / P</td></tr>
+  <tr class="warn"><td>Detached garage subboard without confirmed MEN / outbuilding supply compliance</td><td><strong>Do not energise</strong> until design verified</td><td>7.2.4.5; WorkSafe addendum</td></tr>
+  <tr class="warn"><td>32 A continuous load on unknown/old consumer mains</td><td><strong>Do not install</strong> without max-demand and volt-drop study</td><td>EWRB; WorkSafe addendum</td></tr>
+</table>
+
+<h3>5.1 Mode 2 vs Mode 3 location note</h3>
+<p>Mode 2 (IC-CPD plugged into socket) is discouraged by WorkSafe for employer vehicles and high sustained current. Mode 3 fixed EVSE is the preferred residential solution for 32 A equivalent charging.</p>
+
+<div class="page-break"></div>
+
+<h2 id="s6">6. Heights, clearances, and mounting</h2>
+<table>
+  <tr><th>Dimension</th><th>Requirement</th><th>Type</th></tr>
+  <tr><td>Minimum height to socket / EVSE cable outlet</td><td><strong>≥ 800 mm</strong> above floor or ground</td><td><strong>Mandatory</strong> (7.9.3.3(f), 7.9.3.2(c))</td></tr>
+  <tr><td>Recommended ergonomic height</td><td><strong>900–1 200 mm</strong> AFFL to centre of unit (cable hang, accessibility)</td><td>Good practice / manufacturer</td></tr>
+  <tr><td>Maximum practical height</td><td>Typically ≤ <strong>1 500 mm</strong> unless ladder access agreed (maintenance, cable weight)</td><td>Good practice</td></tr>
+  <tr><td>Side clearance from wall corner</td><td>Often <strong>≥ 300 mm</strong> from corner (manufacturer); allows door swing and cable bend</td><td>Manufacturer install manual</td></tr>
+  <tr><td>Vehicle reach</td><td>Charging port reachable without trailing cable across traffic path</td><td>Site layout</td></tr>
+  <tr><td>Outdoor IP</td><td><strong>IP44</strong> minimum typical (Appendix P informative); <strong>IP55+</strong> recommended exposed rain</td><td>Appendix P; Section 6</td></tr>
+  <tr><td>Impact</td><td><strong>IK07+</strong> where vehicle impact foreseeable (car parks, tight garages)</td><td>Appendix P (informative)</td></tr>
+  <tr><td>Isolator</td><td>Adjacent to charging facility; visible or identifiable from EVSE</td><td>7.9.3.3(e)</td></tr>
+</table>
+
+<h2 id="s7">7. Recommended locations and examples</h2>
+<h3>7.1 Suitable location checklist</h3>
+<ul class="checklist">
+  <li>Within dedicated garage or carport bay — wall facing vehicle charge port</li>
+  <li>Exterior wall near parking with weather-rated EVSE (IP55+ if exposed)</li>
+  <li>Close to MEN main switchboard when practical (short subcircuit, clear max-demand path)</li>
+  <li>Protected from vehicle contact (bollard, wheel stop, offset from door travel)</li>
+  <li>Ventilation and manufacturer temperature range met</li>
+  <li>Distributor notification completed if required</li>
+</ul>
+
+<h3>7.2 Worked location examples</h3>
+<div class="example">
+  <strong>Example A — Integral garage (new build):</strong> Mode 3 wallbox on rear wall of garage, 1 000 mm AFFL, 400 mm from internal corner, IP44 minimum (dust/moisture). Dedicated 32 A subcircuit from garage MSB (MEN). Type A RCBO + EVSE RDC-DD. Vehicle parks nose-in; Type 2 tethered cable reaches port without crossing pedestrian door path. <em>Complies: 7.9.3.3, 7.9.3.1 facility provided.</em>
+</div>
+<div class="example">
+  <strong>Example B — Carport (no full enclosure):</strong> IP55 wallbox on house wall facing carport slab, 900 mm AFFL, conduit in wall from MSB 6 m away. Concrete-mounted bollard in front of charger. Load management set to 16 A evening peak. <em>Complies if IP, height, protection, and max demand documented.</em>
+</div>
+<div class="example">
+  <strong>Example C — Driveway beside house:</strong> Three-phase 11 kW EVSE near meter/MSB; 3-pole Type B RCBO; subcircuit sized 20 A/phase (or per EVSE). Height 850 mm; cable route in UV-stable conduit above ground level. <em>7.9.3.3(b)–(f) apply; 32 A single-phase rule (a) N/A to 3-phase.</em>
+</div>
+<div class="example">
+  <strong>Example D — What to refuse:</strong> Customer requests charger inside ensuite bathroom Zone 2, 600 mm from basin. <strong>Decline</strong> — wet zone prohibition; propose external garage or exterior IP-rated location outside classified zones.
+</div>
+<div class="example">
+  <strong>Example E — Detached garage:</strong> 25 m submain; EVSE on front wall. Confirm MEN/outbuilding rules before choosing garage DB as subcircuit origin. RCBO at origin of final subcircuit; 32 A isolator at EVSE; submain sized for 32 A + other garage loads. <em>See Section 10 Example 5.</em>
+</div>
+
+<div class="page-break"></div>
+
+<h2 id="s8">8. Cable, submain, and capacity</h2>
+<ul>
+  <li>Size cable per <strong>AS/NZS 3008.1.1</strong>: installation method, grouping, ambient, length.</li>
+  <li>Voltage drop: typically ≤ <strong>5%</strong> from origin to load (AS/NZS 3000 / 3008).</li>
+  <li>Single-phase 32 A: many installs use <strong>6 mm²</strong> Cu for short runs — always calculate; do not copy blindly.</li>
+  <li>Three-phase: size each phase conductor for design current; neutral and earthing per 3000.</li>
+  <li><strong>Maximum demand</strong> (2.2.2): EV often at full rated current unless proven assessment, limitation, or LMS.</li>
+  <li>Notify electricity distributor when required by network rules.</li>
+</ul>
+
+<h2 id="s9">9. Testing, CoC, and records</h2>
+<ol>
+  <li>Visual: location, height ≥ 800 mm, IP rating, labelling, dedicated circuit, isolator position.</li>
+  <li>Section 8: continuity, insulation, polarity, earth fault-loop impedance where required.</li>
+  <li>RCD operation including <strong>DC leakage</strong> per ESR-modified 8.3.10.</li>
+  <li>EVSE operational checks per manufacturer (earth monitoring, etc.).</li>
+  <li>Record energization date at switchboard (2018 edition).</li>
+  <li>Issue <strong>Certificate of Compliance</strong>; attach EVSE SDoC to CoC (EWRB good practice).</li>
+</ol>
+
+<h2 id="s10">10. Worked installation examples</h2>
+<div class="example">
+  <strong>1. Single-phase 7.4 kW (32 A) — MSB in garage</strong><br />
+  63 A supply; 8 m run; Type 2 wallbox with RDC-DD; Type A 2-pole RCBO 32 A; 6 mm² V75; LMS throttles to 20 A when oven on. CoC references 7.9.3.3 and LMS settings.
+</div>
+<div class="example">
+  <strong>2. Single-phase — old 50 A board, no spare capacity</strong><br />
+  Install 3.7 kW (16 A) on dedicated 20 A Mode 2 facility OR Mode 3 with LMS cap 12 A overnight OR supply upgrade. Do not fit 32 A hardware without assessment.
+</div>
+<div class="example">
+  <strong>3. Three-phase 11 kW (16 A/phase)</strong><br />
+  400 V supply; 3-pole Type B 30 mA; cable 4 mm² per phase (verify); EVSE SDoC 400 V 50 Hz; max demand includes other 3-phase loads. 7.9.3.3(a) not applicable; (b)–(f) are.
+</div>
+<div class="example">
+  <strong>4. Three-phase 22 kW (32 A/phase) — high-end home</strong><br />
+  Distributor upgrade likely; 10 mm² or larger per phase per 3008; main switch and submain upgraded; fixed load management mandatory; CoC documents full calculation.
+</div>
+<div class="example">
+  <strong>5. Detached garage subboard</strong><br />
+  Verify MEN switchboard origin per WorkSafe; size 25 m submain; protection at final subcircuit origin; local isolator at EVSE; 8.3.9 outbuilding tests.
+</div>
+
+<h2 id="s11">11. Master installer checklist</h2>
+<ul class="checklist">
+  <li>Design to AS/NZS 3000:2018 + Amendments 1, 2, 3</li>
+  <li>Site survey: restricted zones (Section 6 wet areas, impact, hazardous)</li>
+  <li>Height ≥ 800 mm; IP/IK suitable for environment</li>
+  <li>Dedicated final subcircuit; direct connection Mode 3</li>
+  <li>Type B 2-pole 30 mA OR Type A + IEC 62955 RDC-DD (SDoC on file)</li>
+  <li>Subcircuit from MEN switchboard (confirm detached garage case)</li>
+  <li>Single-phase: 32 A min. subcircuit capacity; three-phase: sized per load + 7.9.3.3(b)–(f)</li>
+  <li>32 A isolator adjacent to EVSE</li>
+  <li>Max demand / volt drop / cable size calculated (3008)</li>
+  <li>Load management or upgrade if sustained 32 A exceeds capacity</li>
+  <li>SDoC, IEC 61851, 230/400 V 50 Hz confirmed</li>
+  <li>Section 8 tests + DC leakage; CoC issued</li>
+  <li>Distributor notified if required</li>
+</ul>
+
+<div class="page-break"></div>
+
+<h2 id="s12">12. References (fact-checked May 2026)</h2>
+<div class="sources">
+<ol>
+  <li>AS/NZS 3000:2018 Amendment 1 — Clause 7.9 (NZ) — <a href="https://os-data-2.s3-ap-southeast-2.amazonaws.com/electrotraining-com-au/bundle10/as3000_amendment_1.pdf">electrotraining PDF</a></li>
+  <li>Electricity (Safety) Regulations 2010 — <a href="https://www.legislation.govt.nz/regulation/public/2010/0036/latest/whole.html">legislation.govt.nz</a></li>
+  <li>Electricity (Safety) Amendment Regulations 2025 (SL 2025/225) — <a href="https://www.legislation.govt.nz/regulation/public/2025/0225/latest/whole.html">legislation.govt.nz</a></li>
+  <li>WorkSafe — ESR changes Dec 2025 — <a href="https://www.worksafe.govt.nz/about-us/news-and-media/important-update-changes-to-electricity-safety-regulations-for-electrical-installations/">worksafe.govt.nz</a></li>
+  <li>WorkSafe — EV guidelines addendum Jan 2026 — <a href="https://www.worksafe.govt.nz/dmsdocument/72327-addendum-to-electric-vehicle-charging-safety-guidelines-3rd-edition/latest/">worksafe.govt.nz</a></li>
+  <li>WorkSafe — EV charging safety guidelines (3rd ed.) — <a href="https://www.worksafe.govt.nz/laws-and-regulations/regulations/electrical-regulations/regulatory-guidance-notes/electric-vehicle-charging-safety-guidelines/">worksafe.govt.nz</a></li>
+  <li>EWRB — EV charging installations — <a href="https://www.ewrb.govt.nz/about-us/news-and-notices/electric-vehicle-charging-installations/">ewrb.govt.nz</a></li>
+  <li>EWRB — Installation of EV charging equipment — <a href="https://www.ewrb.govt.nz/about-us/news-and-notices/installation-of-electric-vehicle-charging-equipment/">ewrb.govt.nz</a></li>
+  <li>SNZ PAS 6011:2023 — Residential EV charging (voluntary) — <a href="https://www.standards.govt.nz/shop/snz-pas-60112023">standards.govt.nz</a></li>
+  <li>MBIE Build — Dedicated home charging units — <a href="https://www.buildmagazine.org.nz/assets/PDF/Build-177-32-Build-Right-Electric-Vehicle-Charging.pdf">buildmagazine.org.nz PDF</a></li>
+</ol>
+</div>
+
+<p class="footer-note">
+  Companion summary: <em>NZ-Residential-EV-Charger-Installation-Guide.pdf</em> (shorter 32 A single-phase focus). Standards change — verify before use.
+</p>
+
+</body>
+</html>
