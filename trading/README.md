@@ -78,6 +78,50 @@ python -m trading.run_backtest \
   --save-sweep /tmp/wf_sweep_results.csv
 ```
 
+## Continuous optimize/backtest/forward-test loop
+
+Use the autonomous runner to repeatedly optimize and validate until your profitability gate is hit:
+
+```bash
+python -m trading.continuous_research \
+  --csv /path/to/eurusd_m1.csv \
+  --output-dir trading_runs/continuous \
+  --walk-forward \
+  --wf-train-ratio 0.70 \
+  --target-test-return 1.0 \
+  --max-test-drawdown 8.0 \
+  --min-test-win-rate 45 \
+  --min-test-trades 20 \
+  --interval-seconds 90
+```
+
+Run forever (do not stop on first success):
+
+```bash
+python -m trading.continuous_research \
+  --csv /path/to/eurusd_m1.csv \
+  --output-dir trading_runs/continuous \
+  --max-iterations 0 \
+  --no-stop-on-success
+```
+
+In long sessions, run it inside tmux:
+
+```bash
+tmux new -s swarm-loop
+python -m trading.continuous_research --csv /path/to/eurusd_m1.csv
+```
+
+Artifacts written each iteration:
+
+- `iteration_XXXXX.csv` full ranked parameter table
+- `iteration_XXXXX.best.json` best row snapshot
+- `history.csv` best-by-iteration log
+- `champion_config.json` latest best config
+- `champion_mt5_signals.csv` forward/test segment signals
+- `top_candidates.json` latest top-N list
+- `champion_report.json` when profitability gate is met
+
 ## MT5 signal export columns
 
 `--save-mt5-signals` writes CSV rows with:
@@ -101,3 +145,4 @@ python -m trading.run_backtest \
 - Spread/slippage, ATR stops, and reward/risk are configurable from CLI.
 - Sweep mode currently optimizes over risk, stop multiple, reward/risk, confidence, and SMC/VP windows.
 - Walk-forward mode uses a time-based split and avoids selecting parameters on the forward segment.
+- Profitability is never guaranteed in real markets, even when backtest and forward-test metrics improve.
