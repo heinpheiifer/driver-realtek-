@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+opentrade_data/
+trading_runs/
+trading_data/

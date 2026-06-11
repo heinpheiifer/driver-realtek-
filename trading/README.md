@@ -16,7 +16,10 @@ This module adds a lightweight research stack for your MT5 strategy design work:
 - `trading/swarm.py` - agents + `SwarmCoordinator`
 - `trading/backtest.py` - paper-trading execution and metrics
 - `trading/data.py` - OHLCV CSV loader
-- `trading/run_backtest.py` - CLI runner
+- `trading/continuous_research.py` - autonomous optimize/validate loop
+- `trading/walk_forward.py` - holdout + rolling expanding walk-forward windows
+- `trading/fetch_data.py` - realistic OHLCV sample generator
+- `trading/export_mt5.py` - champion config to MT5 EA scaffold
 
 ## CSV format
 
@@ -28,6 +31,14 @@ CSV must include columns (case-insensitive aliases supported):
 - low (`low`, `l`)
 - close (`close`, `c`)
 - volume (`volume`, `vol`, `tick_volume`)
+
+## Generate sample data
+
+If you do not have a CSV yet:
+
+```bash
+python -m trading.fetch_data --output trading_data/eurusd_m1.csv --bars 8000
+```
 
 ## Quick run
 
@@ -88,6 +99,7 @@ python -m trading.continuous_research \
   --output-dir trading_runs/continuous \
   --walk-forward \
   --wf-train-ratio 0.70 \
+  --rolling-wf-folds 3 \
   --target-test-return 1.0 \
   --max-test-drawdown 8.0 \
   --min-test-win-rate 45 \
@@ -118,6 +130,7 @@ Artifacts written each iteration:
 - `iteration_XXXXX.best.json` best row snapshot
 - `history.csv` best-by-iteration log
 - `champion_config.json` latest best config
+- `SwarmChampionEA.mq5` MT5 EA scaffold from champion config
 - `champion_mt5_signals.csv` forward/test segment signals
 - `top_candidates.json` latest top-N list
 - `champion_report.json` when profitability gate is met
@@ -145,4 +158,6 @@ Artifacts written each iteration:
 - Spread/slippage, ATR stops, and reward/risk are configurable from CLI.
 - Sweep mode currently optimizes over risk, stop multiple, reward/risk, confidence, and SMC/VP windows.
 - Walk-forward mode uses a time-based split and avoids selecting parameters on the forward segment.
+- Rolling walk-forward (`--rolling-wf-folds`) validates each candidate across multiple sequential out-of-sample folds.
+- Champion mutation (`--mutate-champion`) explores neighborhoods around the prior best config each iteration.
 - Profitability is never guaranteed in real markets, even when backtest and forward-test metrics improve.

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from statistics import mean
 from typing import Sequence
 
+from .metrics import count_trading_days, trades_per_day
 from .models import Candle, Trade
 from .swarm import SwarmCoordinator
 
@@ -17,6 +18,8 @@ class BacktestResult:
     trades: list[Trade]
     win_rate_pct: float
     equity_curve: list[float]
+    trading_days: int = 0
+    trades_per_day: float = 0.0
 
 
 @dataclass
@@ -210,6 +213,8 @@ class PaperTradingEngine:
         wins = sum(1 for trade in trades if trade.pnl > 0)
         win_rate = (wins / len(trades) * 100.0) if trades else 0.0
         total_return = ((balance - self.initial_balance) / self.initial_balance) * 100.0
+        days = count_trading_days(candles)
+        tpd = trades_per_day(trades, candles)
 
         return BacktestResult(
             initial_balance=self.initial_balance,
@@ -219,4 +224,6 @@ class PaperTradingEngine:
             trades=trades,
             win_rate_pct=win_rate,
             equity_curve=equity_curve,
+            trading_days=days,
+            trades_per_day=tpd,
         )
