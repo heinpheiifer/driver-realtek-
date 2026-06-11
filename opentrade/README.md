@@ -7,10 +7,10 @@ Web app for strategy editing, paper/live backtesting, and autonomous AI optimiza
 ```bash
 pip install -r requirements.txt
 python3 -m trading.fetch_data --output trading_data/eurusd_m1.csv --bars 8000
-uvicorn opentrade.main:app --host 0.0.0.0 --port 8080
+uvicorn opentrade.main:app --host 127.0.0.1 --port 8010
 ```
 
-Open `http://localhost:8080`.
+Open `http://127.0.0.1:8010`.
 
 ## Features
 
@@ -34,7 +34,7 @@ Open `http://localhost:8080`.
 
 ```bash
 tmux new -s opentrade -c /workspace
-uvicorn opentrade.main:app --host 0.0.0.0 --port 8080
+uvicorn opentrade.main:app --host 127.0.0.1 --port 8010
 ```
 
 Then start optimizer from the UI or CLI.

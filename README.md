@@ -21,10 +21,10 @@ It is designed for Victron Cerbo GX systems running Venus OS Large with Node-RED
 ```bash
 pip install -r requirements.txt
 python3 -m trading.fetch_data --output trading_data/eurusd_m1.csv --bars 8000
-python3 -m uvicorn opentrade.main:app --host 0.0.0.0 --port 8080
+python3 -m uvicorn opentrade.main:app --host 127.0.0.1 --port 8010
 ```
 
-Open `http://localhost:8080` to edit strategies, run backtests, and start the optimizer.
+Open `http://127.0.0.1:8010` to edit strategies, run backtests, and start the optimizer.
 
 ## What the flow controls
 
