@@ -43,9 +43,4 @@ def objective_score(
     trades_per_day_value: float | None = None,
     target_trades_per_day: float = 3.0,
 ) -> float:
-    score = total_return_pct - (0.45 * max_drawdown_pct) + (0.03 * win_rate_pct) + (0.002 * trades)
-    if trades_per_day_value is not None:
-        # Reward configs near the 2-4 trades/day target band.
-        distance = abs(trades_per_day_value - target_trades_per_day)
-        score -= distance * 2.5
-    return score
+    return total_return_pct - (0.45 * max_drawdown_pct) + (0.08 * win_rate_pct) + (0.002 * trades)

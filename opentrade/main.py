@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .journal import TradeJournal
+from .live_engine import LivePaperEngine
 from .services import BacktestService, OptimizerService
 from .store import StrategyStore
 
@@ -15,17 +19,19 @@ APP_ROOT = Path(__file__).resolve().parent
 DATA_ROOT = Path("opentrade_data")
 DEFAULT_CSV = Path("trading_data/eurusd_m1.csv")
 
-app = FastAPI(title="OpenTrade", version="0.1.0")
+app = FastAPI(title="OpenTrade", version="0.2.0")
 store = StrategyStore(DATA_ROOT)
+journal = TradeJournal(DATA_ROOT / "journal.db")
 backtest_service = BacktestService()
 optimizer_service = OptimizerService()
+live_engine = LivePaperEngine(journal)
 
 
 class StrategyConfigPayload(BaseModel):
     risk_per_trade: float = 0.0075
     atr_stop_multiplier: float = 1.4
     reward_risk: float = 1.9
-    min_confidence: float = 0.35
+    min_confidence: float = 0.40
     vp_window: int = 120
     sm_window: int = 50
     liq_window: int = 35
@@ -37,6 +43,8 @@ class StrategyConfigPayload(BaseModel):
     weight_smart_money: float = 1.4
     weight_liquidity_sweep: float = 1.1
     weight_trend_bias: float = 0.8
+    min_agreeing_agents: int = 2
+    require_quality_setup: bool = True
 
 
 class StrategyPayload(BaseModel):
@@ -63,9 +71,17 @@ class OptimizerRequest(BaseModel):
     gates: dict[str, float] | None = None
 
 
+class LiveSessionRequest(BaseModel):
+    strategy_id: str
+    csv_path: str = str(DEFAULT_CSV)
+    initial_balance: float = 10_000.0
+    tick_ms: int = 150
+    start_index: int = 0
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "app": "OpenTrade"}
+    return {"status": "ok", "app": "OpenTrade", "version": "0.2.0"}
 
 
 @app.get("/api/strategies")
@@ -128,6 +144,92 @@ def run_backtest(payload: BacktestRequest) -> dict[str, Any]:
         }
     )
     return {"run_id": run_record["id"], **result}
+
+
+@app.post("/api/session/start")
+def start_live_session(payload: LiveSessionRequest) -> dict[str, Any]:
+    strategy = store.get_strategy(payload.strategy_id)
+    if strategy is None:
+        raise HTTPException(status_code=404, detail="Strategy not found")
+    csv_path = Path(payload.csv_path)
+    if not csv_path.exists():
+        raise HTTPException(status_code=404, detail=f"CSV not found: {csv_path}")
+    try:
+        state = live_engine.start(
+            csv_path=str(csv_path),
+            strategy=strategy,
+            initial_balance=payload.initial_balance,
+            tick_ms=payload.tick_ms,
+            start_index=payload.start_index,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return state
+
+
+@app.post("/api/session/stop")
+def stop_live_session() -> dict[str, Any]:
+    state = live_engine.stop()
+    if state is None:
+        raise HTTPException(status_code=404, detail="No active session")
+    return state
+
+
+@app.get("/api/session/status")
+def session_status() -> dict[str, Any]:
+    state = live_engine.get_state()
+    if state is None:
+        return {"status": "idle"}
+    return state
+
+
+@app.get("/api/session/stream")
+async def session_stream(request: Request) -> StreamingResponse:
+    queue = live_engine.subscribe(asyncio.get_running_loop())
+
+    async def generate():
+        try:
+            current = live_engine.get_state()
+            if current:
+                yield f"data: {json.dumps({'event': 'snapshot', **current})}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    yield f"data: {json.dumps(payload)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            live_engine.unsubscribe(queue)
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.get("/api/journal")
+def list_journal(
+    session_id: str | None = None,
+    limit: int = 500,
+    offset: int = 0,
+) -> dict[str, Any]:
+    trades = journal.list_trades(session_id=session_id, limit=limit, offset=offset)
+    stats = journal.compute_stats(session_id=session_id)
+    return {"trades": trades, "stats": stats}
+
+
+@app.get("/api/journal/stats")
+def journal_stats(session_id: str | None = None) -> dict[str, Any]:
+    return journal.compute_stats(session_id=session_id)
+
+
+@app.get("/api/journal/sessions")
+def list_journal_sessions(limit: int = 20) -> list[dict[str, Any]]:
+    sessions = journal.list_sessions(limit=limit)
+    enriched = []
+    for session in sessions:
+        stats = journal.compute_stats(session_id=session["id"])
+        enriched.append({**session, "stats": stats})
+    return enriched
 
 
 @app.post("/api/optimizer/start")

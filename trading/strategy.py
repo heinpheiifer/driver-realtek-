@@ -28,6 +28,8 @@ class StrategyConfig:
     weight_smart_money: float = 1.4
     weight_liquidity_sweep: float = 1.1
     weight_trend_bias: float = 0.8
+    min_agreeing_agents: int = 2
+    require_quality_setup: bool = True
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -54,4 +56,6 @@ def build_swarm(config: StrategyConfig) -> SwarmCoordinator:
             "trend_bias": config.weight_trend_bias,
         },
         min_confidence=config.min_confidence,
+        min_agreeing_agents=config.min_agreeing_agents,
+        require_quality_setup=config.require_quality_setup,
     )

@@ -15,7 +15,7 @@ DEFAULT_STRATEGY = {
         "risk_per_trade": 0.0075,
         "atr_stop_multiplier": 1.4,
         "reward_risk": 1.9,
-        "min_confidence": 0.35,
+        "min_confidence": 0.40,
         "vp_window": 120,
         "sm_window": 50,
         "liq_window": 35,
@@ -27,6 +27,7 @@ DEFAULT_STRATEGY = {
         "weight_smart_money": 1.4,
         "weight_liquidity_sweep": 1.1,
         "weight_trend_bias": 0.8,
+        "min_agreeing_agents": 2,
     },
 }
 
