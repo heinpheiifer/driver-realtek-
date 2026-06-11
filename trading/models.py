@@ -42,3 +42,6 @@ class Trade:
     quantity: float
     pnl: float
     reason: str
+    entry_confidence: float = 0.0
+    entry_score: float = 0.0
+    entry_agents: str = ""

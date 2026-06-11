@@ -27,6 +27,9 @@ class _Position:
     quantity: float
     stop_loss: float
     take_profit: float
+    entry_confidence: float
+    entry_score: float
+    entry_agents: str
 
 
 def _average_true_range(history: Sequence[Candle], period: int = 14) -> float:
@@ -124,6 +127,9 @@ class PaperTradingEngine:
                             quantity=position.quantity,
                             pnl=pnl,
                             reason=exit_reason,
+                            entry_confidence=position.entry_confidence,
+                            entry_score=position.entry_score,
+                            entry_agents=position.entry_agents,
                         )
                     )
                     position = None
@@ -155,6 +161,11 @@ class PaperTradingEngine:
                                 quantity=quantity,
                                 stop_loss=stop,
                                 take_profit=target,
+                                entry_confidence=decision.confidence,
+                                entry_score=decision.score,
+                                entry_agents="; ".join(
+                                    f"{s.agent}:{s.side}:{s.score:.2f}" for s in decision.signals
+                                ),
                             )
 
             mark_price = candle.close
@@ -186,6 +197,9 @@ class PaperTradingEngine:
                     quantity=position.quantity,
                     pnl=pnl,
                     reason="end_of_data",
+                    entry_confidence=position.entry_confidence,
+                    entry_score=position.entry_score,
+                    entry_agents=position.entry_agents,
                 )
             )
             if equity_curve:
