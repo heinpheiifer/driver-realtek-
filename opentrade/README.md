@@ -4,13 +4,30 @@ Web app for strategy editing, paper/live backtesting, and autonomous AI optimiza
 
 ## Run
 
+**First time setup** (creates `.venv` and installs dependencies):
+
 ```bash
+bash scripts/setup_opentrade.sh
+```
+
+**Start OpenTrade:**
+
+```bash
+bash scripts/run_opentrade.sh
+```
+
+Or manually:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-python3 -m trading.fetch_data --output trading_data/eurusd_m1.csv --bars 8000
-uvicorn opentrade.main:app --host 127.0.0.1 --port 8010
+python3 -m uvicorn opentrade.main:app --host 127.0.0.1 --port 8010
 ```
 
 Open `http://127.0.0.1:8010`.
+
+If you see `No module named uvicorn`, you skipped `pip install -r requirements.txt` — run setup first.
 
 ## Features
 

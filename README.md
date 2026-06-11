@@ -19,12 +19,16 @@ It is designed for Victron Cerbo GX systems running Venus OS Large with Node-RED
 ## OpenTrade quick start
 
 ```bash
-pip install -r requirements.txt
-python3 -m trading.fetch_data --output trading_data/eurusd_m1.csv --bars 8000
-python3 -m uvicorn opentrade.main:app --host 127.0.0.1 --port 8010
+bash scripts/setup_opentrade.sh   # once
+bash scripts/run_opentrade.sh     # starts http://127.0.0.1:8010
 ```
 
-Open `http://127.0.0.1:8010` to edit strategies, run backtests, and start the optimizer.
+Or if dependencies are already installed:
+
+```bash
+pip install -r requirements.txt
+python3 -m uvicorn opentrade.main:app --host 127.0.0.1 --port 8010
+```
 
 ## What the flow controls
 
