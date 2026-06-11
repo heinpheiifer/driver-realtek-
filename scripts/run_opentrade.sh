@@ -17,5 +17,8 @@ if [[ ! -f trading_data/eurusd_m1.csv ]]; then
   python3 -m trading.fetch_data --output trading_data/eurusd_m1.csv --bars 8000
 fi
 
-echo "Starting OpenTrade at http://127.0.0.1:8010"
-exec python3 -m uvicorn opentrade.main:app --host 127.0.0.1 --port 8010
+PORT="${PORT:-8080}"
+HOST="${HOST:-127.0.0.1}"
+
+echo "Starting OpenTrade at http://${HOST}:${PORT}"
+exec python3 -m uvicorn opentrade.main:app --host "$HOST" --port "$PORT"

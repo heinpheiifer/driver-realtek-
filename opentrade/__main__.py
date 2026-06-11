@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 if __name__ == "__main__":
     try:
         import uvicorn
@@ -12,7 +14,9 @@ if __name__ == "__main__":
             "Or manually:\n"
             "  python3 -m venv .venv && source .venv/bin/activate\n"
             "  pip install -r requirements.txt\n"
-            "  python3 -m uvicorn opentrade.main:app --host 127.0.0.1 --port 8010\n"
+            "  python3 -m uvicorn opentrade.main:app --host 127.0.0.1 --port 8080\n"
         ) from exc
 
-    uvicorn.run("opentrade.main:app", host="127.0.0.1", port=8010, reload=False)
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "8080"))
+    uvicorn.run("opentrade.main:app", host=host, port=port, reload=False)
