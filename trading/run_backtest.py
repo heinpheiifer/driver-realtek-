@@ -24,6 +24,14 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--csv", required=True, help="Path to OHLCV CSV file.")
     parser.add_argument("--symbol", default="EURUSD", help="Symbol for MT5 signal export metadata.")
     parser.add_argument("--timeframe", default="M1", help="Timeframe label for MT5 signal export.")
+    parser.add_argument(
+        "--walk-forward",
+        action="store_true",
+        help="Enable train/test time split. In sweep mode: optimize on train, validate on test.",
+    )
+    parser.add_argument("--wf-train-ratio", type=float, default=0.70)
+    parser.add_argument("--wf-min-train", type=int, default=250)
+    parser.add_argument("--wf-min-test", type=int, default=120)
     parser.add_argument("--initial-balance", type=float, default=10_000.0)
     parser.add_argument("--risk-per-trade", type=float, default=0.01)
     parser.add_argument("--atr-stop-multiplier", type=float, default=1.4)
@@ -141,6 +149,20 @@ def _parse_int_list(value: str) -> list[int]:
     return [int(part.strip()) for part in value.split(",") if part.strip()]
 
 
+def _split_walk_forward(candles, train_ratio: float, min_train: int, min_test: int):
+    if not 0.5 <= train_ratio < 0.95:
+        raise SystemExit("--wf-train-ratio must be between 0.50 and 0.95.")
+    split_idx = int(len(candles) * train_ratio)
+    train = candles[:split_idx]
+    test = candles[split_idx:]
+    if len(train) < min_train or len(test) < min_test:
+        raise SystemExit(
+            "Not enough candles for walk-forward split. "
+            f"Need at least train={min_train}, test={min_test}, got train={len(train)}, test={len(test)}."
+        )
+    return train, test
+
+
 def _build_swarm(
     *,
     vp_window: int,
@@ -168,24 +190,109 @@ def _build_swarm(
     )
 
 
-def _run_single(args, candles):
+def _run_config(
+    candles,
+    *,
+    args,
+    risk_per_trade: float,
+    atr_stop_multiplier: float,
+    reward_risk: float,
+    min_confidence: float,
+    vp_window: int,
+    sm_window: int,
+):
     swarm = _build_swarm(
-        vp_window=args.vp_window,
-        sm_window=args.sm_window,
+        vp_window=vp_window,
+        sm_window=sm_window,
         liq_window=args.liq_window,
         trend_fast=args.trend_fast,
         trend_slow=args.trend_slow,
-        min_confidence=args.min_confidence,
+        min_confidence=min_confidence,
     )
     engine = PaperTradingEngine(
         initial_balance=args.initial_balance,
-        risk_per_trade=args.risk_per_trade,
-        atr_stop_multiplier=args.atr_stop_multiplier,
-        reward_risk=args.reward_risk,
+        risk_per_trade=risk_per_trade,
+        atr_stop_multiplier=atr_stop_multiplier,
+        reward_risk=reward_risk,
         spread_bps=args.spread_bps,
         slippage_bps=args.slippage_bps,
     )
     result = engine.run(candles, swarm)
+    objective = _objective(
+        result.total_return_pct,
+        result.max_drawdown_pct,
+        result.win_rate_pct,
+    )
+    return result, objective
+
+
+def _run_single(args, candles):
+    if args.walk_forward:
+        train, test = _split_walk_forward(
+            candles,
+            train_ratio=args.wf_train_ratio,
+            min_train=args.wf_min_train,
+            min_test=args.wf_min_test,
+        )
+        train_result, train_objective = _run_config(
+            train,
+            args=args,
+            risk_per_trade=args.risk_per_trade,
+            atr_stop_multiplier=args.atr_stop_multiplier,
+            reward_risk=args.reward_risk,
+            min_confidence=args.min_confidence,
+            vp_window=args.vp_window,
+            sm_window=args.sm_window,
+        )
+        test_result, test_objective = _run_config(
+            test,
+            args=args,
+            risk_per_trade=args.risk_per_trade,
+            atr_stop_multiplier=args.atr_stop_multiplier,
+            reward_risk=args.reward_risk,
+            min_confidence=args.min_confidence,
+            vp_window=args.vp_window,
+            sm_window=args.sm_window,
+        )
+
+        print("=== Swarm Scalping Walk-Forward Backtest ===")
+        print(f"Candles: total={len(candles)} train={len(train)} test={len(test)}")
+        print(
+            f"Train -> ret={train_result.total_return_pct:.2f}% dd={train_result.max_drawdown_pct:.2f}% "
+            f"wr={train_result.win_rate_pct:.2f}% trades={len(train_result.trades)} obj={train_objective:.3f}"
+        )
+        print(
+            f"Test  -> ret={test_result.total_return_pct:.2f}% dd={test_result.max_drawdown_pct:.2f}% "
+            f"wr={test_result.win_rate_pct:.2f}% trades={len(test_result.trades)} obj={test_objective:.3f}"
+        )
+
+        if args.save_trades:
+            test_path = Path(args.save_trades)
+            train_path = test_path.with_name(f"{test_path.stem}.train{test_path.suffix or '.csv'}")
+            _save_trades(train_path, train_result.trades)
+            _save_trades(test_path, test_result.trades)
+            print(f"Train trades saved to: {train_path}")
+            print(f"Test trades saved to:  {test_path}")
+        if args.save_mt5_signals:
+            _save_mt5_signals(
+                args.save_mt5_signals,
+                args.symbol,
+                args.timeframe,
+                test_result.trades,
+            )
+            print(f"MT5 forward signals saved to: {args.save_mt5_signals}")
+        return
+
+    result, _ = _run_config(
+        candles,
+        args=args,
+        risk_per_trade=args.risk_per_trade,
+        atr_stop_multiplier=args.atr_stop_multiplier,
+        reward_risk=args.reward_risk,
+        min_confidence=args.min_confidence,
+        vp_window=args.vp_window,
+        sm_window=args.sm_window,
+    )
 
     print("=== Swarm Scalping Paper Backtest ===")
     print(f"Candles:         {len(candles)}")
@@ -239,58 +346,101 @@ def _run_sweep(args, candles):
     print(f"=== Parameter Sweep Mode ===")
     print(f"Combinations: {total}")
 
+    if args.walk_forward:
+        train_candles, test_candles = _split_walk_forward(
+            candles,
+            train_ratio=args.wf_train_ratio,
+            min_train=args.wf_min_train,
+            min_test=args.wf_min_test,
+        )
+        print(
+            f"Walk-forward split active: train={len(train_candles)} candles, test={len(test_candles)} candles."
+        )
+    else:
+        train_candles = candles
+        test_candles = None
+
     for risk, atr, rr, conf, vp_window, sm_window in itertools.product(
         risk_grid, atr_grid, rr_grid, conf_grid, vp_grid, sm_grid
     ):
-        swarm = _build_swarm(
-            vp_window=vp_window,
-            sm_window=sm_window,
-            liq_window=args.liq_window,
-            trend_fast=args.trend_fast,
-            trend_slow=args.trend_slow,
-            min_confidence=conf,
-        )
-        engine = PaperTradingEngine(
-            initial_balance=args.initial_balance,
+        train_result, train_score = _run_config(
+            train_candles,
+            args=args,
             risk_per_trade=risk,
             atr_stop_multiplier=atr,
             reward_risk=rr,
-            spread_bps=args.spread_bps,
-            slippage_bps=args.slippage_bps,
+            min_confidence=conf,
+            vp_window=vp_window,
+            sm_window=sm_window,
         )
-        result = engine.run(candles, swarm)
-        score = _objective(
-            result.total_return_pct, result.max_drawdown_pct, result.win_rate_pct
-        )
-        rows.append(
-            {
-                "objective": round(score, 6),
-                "total_return_pct": round(result.total_return_pct, 6),
-                "max_drawdown_pct": round(result.max_drawdown_pct, 6),
-                "win_rate_pct": round(result.win_rate_pct, 6),
-                "trades": len(result.trades),
-                "risk_per_trade": risk,
-                "atr_stop_multiplier": atr,
-                "reward_risk": rr,
-                "min_confidence": conf,
-                "vp_window": vp_window,
-                "sm_window": sm_window,
-                "liq_window": args.liq_window,
-                "trend_fast": args.trend_fast,
-                "trend_slow": args.trend_slow,
-            }
-        )
+        row = {
+            "objective_train": round(train_score, 6),
+            "total_return_train_pct": round(train_result.total_return_pct, 6),
+            "max_drawdown_train_pct": round(train_result.max_drawdown_pct, 6),
+            "win_rate_train_pct": round(train_result.win_rate_pct, 6),
+            "trades_train": len(train_result.trades),
+            "risk_per_trade": risk,
+            "atr_stop_multiplier": atr,
+            "reward_risk": rr,
+            "min_confidence": conf,
+            "vp_window": vp_window,
+            "sm_window": sm_window,
+            "liq_window": args.liq_window,
+            "trend_fast": args.trend_fast,
+            "trend_slow": args.trend_slow,
+        }
 
-    ranked = sorted(rows, key=lambda row: row["objective"], reverse=True)
+        if test_candles is not None:
+            test_result, test_score = _run_config(
+                test_candles,
+                args=args,
+                risk_per_trade=risk,
+                atr_stop_multiplier=atr,
+                reward_risk=rr,
+                min_confidence=conf,
+                vp_window=vp_window,
+                sm_window=sm_window,
+            )
+            row.update(
+                {
+                    "objective_test": round(test_score, 6),
+                    "total_return_test_pct": round(test_result.total_return_pct, 6),
+                    "max_drawdown_test_pct": round(test_result.max_drawdown_pct, 6),
+                    "win_rate_test_pct": round(test_result.win_rate_pct, 6),
+                    "trades_test": len(test_result.trades),
+                }
+            )
+        rows.append(row)
+
+    ranked = sorted(rows, key=lambda row: row["objective_train"], reverse=True)
     top_n = min(args.sweep_top_n, len(ranked))
     print(f"Top {top_n} candidates:")
     for idx, row in enumerate(ranked[:top_n], start=1):
-        print(
-            f"{idx:>2}. obj={row['objective']:.3f} "
-            f"ret={row['total_return_pct']:.2f}% dd={row['max_drawdown_pct']:.2f}% "
-            f"wr={row['win_rate_pct']:.2f}% trades={row['trades']} "
+        msg = (
+            f"{idx:>2}. train_obj={row['objective_train']:.3f} "
+            f"train_ret={row['total_return_train_pct']:.2f}% train_dd={row['max_drawdown_train_pct']:.2f}% "
+            f"train_wr={row['win_rate_train_pct']:.2f}% train_trades={row['trades_train']} "
+        )
+        if "objective_test" in row:
+            msg += (
+                f"| test_obj={row['objective_test']:.3f} test_ret={row['total_return_test_pct']:.2f}% "
+                f"test_dd={row['max_drawdown_test_pct']:.2f}% test_wr={row['win_rate_test_pct']:.2f}% "
+                f"test_trades={row['trades_test']} "
+            )
+        msg += (
             f"[risk={row['risk_per_trade']}, atr={row['atr_stop_multiplier']}, rr={row['reward_risk']}, "
             f"conf={row['min_confidence']}, vp={row['vp_window']}, sm={row['sm_window']}]"
+        )
+        print(msg)
+
+    if ranked and "objective_test" in ranked[0]:
+        champion = ranked[0]
+        print(
+            "Champion forward validation -> "
+            f"test_obj={champion['objective_test']:.3f}, "
+            f"test_ret={champion['total_return_test_pct']:.2f}%, "
+            f"test_dd={champion['max_drawdown_test_pct']:.2f}%, "
+            f"test_wr={champion['win_rate_test_pct']:.2f}%."
         )
 
     if args.save_sweep:

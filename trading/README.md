@@ -56,6 +56,28 @@ python -m trading.run_backtest \
   --save-sweep /tmp/sweep_results.csv
 ```
 
+Walk-forward (single config):
+
+```bash
+python -m trading.run_backtest \
+  --mode single \
+  --walk-forward \
+  --wf-train-ratio 0.70 \
+  --csv /path/to/eurusd_m1.csv \
+  --save-trades /tmp/wf_trades.csv
+```
+
+Walk-forward (sweep optimize on train, validate on test):
+
+```bash
+python -m trading.run_backtest \
+  --mode sweep \
+  --walk-forward \
+  --wf-train-ratio 0.70 \
+  --csv /path/to/eurusd_m1.csv \
+  --save-sweep /tmp/wf_sweep_results.csv
+```
+
 ## MT5 signal export columns
 
 `--save-mt5-signals` writes CSV rows with:
@@ -78,3 +100,4 @@ python -m trading.run_backtest \
 - It is designed to make strategy iteration fast before MT5 live EA wiring.
 - Spread/slippage, ATR stops, and reward/risk are configurable from CLI.
 - Sweep mode currently optimizes over risk, stop multiple, reward/risk, confidence, and SMC/VP windows.
+- Walk-forward mode uses a time-based split and avoids selecting parameters on the forward segment.
