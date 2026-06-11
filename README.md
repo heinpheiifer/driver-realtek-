@@ -13,6 +13,7 @@ It is designed for Victron Cerbo GX systems running Venus OS Large with Node-RED
 ## Files
 
 - `flows/victron-storm-watch-flow.json` - import this into Node-RED.
+- `trading/` - swarm scalping research toolkit with paper backtesting (volume profile + smart money model components).
 
 ## What the flow controls
 
