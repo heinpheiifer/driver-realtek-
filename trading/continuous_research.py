@@ -91,9 +91,6 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-test-drawdown", type=float, default=10.0)
     parser.add_argument("--min-test-win-rate", type=float, default=65.0)
     parser.add_argument("--min-test-trades", type=int, default=20)
-    parser.add_argument("--min-trades-per-day", type=float, default=2.0)
-    parser.add_argument("--max-trades-per-day", type=float, default=4.0)
-
     parser.add_argument("--risk-grid", default="0.005,0.0075,0.01")
     parser.add_argument("--atr-grid", default="1.2,1.4,1.6")
     parser.add_argument("--rr-grid", default="1.6,1.9,2.2")
@@ -310,7 +307,6 @@ def _meets_profitability_gate(args, row: dict) -> bool:
     if row.get("rolling_folds", 0) > 0:
         return (
             row["rolling_min_win_rate_pct"] >= args.min_test_win_rate
-            and args.min_trades_per_day <= row["rolling_trades_per_day"] <= args.max_trades_per_day
             and row["rolling_min_return_pct"] >= args.target_test_return
             and row["rolling_max_drawdown_pct"] <= args.max_test_drawdown
             and row["rolling_total_trades"] >= args.min_test_trades
@@ -320,7 +316,6 @@ def _meets_profitability_gate(args, row: dict) -> bool:
         and row["max_drawdown_test_pct"] <= args.max_test_drawdown
         and row["win_rate_test_pct"] >= args.min_test_win_rate
         and row["trades_test"] >= args.min_test_trades
-        and args.min_trades_per_day <= row.get("trades_per_day_test", 0.0) <= args.max_trades_per_day
     )
 
 

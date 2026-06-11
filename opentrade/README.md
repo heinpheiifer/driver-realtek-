@@ -19,7 +19,6 @@ Open `http://localhost:8080`.
 - Live mode scaffold (MT5 EA export path via optimizer artifacts)
 - AI optimizer loop targeting:
   - 65%+ win rate
-  - 2-4 trades/day
   - drawdown and return gates
 - Equity curve + trade table in UI
 

@@ -136,8 +136,6 @@ class OptimizerService:
     ) -> None:
         gates = gates or {
             "min_win_rate": 65.0,
-            "min_trades_per_day": 2.0,
-            "max_trades_per_day": 4.0,
             "target_test_return": 0.5,
             "max_test_drawdown": 10.0,
             "min_test_trades": 20,
@@ -202,7 +200,6 @@ class OptimizerService:
                     train_payload.max_drawdown_pct,
                     train_payload.win_rate_pct,
                     len(train_payload.trades),
-                    trades_per_day_value=train_payload.trades_per_day,
                 )
                 rows.append(
                     {
@@ -249,7 +246,6 @@ class OptimizerService:
     def _gate_met(best: dict[str, Any], gates: dict[str, float]) -> bool:
         return (
             best["rolling_min_win_rate_pct"] >= gates["min_win_rate"]
-            and gates["min_trades_per_day"] <= best["rolling_trades_per_day"] <= gates["max_trades_per_day"]
             and best["rolling_min_return_pct"] >= gates["target_test_return"]
             and best["rolling_max_drawdown_pct"] <= gates["max_test_drawdown"]
             and best["trades_test"] >= gates["min_test_trades"]

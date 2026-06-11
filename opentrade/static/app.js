@@ -215,7 +215,7 @@ async function pollOptimizer() {
   if (job.status === "running") {
     optimizerPollTimer = setTimeout(pollOptimizer, 3000);
   } else if (job.gate_met) {
-    $("optimizerStatus").textContent = "Gate met: strategy reached target win rate and trade frequency.";
+    $("optimizerStatus").textContent = "Gate met: strategy reached 65%+ win rate target.";
   }
 }
 
@@ -224,8 +224,6 @@ async function startOptimizer() {
     max_iterations: 0,
     gates: {
       min_win_rate: parseFloat($("gateWinRate").value),
-      min_trades_per_day: parseFloat($("gateMinTpd").value),
-      max_trades_per_day: parseFloat($("gateMaxTpd").value),
       max_test_drawdown: parseFloat($("gateMaxDd").value),
       target_test_return: 0.5,
       min_test_trades: 20,
