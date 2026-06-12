@@ -13,7 +13,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from trading.data import load_candles_from_csv
-from trading.market_data import load_market_candles
+from trading.blackbull_mt5 import connect_mt5, fetch_mt5_candles, mt5_status
+from trading.market_data import BlackbullDataError, import_blackbull_candles, load_market_candles
 from trading.orderflow import compute_orderflow
 from opentrade.journal import TradeJournal
 from opentrade.live_engine import LivePaperEngine
@@ -44,6 +45,8 @@ app.add_middleware(
     allow_origins=[
         "http://127.0.0.1:8010",
         "http://localhost:8010",
+        "http://127.0.0.1:8011",
+        "http://localhost:8011",
         "http://127.0.0.1:8080",
         "http://localhost:8080",
     ],
@@ -128,6 +131,21 @@ class MarketLoadRequest(BaseModel):
     csv_path: str | None = None
 
 
+class CandleRowPayload(BaseModel):
+    timestamp: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float = 0.0
+
+
+class BlackbullImportPayload(BaseModel):
+    symbol: str
+    timeframe: str = "M5"
+    candles: list[CandleRowPayload]
+
+
 def _resolve_csv(
     *,
     symbol: str = "BTCUSD",
@@ -136,7 +154,7 @@ def _resolve_csv(
     csv_path: str | None = None,
     bars: int = 800,
 ) -> tuple[str, list]:
-    _, _, path = load_market_candles(
+    _, _, path, _ = load_market_candles(
         symbol=symbol,
         source=source,
         csv_path=csv_path,
@@ -163,11 +181,11 @@ def market_sources() -> dict[str, Any]:
     return {
         "sources": [
             {"id": "yahoo", "label": "Yahoo Finance"},
-            {"id": "blackbull", "label": "BlackBull Markets"},
+            {"id": "blackbull", "label": "BlackBull Markets (MT5)"},
             {"id": "csv", "label": "Local CSV"},
         ],
         "default_symbol": "BTCUSD",
-        "default_source": "yahoo",
+        "default_source": "blackbull",
     }
 
 
@@ -180,13 +198,23 @@ def market_candles(
     csv_path: str | None = None,
     window: int = 100,
 ) -> dict[str, Any]:
-    candles, source_label, path = load_market_candles(
-        symbol=symbol,
-        source=source,
-        csv_path=csv_path,
-        bars=bars,
-        timeframe=timeframe,
-    )
+    try:
+        candles, source_label, path, meta = load_market_candles(
+            symbol=symbol,
+            source=source,
+            csv_path=csv_path,
+            bars=bars,
+            timeframe=timeframe,
+        )
+    except BlackbullDataError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": str(exc),
+                "mt5": (exc.meta or {}).get("mt5"),
+                "hint": "Start BlackBull MT5, set MT5_* env vars, or run scripts/mt5_python_bridge.py",
+            },
+        ) from exc
     if not candles:
         raise HTTPException(status_code=404, detail=f"No candles for {symbol} ({source})")
     orderflow = compute_orderflow(candles, window=min(window, len(candles)))
@@ -202,6 +230,8 @@ def market_candles(
         "count": len(candles),
         "last_price": last.close,
         "last_timestamp": last.timestamp,
+        "mt5": meta.get("mt5") if meta else mt5_status() if source.lower() == "blackbull" else None,
+        "used_cache": (meta or {}).get("used_cache") if meta else False,
         "candles": [
             {
                 "timestamp": c.timestamp,
@@ -226,6 +256,63 @@ def market_load(payload: MarketLoadRequest) -> dict[str, Any]:
         bars=payload.bars,
         csv_path=payload.csv_path,
     )
+
+
+@app.get("/api/market/mt5/status")
+def market_mt5_status() -> dict[str, Any]:
+    status = mt5_status()
+    return {"mt5": status}
+
+
+@app.post("/api/market/mt5/connect")
+def market_mt5_connect() -> dict[str, Any]:
+    connected = connect_mt5()
+    return {"connected": connected, "mt5": mt5_status()}
+
+
+@app.post("/api/market/blackbull/sync")
+def market_blackbull_sync(
+    symbol: str = "BTCUSD",
+    timeframe: str = "M5",
+    bars: int = 800,
+) -> dict[str, Any]:
+    result = fetch_mt5_candles(symbol=symbol, timeframe=timeframe, bars=bars)
+    if result is None:
+        raise HTTPException(
+            status_code=503,
+            detail={"message": "MT5 sync failed", "mt5": mt5_status()},
+        )
+    candles, source_label, path = result
+    orderflow = compute_orderflow(candles, window=min(100, len(candles)))
+    return {
+        "synced": True,
+        "source": source_label,
+        "csv_path": path,
+        "count": len(candles),
+        "last_price": candles[-1].close,
+        "orderflow": orderflow,
+        "mt5": mt5_status(),
+    }
+
+
+@app.post("/api/market/blackbull/import")
+def market_blackbull_import(payload: BlackbullImportPayload) -> dict[str, Any]:
+    if not payload.candles:
+        raise HTTPException(status_code=400, detail="No candles provided")
+    rows = [row.model_dump() for row in payload.candles]
+    candles, source_label, path = import_blackbull_candles(
+        symbol=payload.symbol,
+        timeframe=payload.timeframe,
+        rows=rows,
+    )
+    orderflow = compute_orderflow(candles, window=min(100, len(candles)))
+    return {
+        "imported": len(candles),
+        "source": source_label,
+        "csv_path": path,
+        "orderflow": orderflow,
+        "mt5": mt5_status(),
+    }
 
 
 @app.get("/api/strategies")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from .blackbull_mt5 import load_blackbull_candles, save_blackbull_candles
 from .data import load_candles_from_csv
 from .fetch_data import _generate_realistic_ohlcv, save_ohlcv_csv
 from .models import Candle
@@ -17,6 +18,12 @@ TIMEFRAME_YAHOO = {
     "H4": ("6mo", "1h"),
     "D1": ("1y", "1d"),
 }
+
+
+class BlackbullDataError(Exception):
+    def __init__(self, message: str, meta: dict | None = None):
+        super().__init__(message)
+        self.meta = meta or {}
 
 
 def _candles_to_dict(candles: list[Candle], limit: int = 500) -> list[dict]:
@@ -102,6 +109,27 @@ def _fetch_yahoo_candles(
         return None
 
 
+def import_blackbull_candles(
+    *,
+    symbol: str,
+    timeframe: str,
+    rows: list[dict],
+) -> tuple[list[Candle], str, str]:
+    candles = [
+        Candle(
+            timestamp=str(row["timestamp"]),
+            open=float(row["open"]),
+            high=float(row["high"]),
+            low=float(row["low"]),
+            close=float(row["close"]),
+            volume=float(row.get("volume", 0) or 0),
+        )
+        for row in rows
+    ]
+    path = save_blackbull_candles(symbol=symbol, timeframe=timeframe, candles=candles, source_label="blackbull:import")
+    return candles, "blackbull:import", path
+
+
 def load_market_candles(
     *,
     symbol: str = "BTCUSD",
@@ -109,10 +137,10 @@ def load_market_candles(
     csv_path: str | None = None,
     bars: int = 800,
     timeframe: str = "M5",
-) -> tuple[list[Candle], str, str]:
-    """Load candles from csv, yahoo, blackbull (stub), or synthetic.
+) -> tuple[list[Candle], str, str, dict | None]:
+    """Load candles from blackbull MT5, yahoo, csv, or synthetic.
 
-    Returns (candles, source_label, csv_path).
+    Returns (candles, source_label, csv_path, extra_meta).
     """
     symbol = symbol.upper().replace("/", "")
     source = source.lower()
@@ -123,25 +151,23 @@ def load_market_candles(
         if path.exists():
             candles = load_candles_from_csv(path)
             if candles:
-                return candles[-bars:], f"csv:{path.name}", str(path)
+                return candles[-bars:], f"csv:{path.name}", str(path), None
 
-    if source in ("yahoo", "blackbull"):
+    if source == "blackbull":
+        candles, label, path, meta = load_blackbull_candles(symbol=symbol, timeframe=tf, bars=bars)
+        if candles:
+            return candles, label, path, meta
+        hint = (meta or {}).get("mt5", {}).get("hint", "Connect MT5 to BlackBull Markets")
+        raise BlackbullDataError(hint, meta)
+
+    if source == "yahoo":
         yahoo = _fetch_yahoo_candles(symbol=symbol, timeframe=tf, bars=bars)
         if yahoo:
             candles, label, path = yahoo
-            if source == "blackbull":
-                return candles, f"blackbull:yahoo({label.split(':', 1)[-1]})", path
-            return candles, label, path
-
-    if source == "blackbull":
-        cached = Path("trading_data") / f"{symbol.lower()}_{tf.lower()}_blackbull.csv"
-        if cached.exists():
-            candles = load_candles_from_csv(cached)
-            if candles:
-                return candles[-bars:], f"blackbull:{symbol}", str(cached)
+            return candles, label, path, None
 
     out = Path("trading_data") / f"{symbol.lower()}_{tf.lower()}_synthetic.csv"
     start_price = 62900.0 if "BTC" in symbol else (1.0850 if "EUR" in symbol else 100.0)
     rows = _generate_realistic_ohlcv(bars=bars, start_price=start_price, seed=hash(symbol + tf) % 10000)
     save_ohlcv_csv(out, rows)
-    return load_candles_from_csv(out)[-bars:], f"synthetic:{symbol}", str(out)
+    return load_candles_from_csv(out)[-bars:], f"synthetic:{symbol}", str(out), None

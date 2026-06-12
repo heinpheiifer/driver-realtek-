@@ -34,6 +34,8 @@ if [[ ! -f trading_data/eurusd_m1.csv ]]; then
   python -m trading.fetch_data --output trading_data/eurusd_m1.csv --bars 8000
 fi
 
+mkdir -p trading_data/blackbull_import
+
 PORT="${PORT:-8010}"
 HOST="${HOST:-127.0.0.1}"
 

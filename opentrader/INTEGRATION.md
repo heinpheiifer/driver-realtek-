@@ -33,7 +33,7 @@ FORCE=1 bash install_and_run.sh
 Use the toolbar to pick symbol and data source:
 
 - **Yahoo** — live BTCUSD, EURUSD, etc. via Yahoo Finance
-- **BlackBull** — uses cached CSV (wire MT5/BlackBull API in `trading/market_data.py`)
+- **BlackBull** — real MT5 data from your BlackBull terminal ([setup guide](BLACKBULL_MT5.md))
 - **CSV** — local file in `trading_data/`
 
 ## Bookmap integration

@@ -29,11 +29,12 @@ let signalLog = [];
 
 let marketState = {
   symbol: "BTCUSD",
-  source: "yahoo",
+  source: "blackbull",
   timeframe: "M5",
   csv_path: null,
   source_label: "",
 };
+let blackbullRefreshTimer = null;
 
 function $(id) {
   return document.getElementById(id);
@@ -45,7 +46,14 @@ async function api(path, options = {}) {
     ...options,
   });
   if (!response.ok) {
-    const detail = await response.text();
+    let detail = await response.text();
+    try {
+      const parsed = JSON.parse(detail);
+      detail = parsed.detail?.message || parsed.detail || parsed.message || detail;
+      if (typeof parsed.detail === "object") {
+        detail = parsed.detail.message || JSON.stringify(parsed.detail);
+      }
+    } catch (_) { /* plain text */ }
     throw new Error(detail || `Request failed: ${response.status}`);
   }
   return response.json();
@@ -393,32 +401,98 @@ async function startBookmapReplay() {
   }
 }
 
-async function loadMarket() {
+async function updateMt5Status() {
+  try {
+    const data = await api("/api/market/mt5/status");
+    const mt5 = data.mt5 || {};
+    const el = $("mt5Status");
+    if (!el) return;
+    if (mt5.connected) {
+      el.textContent = `MT5 ✓ ${mt5.server || mt5.broker || "connected"}`;
+      el.className = "mt5-status connected";
+    } else if (mt5.available) {
+      el.textContent = "MT5 offline";
+      el.className = "mt5-status offline";
+    } else {
+      el.textContent = "MT5 bridge needed";
+      el.className = "mt5-status offline";
+    }
+    el.title = mt5.last_error || "BlackBull MT5 connection status";
+  } catch (_) {
+    const el = $("mt5Status");
+    if (el) { el.textContent = "MT5 ?"; el.className = "mt5-status offline"; }
+  }
+}
+
+function scheduleBlackbullRefresh() {
+  if (blackbullRefreshTimer) clearInterval(blackbullRefreshTimer);
+  if (marketState.source !== "blackbull") return;
+  blackbullRefreshTimer = setInterval(() => {
+    loadMarket(true).catch(() => {});
+  }, 15000);
+}
+
+async function syncMt5() {
+  $("liveStatus").textContent = "Syncing from BlackBull MT5…";
+  const data = await api(
+    `/api/market/blackbull/sync?symbol=${encodeURIComponent(marketState.symbol)}&timeframe=${marketState.timeframe}&bars=800`,
+    { method: "POST" }
+  );
+  marketState.csv_path = data.csv_path;
+  marketState.source_label = data.source;
+  renderCharts(data.orderflow);
+  $("dataSourceTag").textContent = `${data.source} · ${data.count} bars`;
+  $("dataSourceTag").classList.remove("synthetic-warning");
+  $("liveStatus").textContent = `MT5 synced · ${fmtPrice(data.last_price)} · ${data.source}`;
+  await updateMt5Status();
+  await startBookmapReplay();
+}
+
+async function loadMarket(quiet = false) {
   marketState.symbol = ($("symbolInput")?.value || "BTCUSD").toUpperCase().replace("/", "");
   marketState.timeframe = $("strategyTimeframe")?.value || "M5";
   $("chartSymbol").textContent = marketState.symbol;
   $("strategySymbol").value = marketState.symbol;
   syncTimeframeButtons(marketState.timeframe);
-  $("liveStatus").textContent = `Loading ${marketState.symbol} from ${marketState.source}…`;
+  if (!quiet) $("liveStatus").textContent = `Loading ${marketState.symbol} from ${marketState.source}…`;
 
-  const data = await api(
-    `/api/market/candles?symbol=${encodeURIComponent(marketState.symbol)}&source=${marketState.source}&timeframe=${marketState.timeframe}&bars=800&window=120`
-  );
+  try {
+    const data = await api(
+      `/api/market/candles?symbol=${encodeURIComponent(marketState.symbol)}&source=${marketState.source}&timeframe=${marketState.timeframe}&bars=800&window=120`
+    );
 
-  marketState.csv_path = data.csv_path;
-  marketState.source_label = data.source;
-  const tag = $("dataSourceTag");
-  if (tag) {
-    tag.textContent = `${data.source} · ${data.count} bars`;
-    tag.classList.toggle("synthetic-warning", !!data.is_synthetic);
+    marketState.csv_path = data.csv_path;
+    marketState.source_label = data.source;
+    const tag = $("dataSourceTag");
+    if (tag) {
+      tag.textContent = `${data.source} · ${data.count} bars${data.used_cache ? " (cached)" : ""}`;
+      tag.classList.toggle("synthetic-warning", !!data.is_synthetic);
+    }
+    renderCharts(data.orderflow);
+    let status = `${marketState.symbol} ${marketState.timeframe} · ${data.source} · ${fmtPrice(data.last_price)}`;
+    if (data.is_synthetic) status += " · ⚠ synthetic fallback";
+    if (data.used_cache) status += " · cached MT5 data";
+    $("liveStatus").textContent = status;
+    if (data.mt5) updateMt5StatusFromPayload(data.mt5);
+    if (!quiet) await startBookmapReplay();
+  } catch (e) {
+    $("liveStatus").textContent = `BlackBull: ${e.message} — start MT5 or run scripts/mt5_python_bridge.py`;
+    await updateMt5Status();
+    throw e;
   }
-  renderCharts(data.orderflow);
-  let status = `${marketState.symbol} ${marketState.timeframe} · ${data.source} · ${fmtPrice(data.last_price)}`;
-  if (data.is_synthetic) {
-    status += " · ⚠ synthetic fallback — check network or try Yahoo";
+}
+
+function updateMt5StatusFromPayload(mt5) {
+  const el = $("mt5Status");
+  if (!el) return;
+  if (mt5.connected) {
+    el.textContent = `MT5 ✓ ${mt5.server || mt5.broker || "connected"}`;
+    el.className = "mt5-status connected";
+  } else {
+    el.textContent = "MT5 bridge needed";
+    el.className = "mt5-status offline";
   }
-  $("liveStatus").textContent = status;
-  await startBookmapReplay();
+  el.title = mt5.last_error || mt5.hint || "";
 }
 
 function updateLiveDashboard(state) {
@@ -635,6 +709,9 @@ document.querySelectorAll(".source-btn").forEach((btn) => {
     document.querySelectorAll(".source-btn").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     marketState.source = btn.dataset.source;
+    $("syncMt5Btn")?.classList.toggle("hidden", marketState.source !== "blackbull");
+    scheduleBlackbullRefresh();
+    loadMarket().catch((e) => { $("liveStatus").textContent = e.message; });
   });
 });
 
@@ -654,6 +731,7 @@ document.querySelectorAll(".tf").forEach((btn) => {
 });
 
 $("loadMarketBtn")?.addEventListener("click", () => loadMarket().catch((e) => alert(e.message)));
+$("syncMt5Btn")?.addEventListener("click", () => syncMt5().catch((e) => alert(e.message)));
 $("symbolInput")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") loadMarket().catch((err) => alert(err.message));
 });
@@ -673,10 +751,16 @@ async function init() {
   await loadStrategies();
   marketState.symbol = ($("symbolInput")?.value || "BTCUSD").toUpperCase();
   marketState.timeframe = document.querySelector(".tf.active")?.dataset.tf || "M5";
+  marketState.source = document.querySelector(".source-btn.active")?.dataset.source || "blackbull";
   $("strategySymbol").value = marketState.symbol;
   $("strategyTimeframe").value = marketState.timeframe;
+  $("syncMt5Btn")?.classList.toggle("hidden", marketState.source !== "blackbull");
+  await updateMt5Status();
   await loadJournal();
-  await loadMarket();
+  try {
+    await loadMarket();
+  } catch (_) { /* status line shows setup hint */ }
+  scheduleBlackbullRefresh();
   connectBookmapStream();
   const status = await api("/api/session/status");
   if (status.status && status.status !== "idle") {
