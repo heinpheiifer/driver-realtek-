@@ -11,7 +11,8 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from opentrade.journal import TradeJournal
+from trading.data import load_candles_from_csv
+from trading.orderflow import compute_orderflow
 from opentrade.live_engine import LivePaperEngine
 from opentrade.services import BacktestService, OptimizerService
 from opentrade.store import StrategyStore
@@ -282,6 +283,21 @@ def get_run(run_id: str) -> dict[str, Any]:
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return run
+
+
+@app.get("/api/orderflow")
+def get_orderflow(
+    csv_path: str = str(DEFAULT_CSV),
+    end_index: int | None = None,
+    window: int = 100,
+) -> dict[str, Any]:
+    path = Path(csv_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"CSV not found: {path}")
+    if live_engine.is_running():
+        return live_engine.get_orderflow(window=window)
+    candles = load_candles_from_csv(path)
+    return compute_orderflow(candles, end_index=end_index, window=window)
 
 
 @app.get("/api/data/default-csv")

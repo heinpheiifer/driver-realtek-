@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from trading.data import load_candles_from_csv
 from trading.models import Candle, Trade
+from trading.orderflow import compute_orderflow
 from trading.strategy import StrategyConfig, build_swarm
 
 from .journal import TradeJournal
@@ -77,7 +78,8 @@ class LivePaperEngine:
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._subscribers: list[asyncio.Queue] = []
-        self._loop: asyncio.AbstractEventLoop | None = None
+        self._candles: list[Candle] = []
+        self._csv_path: str = ""
 
     def get_state(self) -> dict[str, Any] | None:
         with self._lock:
@@ -117,6 +119,8 @@ class LivePaperEngine:
         )
 
         self._stop_event.clear()
+        self._candles = candles
+        self._csv_path = csv_path
         with self._lock:
             self._state = SessionState(
                 session_id=session_id,
@@ -197,6 +201,12 @@ class LivePaperEngine:
             "open_position": state.open_position,
             "equity_curve": state.equity_curve[-200:],
         }
+
+    def get_orderflow(self, *, window: int = 100) -> dict:
+        with self._lock:
+            end_index = self._state.candle_index if self._state else len(self._candles)
+            candles = list(self._candles)
+        return compute_orderflow(candles, end_index=end_index, window=window)
 
     def _run_loop(
         self,
@@ -370,7 +380,8 @@ class LivePaperEngine:
                     )
                     self._state.equity_curve.append(equity)
                     snapshot = self._serialize_state(self._state)
-                    self._broadcast({"event": "tick", **snapshot})
+                    orderflow = compute_orderflow(candles, end_index=idx + 1, window=100)
+                    self._broadcast({"event": "tick", "orderflow": orderflow, **snapshot})
 
             time.sleep(max(0.05, tick_ms / 1000.0))
 

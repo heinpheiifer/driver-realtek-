@@ -40,6 +40,24 @@
       <div id="dashboardTab">
         <div class="status-line" id="liveStatus">Start a paper session to stream real-time P&amp;L.</div>
         <div class="metrics" id="liveMetrics"></div>
+
+        <div class="chart-stack">
+          <div class="chart-panel">
+            <h3>Price Chart</h3>
+            <canvas id="priceChart"></canvas>
+          </div>
+          <div class="chart-panel">
+            <h3>Bookmap Order Flow</h3>
+            <canvas id="orderflowChart"></canvas>
+            <div class="orderflow-legend">
+              <span class="legend-buy">■ Buy / Bid volume</span>
+              <span class="legend-sell">■ Sell / Ask volume</span>
+              <span id="orderflowDelta">Delta: 0</span>
+              <span id="orderflowPoc">POC: —</span>
+            </div>
+          </div>
+        </div>
+
         <div class="grid-2 dashboard-charts">
           <div>
             <h3>Equity Curve</h3>
@@ -106,6 +124,21 @@
       <div id="backtestTab" class="hidden">
         <div class="status-line" id="backtestStatus">No backtest run yet.</div>
         <div class="metrics" id="metrics"></div>
+        <div class="chart-stack">
+          <div class="chart-panel">
+            <h3>Price Chart</h3>
+            <canvas id="backtestPriceChart"></canvas>
+          </div>
+          <div class="chart-panel">
+            <h3>Bookmap Order Flow</h3>
+            <canvas id="backtestOrderflowChart"></canvas>
+            <div class="orderflow-legend">
+              <span class="legend-buy">■ Buy volume</span>
+              <span class="legend-sell">■ Sell volume</span>
+              <span id="backtestOrderflowDelta">Delta: 0</span>
+            </div>
+          </div>
+        </div>
         <canvas id="equityChart"></canvas>
         <h2 style="margin-top:1rem;">Backtest Trades</h2>
         <table>

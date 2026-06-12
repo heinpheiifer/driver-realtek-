@@ -23,6 +23,7 @@ let optimizerJobId = null;
 let optimizerPollTimer = null;
 let eventSource = null;
 let liveEquity = [];
+let lastOrderflow = null;
 
 function $(id) {
   return document.getElementById(id);
@@ -143,6 +144,156 @@ function drawEquity(canvasId, curve) {
   ctx.stroke();
 }
 
+function drawPriceChart(canvasId, orderflow) {
+  const canvas = $(canvasId);
+  if (!canvas || !orderflow?.columns?.length) return;
+  const ctx = canvas.getContext("2d");
+  const width = canvas.clientWidth || 600;
+  const height = canvas.clientHeight || 260;
+  canvas.width = width;
+  canvas.height = height;
+  ctx.clearRect(0, 0, width, height);
+
+  const cols = orderflow.columns;
+  const pad = { l: 52, r: 12, t: 12, b: 22 };
+  const plotW = width - pad.l - pad.r;
+  const plotH = height - pad.t - pad.b;
+  const priceMin = orderflow.price_min;
+  const priceMax = orderflow.price_max;
+  const priceRange = Math.max(1e-9, priceMax - priceMin);
+
+  const xAt = (i) => pad.l + (i / Math.max(1, cols.length - 1)) * plotW;
+  const yAt = (p) => pad.t + plotH - ((p - priceMin) / priceRange) * plotH;
+
+  ctx.strokeStyle = "#24314f";
+  ctx.lineWidth = 1;
+  for (let g = 0; g <= 4; g++) {
+    const y = pad.t + (plotH * g) / 4;
+    ctx.beginPath();
+    ctx.moveTo(pad.l, y);
+    ctx.lineTo(width - pad.r, y);
+    ctx.stroke();
+    const price = priceMax - (priceRange * g) / 4;
+    ctx.fillStyle = "#93a4c7";
+    ctx.font = "10px sans-serif";
+    ctx.fillText(price.toFixed(5), 4, y + 3);
+  }
+
+  const barW = Math.max(2, plotW / cols.length * 0.6);
+  cols.forEach((col, i) => {
+    const x = xAt(i) - barW / 2;
+    const bullish = col.close >= col.open;
+    const bodyTop = yAt(Math.max(col.open, col.close));
+    const bodyBot = yAt(Math.min(col.open, col.close));
+    const wickTop = yAt(col.high);
+    const wickBot = yAt(col.low);
+    ctx.strokeStyle = bullish ? "#22c997" : "#ff6b6b";
+    ctx.fillStyle = bullish ? "rgba(34,201,151,0.85)" : "rgba(255,107,107,0.85)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(xAt(i), wickTop);
+    ctx.lineTo(xAt(i), wickBot);
+    ctx.stroke();
+    ctx.fillRect(x, bodyTop, barW, Math.max(1, bodyBot - bodyTop));
+  });
+
+  if (orderflow.poc_price) {
+    const pocY = yAt(orderflow.poc_price);
+    ctx.strokeStyle = "rgba(255, 200, 80, 0.8)";
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(pad.l, pocY);
+    ctx.lineTo(width - pad.r, pocY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function drawOrderflow(canvasId, orderflow, deltaElId, pocElId) {
+  const canvas = $(canvasId);
+  if (!canvas || !orderflow?.columns?.length) return;
+  const ctx = canvas.getContext("2d");
+  const width = canvas.clientWidth || 600;
+  const height = canvas.clientHeight || 200;
+  canvas.width = width;
+  canvas.height = height;
+  ctx.clearRect(0, 0, width, height);
+
+  const cols = orderflow.columns;
+  const bins = orderflow.bins;
+  const pad = { l: 52, r: 12, t: 8, b: 8 };
+  const plotW = width - pad.l - pad.r;
+  const plotH = height - pad.t - pad.b;
+  const priceMin = orderflow.price_min;
+  const priceMax = orderflow.price_max;
+  const priceRange = Math.max(1e-9, priceMax - priceMin);
+
+  let maxVol = 0;
+  cols.forEach((col) => {
+    for (let b = 0; b < bins; b++) {
+      maxVol = Math.max(maxVol, (col.buy[b] || 0) + (col.sell[b] || 0));
+    }
+  });
+  maxVol = Math.max(maxVol, 1e-9);
+
+  const colW = plotW / cols.length;
+  const binH = plotH / bins;
+
+  cols.forEach((col, ci) => {
+    const x = pad.l + ci * colW;
+    for (let b = 0; b < bins; b++) {
+      const buy = col.buy[b] || 0;
+      const sell = col.sell[b] || 0;
+      const total = buy + sell;
+      if (total <= 0) continue;
+      const price = priceMin + (b + 0.5) * (priceRange / bins);
+      const y = pad.t + plotH - ((price - priceMin) / priceRange) * plotH - binH;
+      const intensity = Math.min(1, total / maxVol);
+      if (buy >= sell) {
+        ctx.fillStyle = `rgba(34, 201, 151, ${0.15 + intensity * 0.75})`;
+      } else {
+        ctx.fillStyle = `rgba(255, 107, 107, ${0.15 + intensity * 0.75})`;
+      }
+      ctx.fillRect(x, y, Math.max(1, colW - 0.5), Math.max(1, binH - 0.5));
+    }
+  });
+
+  ctx.fillStyle = "#93a4c7";
+  ctx.font = "10px sans-serif";
+  for (let g = 0; g <= 4; g++) {
+    const price = priceMax - (priceRange * g) / 4;
+    const y = pad.t + (plotH * g) / 4;
+    ctx.fillText(price.toFixed(5), 4, y + 3);
+  }
+
+  if (deltaElId && $(deltaElId)) {
+    const d = orderflow.delta || 0;
+    $(deltaElId).textContent = `Delta: ${d >= 0 ? "+" : ""}${d}`;
+    $(deltaElId).className = d >= 0 ? "legend-buy" : "legend-sell";
+  }
+  if (pocElId && $(pocElId)) {
+    $(pocElId).textContent = `POC: ${orderflow.poc_price ?? "—"}`;
+  }
+}
+
+function renderCharts(orderflow, prefix = "") {
+  if (!orderflow) return;
+  lastOrderflow = orderflow;
+  const priceId = prefix ? `${prefix}PriceChart` : "priceChart";
+  const flowId = prefix ? `${prefix}OrderflowChart` : "orderflowChart";
+  const deltaId = prefix ? `${prefix}OrderflowDelta` : "orderflowDelta";
+  const pocId = prefix ? null : "orderflowPoc";
+  drawPriceChart(priceId, orderflow);
+  drawOrderflow(flowId, orderflow, deltaId, pocId);
+}
+
+async function loadOrderflowPreview() {
+  try {
+    const flow = await api("/api/orderflow?window=120");
+    renderCharts(flow);
+  } catch (_) { /* ignore */ }
+}
+
 function updateLiveDashboard(state) {
   if (!state || state.status === "idle") return;
 
@@ -169,6 +320,10 @@ function updateLiveDashboard(state) {
   if (state.equity_curve) {
     liveEquity = state.equity_curve;
     drawEquity("liveEquityChart", liveEquity);
+  }
+
+  if (state.orderflow) {
+    renderCharts(state.orderflow);
   }
 
   const pos = state.open_position;
@@ -273,6 +428,10 @@ async function runBacktest() {
     ["Trades/Day", test.trades_per_day, ""],
   ]);
   drawEquity("equityChart", test.equity_curve);
+  try {
+    const flow = await api("/api/orderflow?window=120");
+    renderCharts(flow, "backtest");
+  } catch (_) { /* ignore */ }
   $("tradesBody").innerHTML = (test.trade_rows || []).slice(-50).reverse().map((t) => `
     <tr>
       <td>${t.side}</td><td>${t.entry_time}</td><td>${t.exit_time}</td>
@@ -348,6 +507,7 @@ $("strategyMode").addEventListener("change", (e) => { $("modeBadge").textContent
 async function init() {
   await loadStrategies();
   await loadJournal();
+  await loadOrderflowPreview();
   const status = await api("/api/session/status");
   if (status.status && status.status !== "idle") {
     updateLiveDashboard(status);

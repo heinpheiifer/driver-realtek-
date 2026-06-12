@@ -192,6 +192,47 @@ header .header-stats {
   color: var(--muted);
 }
 
+.chart-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.chart-panel h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+#priceChart, #backtestPriceChart {
+  width: 100%;
+  height: 260px;
+  background: #0f1628;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+#orderflowChart, #backtestOrderflowChart {
+  width: 100%;
+  height: 200px;
+  background: #0a0e18;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.orderflow-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.legend-buy { color: #22c997; }
+.legend-sell { color: #ff6b6b; }
+
 #liveEquityChart, #equityChart {
   width: 100%;
   height: 220px;
