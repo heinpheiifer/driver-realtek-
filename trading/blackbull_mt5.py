@@ -390,7 +390,9 @@ def load_blackbull_candles(
         return candles, label, path, meta
 
     meta["mt5"]["hint"] = (
-        "Connect MT5 to BlackBull and set MT5_PATH/MT5_LOGIN/MT5_PASSWORD/MT5_SERVER, "
-        "or run scripts/mt5_python_bridge.py, or import via POST /api/market/blackbull/import"
+        "BlackBull data not connected. On Windows with MT5: run scripts/start_mt5_bridge.bat "
+        "(set MT5_LOGIN, MT5_PASSWORD, MT5_SERVER, OPENTRADER_URL in .env). "
+        "On Linux: bash scripts/setup_blackbull.sh for steps, or import CSV via "
+        "bash scripts/import_blackbull_csv.sh"
     )
     return [], "blackbull:unavailable", "", meta
