@@ -237,10 +237,14 @@ class SwarmCoordinator:
         agents: list[BaseAgent],
         weights: dict[str, float] | None = None,
         min_confidence: float = 0.35,
+        min_agreeing_agents: int = 2,
+        require_quality_setup: bool = True,
     ):
         self.agents = agents
         self.weights = weights or {}
         self.min_confidence = min_confidence
+        self.min_agreeing_agents = min_agreeing_agents
+        self.require_quality_setup = require_quality_setup
 
     def decide(self, history: Sequence[Candle]) -> SwarmDecision | None:
         signals: list[Signal] = []
@@ -260,13 +264,27 @@ class SwarmCoordinator:
         if not signals or active_weight == 0:
             return None
 
+        side = "long" if weighted_score > 0 else "short"
+        agreeing = sum(1 for s in signals if s.side == side)
+        if agreeing < self.min_agreeing_agents:
+            return None
+
+        if self.require_quality_setup:
+            quality = {"smart_money", "liquidity_sweep"}
+            if not any(s.agent in quality for s in signals):
+                return None
+
+        trend_signals = [s for s in signals if s.agent == "trend_bias"]
+        if trend_signals and trend_signals[0].side != side:
+            return None
+
         normalized = weighted_score / active_weight
         confidence = abs(normalized)
         if confidence < self.min_confidence:
             return None
 
         return SwarmDecision(
-            side="long" if normalized > 0 else "short",
+            side=side,  # type: ignore[arg-type]
             confidence=confidence,
             score=normalized,
             signals=signals,

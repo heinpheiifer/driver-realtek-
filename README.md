@@ -14,6 +14,17 @@ It is designed for Victron Cerbo GX systems running Venus OS Large with Node-RED
 
 - `flows/victron-storm-watch-flow.json` - import this into Node-RED.
 - `trading/` - swarm scalping research toolkit with paper backtesting, walk-forward validation, and continuous optimization loops (volume profile + smart money model components).
+- `opentrader/` - **OpenTrader** unified app (live PnL, journal, strategy, backtest, optimizer)
+- `opentrade/` - OpenTrade research engine modules (used by OpenTrader)
+- `trading/` - swarm scalping research toolkit (Python backtest core)
+
+## OpenTrader quick start
+
+```bash
+bash install_and_run.sh
+```
+
+Open **http://127.0.0.1:8010** — includes all OpenTrade features built in.
 
 ## What the flow controls
 

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .backtest import PaperTradingEngine
 from .data import load_candles_from_csv
+from .walk_forward import split_holdout
 from .swarm import (
     LiquiditySweepAgent,
     SmartMoneyStructureAgent,
@@ -150,17 +151,10 @@ def _parse_int_list(value: str) -> list[int]:
 
 
 def _split_walk_forward(candles, train_ratio: float, min_train: int, min_test: int):
-    if not 0.5 <= train_ratio < 0.95:
-        raise SystemExit("--wf-train-ratio must be between 0.50 and 0.95.")
-    split_idx = int(len(candles) * train_ratio)
-    train = candles[:split_idx]
-    test = candles[split_idx:]
-    if len(train) < min_train or len(test) < min_test:
-        raise SystemExit(
-            "Not enough candles for walk-forward split. "
-            f"Need at least train={min_train}, test={min_test}, got train={len(train)}, test={len(test)}."
-        )
-    return train, test
+    try:
+        return split_holdout(candles, train_ratio, min_train, min_test)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _build_swarm(

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Open Trader</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Open Trader</h1>
+      <span id="chartSymbol" class="symbol-badge">BTCUSD</span>
+    </div>
+    <div class="symbol-bar">
+      <input id="symbolInput" type="text" value="BTCUSD" placeholder="Symbol" list="symbolList" autocomplete="off" />
+      <datalist id="symbolList"></datalist>
+      <div class="source-group" id="sourceGroup">
+        <button class="source-btn" data-source="yahoo">Yahoo</button>
+        <button class="source-btn active" data-source="blackbull">BlackBull</button>
+        <button class="source-btn" data-source="csv">CSV</button>
+      </div>
+      <button id="syncMt5Btn" class="toolbar-btn" title="Sync from BlackBull MT5">Sync MT5</button>
+      <button id="loadMarketBtn" class="toolbar-btn">Load</button>
+      <span id="mt5Status" class="mt5-status">MT5 …</span>
+    </div>
+    <div class="toolbar">
+      <div class="tf-group" id="timeframeGroup">
+        <button class="tf" data-tf="M1">1m</button>
+        <button class="tf active" data-tf="M5">5m</button>
+        <button class="tf" data-tf="M15">15m</button>
+        <button class="tf" data-tf="H1">1h</button>
+      </div>
+      <button class="toolbar-btn active" id="btnCandles">Candles</button>
+      <button class="toolbar-btn active" id="btnBookmapToggle">Bookmap</button>
+    </div>
+    <div class="header-stats">
+      <div class="live-pnl" id="headerPnl">$0.00</div>
+      <span id="modeBadge" class="badge">paper</span>
+      <span id="sessionBadge" class="badge idle">idle</span>
+    </div>
+  </header>
+
+  <main class="terminal-layout">
+    <aside class="panel sidebar">
+      <h2>Strategies</h2>
+      <div id="strategyList"></div>
+      <div class="actions">
+        <button id="newStrategyBtn" class="secondary">New</button>
+        <button id="saveStrategyBtn" class="secondary">Save</button>
+      </div>
+      <div class="sidebar-actions">
+        <button id="startSessionBtn" class="success full-width">Start Session</button>
+        <button id="stopSessionBtn" class="secondary full-width">Stop</button>
+        <button id="runBacktestBtn" class="secondary full-width">Backtest</button>
+        <button id="startOptimizerBtn" class="secondary full-width">Optimizer</button>
+      </div>
+    </aside>
+
+    <section class="chart-terminal">
+      <div class="chart-main">
+        <canvas id="priceChart"></canvas>
+        <div class="chart-overlay-price" id="lastPriceLabel">—</div>
+        <div class="data-source-tag" id="dataSourceTag">yahoo · loading…</div>
+      </div>
+
+      <div class="bookmap-panel" id="bookmapPanel">
+        <div class="bookmap-header">
+          <div class="bookmap-title">
+            <span class="bookmap-dot" id="bookmapLiveDot"></span>
+            Bookmap Order Flow
+            <small id="bookmapSource">connecting…</small>
+          </div>
+          <div class="bookmap-stats">
+            <span>CVD <strong id="bookmapCvd">0.000</strong></span>
+            <span>Delta <strong id="orderflowDelta">0</strong></span>
+            <span>POC <strong id="orderflowPoc">—</strong></span>
+          </div>
+          <div class="sub-tabs">
+            <button class="sub-tab active" data-sub="heatmap">Heatmap</button>
+            <button class="sub-tab" data-sub="signals">Signals</button>
+            <button class="sub-tab" data-sub="volume">Volume</button>
+          </div>
+        </div>
+
+        <div id="subHeatmap" class="sub-panel">
+          <canvas id="orderflowChart"></canvas>
+          <div class="orderflow-legend">
+            <span class="legend-sweep">● Sweep</span>
+            <span class="legend-absorption">● Absorption</span>
+            <span class="legend-large">● Large print</span>
+            <span class="legend-imbalance">● Imbalance</span>
+            <span class="legend-buy">■ Buy heat</span>
+            <span class="legend-sell">■ Sell heat</span>
+          </div>
+        </div>
+
+        <div id="subSignals" class="sub-panel hidden">
+          <ul id="signalFeed" class="signal-feed"></ul>
+        </div>
+
+        <div id="subVolume" class="sub-panel hidden">
+          <canvas id="volumeChart"></canvas>
+        </div>
+      </div>
+
+      <div class="bottom-strip">
+        <div class="strip-item">
+          <label>Equity</label>
+          <canvas id="liveEquityChart"></canvas>
+        </div>
+        <div class="strip-item">
+          <label>Open Position</label>
+          <div id="openPositionPanel" class="open-position-panel">No open position</div>
+        </div>
+        <div class="strip-item metrics-compact" id="liveMetrics"></div>
+      </div>
+      <div class="status-line" id="liveStatus">Loading market data…</div>
+    </section>
+
+    <aside class="panel right-panel">
+      <div class="right-tabs">
+        <button class="right-tab active" data-rtab="settings">Settings</button>
+        <button class="right-tab" data-rtab="journal">Journal</button>
+        <button class="right-tab" data-rtab="backtest">Backtest</button>
+        <button class="right-tab" data-rtab="optimizer">Optimizer</button>
+      </div>
+
+      <div id="panelSettings" class="right-panel-body">
+        <div class="grid-2">
+          <div><label>Name</label><input id="strategyName" /></div>
+          <div>
+            <label>Mode</label>
+            <select id="strategyMode"><option value="paper">Paper</option><option value="live">Live</option></select>
+          </div>
+          <div><label>Symbol</label><input id="strategySymbol" value="BTCUSD" /></div>
+          <div><label>Timeframe</label><input id="strategyTimeframe" value="M5" /></div>
+        </div>
+        <div class="grid-2" id="configFields"></div>
+      </div>
+
+      <div id="panelJournal" class="right-panel-body hidden">
+        <div class="mini-metrics" id="journalStatsMini"></div>
+        <div class="table-wrap">
+          <table class="data-table" id="journalTable">
+            <thead>
+              <tr><th>Time</th><th>Side</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Conf</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="panelBacktest" class="right-panel-body hidden">
+        <div id="backtestResults" class="results-panel">
+          <p class="muted">Run a backtest from the sidebar to see results here.</p>
+        </div>
+      </div>
+
+      <div id="panelOptimizer" class="right-panel-body hidden">
+        <div id="optimizerStatus" class="results-panel">
+          <p class="muted">Optimizer runs until 65%+ win rate is reached.</p>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
