@@ -1,9 +1,12 @@
 """Django-style API routes expected by ~/OpenTrader frontend."""
 from __future__ import annotations
 
+import logging
+import os
 from datetime import datetime, timezone
 from typing import Any
 
+import requests
 from fastapi import APIRouter, HTTPException
 
 from trading.blackbull_mt5 import mt5_status
@@ -11,7 +14,7 @@ from trading.market_data import BlackbullDataError, load_market_candles
 
 from .mt5_autosync import mt5_autosync
 
-router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _INTERVAL_TO_TF = {
     "1m": "M1",
@@ -92,6 +95,114 @@ def _bar_rows(candles: list) -> list[dict[str, Any]]:
     return rows
 
 
+def _history_response(
+    *,
+    symbol: str,
+    interval: str,
+    tf: str,
+    range_: str,
+    requested_source: str,
+    candles: list,
+    source_label: str,
+    path: str,
+    meta: dict | None,
+    fallback: bool = False,
+    fallback_reason: str | None = None,
+) -> dict[str, Any]:
+    rows = _bar_rows(candles)
+    last = candles[-1]
+    return {
+        "symbol": symbol.upper(),
+        "interval": interval,
+        "timeframe": tf,
+        "range": range_,
+        "source": source_label,
+        "requested_source": requested_source,
+        "fallback": fallback,
+        "fallback_reason": fallback_reason,
+        "count": len(rows),
+        "last_price": last.close,
+        "csv_path": path,
+        "used_cache": (meta or {}).get("used_cache") if meta else False,
+        "mt5": (meta or {}).get("mt5") if meta else mt5_status() if requested_source == "blackbull" else None,
+        "bars": rows,
+        "candles": rows,
+        "data": rows,
+    }
+
+
+def _try_django_history(
+    *,
+    symbol: str,
+    interval: str,
+    range_: str,
+    source: str,
+) -> dict[str, Any] | None:
+    backend = os.environ.get("OPENTRADER_BACKEND_URL", "").strip().rstrip("/")
+    if not backend:
+        return None
+    try:
+        resp = requests.get(
+            f"{backend}/api/history/",
+            params={
+                "symbol": symbol,
+                "interval": interval,
+                "range": range_,
+                "source": source,
+            },
+            timeout=20,
+        )
+        if resp.ok:
+            data = resp.json()
+            if isinstance(data, dict) and (data.get("bars") or data.get("candles") or data.get("data")):
+                return data
+    except requests.RequestException as exc:
+        logger.warning("Django history fetch failed: %s", exc)
+    return None
+
+
+def _load_history_candles(
+    *,
+    symbol: str,
+    tf: str,
+    limit: int,
+    source: str,
+) -> tuple[list, str, str, dict | None, bool, str | None]:
+    """Load candles; fallback yahoo/synthetic when blackbull unavailable."""
+    try:
+        candles, label, path, meta = load_market_candles(
+            symbol=symbol,
+            source=source,
+            timeframe=tf,
+            bars=limit,
+        )
+        if candles:
+            return candles, label, path, meta, False, None
+    except BlackbullDataError:
+        if source.lower() != "blackbull":
+            raise
+
+    for alt in ("yahoo", "synthetic"):
+        try:
+            candles, label, path, meta = load_market_candles(
+                symbol=symbol,
+                source=alt,
+                timeframe=tf,
+                bars=limit,
+            )
+            if candles:
+                return candles, label, path, meta, True, f"blackbull unavailable — using {alt}"
+        except Exception:
+            continue
+
+    raise BlackbullDataError(
+        "No BlackBull data. Start: bash ~/opentrader-app/scripts/start_opentrader_django.sh "
+        "/home/heinz/OpenTrader  OR  MT5 bridge from Windows.",
+        {"mt5": mt5_status()},
+    )
+
+
+router = APIRouter()
 @router.get("/api/history")
 @router.get("/api/history/")
 def opentrader_history(
@@ -105,12 +216,16 @@ def opentrader_history(
     """OpenTrader Django-compatible OHLCV history (chart calls this for XRPUSD)."""
     tf = _parse_interval(timeframe or interval)
     limit = bars or _parse_range_bars(range, tf)
+
+    django_data = _try_django_history(
+        symbol=symbol, interval=interval, range_=range, source=source
+    )
+    if django_data is not None:
+        return django_data
+
     try:
-        candles, source_label, path, meta = load_market_candles(
-            symbol=symbol,
-            source=source,
-            timeframe=tf,
-            bars=limit,
+        candles, source_label, path, meta, fallback, reason = _load_history_candles(
+            symbol=symbol, tf=tf, limit=limit, source=source
         )
     except BlackbullDataError as exc:
         raise HTTPException(
@@ -118,30 +233,26 @@ def opentrader_history(
             detail={
                 "message": str(exc),
                 "mt5": (exc.meta or {}).get("mt5"),
-                "hint": "Start Django backend or MT5 bridge — see opentrader/BLACKBULL_OLD_APP.md",
+                "hint": (
+                    "cd ~/opentrader-app && bash scripts/start_opentrader_django.sh "
+                    "/home/heinz/OpenTrader /home/heinz/opentrade-app"
+                ),
             },
         ) from exc
-    if not candles:
-        raise HTTPException(status_code=404, detail=f"No history for {symbol} ({source})")
 
-    rows = _bar_rows(candles)
-    last = candles[-1]
-    return {
-        "symbol": symbol.upper(),
-        "interval": interval,
-        "timeframe": tf,
-        "range": range,
-        "source": source_label,
-        "requested_source": source.lower(),
-        "count": len(rows),
-        "last_price": last.close,
-        "csv_path": path,
-        "used_cache": (meta or {}).get("used_cache") if meta else False,
-        "mt5": (meta or {}).get("mt5") if meta else mt5_status() if source.lower() == "blackbull" else None,
-        "bars": rows,
-        "candles": rows,
-        "data": rows,
-    }
+    return _history_response(
+        symbol=symbol,
+        interval=interval,
+        tf=tf,
+        range_=range,
+        requested_source=source.lower(),
+        candles=candles,
+        source_label=source_label,
+        path=path,
+        meta=meta,
+        fallback=fallback,
+        fallback_reason=reason,
+    )
 
 
 @router.get("/api/mt5/status")
