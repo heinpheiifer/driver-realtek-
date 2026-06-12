@@ -73,7 +73,7 @@ cp "$ENGINE_ROOT/scripts/backup_old_ui.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/restore_old_ui.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/setup_old_app.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/diagnose_old_app.sh" "$OLD_APP/scripts/"
-cp "$ENGINE_ROOT/scripts/integrate_old_app.sh" "$OLD_APP/scripts/"
+cp "$ENGINE_ROOT/scripts/bring_back_old_app.sh" "$OLD_APP/scripts/"
 chmod +x "$OLD_APP/scripts/"*.sh
 
 mkdir -p "$OLD_APP/trading_data/blackbull_import"
@@ -89,6 +89,10 @@ if ! grep -q "^OPENTRADER_OLD_APP=" "$ENV_FILE" 2>/dev/null; then
   echo "OPENTRADER_OLD_APP=$OLD_APP" >> "$ENV_FILE"
 fi
 
+if ! grep -q "^OPENTRADER_USE_OLD_UI=" "$ENV_FILE" 2>/dev/null; then
+  echo "OPENTRADER_USE_OLD_UI=1" >> "$ENV_FILE"
+fi
+
 if ! grep -q "^MT5_AUTO_SYNC=" "$ENV_FILE" 2>/dev/null; then
   echo "MT5_AUTO_SYNC=0" >> "$ENV_FILE"
 fi
@@ -97,9 +101,9 @@ cat > "$OLD_APP/run.sh" << 'LAUNCHER'
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
+export OPENTRADER_USE_OLD_UI=1
 export OPENTRADER_OLD_APP="$(pwd)"
 export PORT="${PORT:-8010}"
-# Python loads .env via dotenv — do not source .env in bash (MT5_PATH spaces break)
 bash install_and_run.sh
 LAUNCHER
 chmod +x "$OLD_APP/run.sh"

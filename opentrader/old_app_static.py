@@ -5,20 +5,31 @@ import os
 from pathlib import Path
 
 UI_BACKUP_DIRNAME = ".opentrader_ui_backup"
+DEFAULT_OLD_APP = Path("/home/heinz/opentrade-app")
 ENGINE_STATIC_MARKERS = ("Open Trader", "btnBookmapToggle", "runBacktestBtn")
 
 
+def use_old_ui() -> bool:
+    """Serve the user's original chart unless OPENTRADER_USE_NEW_UI=1."""
+    if os.environ.get("OPENTRADER_USE_NEW_UI", "").strip().lower() in ("1", "true", "yes"):
+        return False
+    if os.environ.get("OPENTRADER_USE_OLD_UI", "").strip().lower() in ("1", "true", "yes"):
+        return True
+    if os.environ.get("OPENTRADER_OLD_APP", "").strip():
+        return True
+    return DEFAULT_OLD_APP.is_dir()
+
+
 def resolve_old_app_root() -> Path | None:
-    """Only serve legacy chart UI when OPENTRADER_USE_OLD_UI=1."""
-    if os.environ.get("OPENTRADER_USE_OLD_UI", "").strip().lower() not in ("1", "true", "yes"):
+    if not use_old_ui():
         return None
     raw = os.environ.get("OPENTRADER_OLD_APP", "").strip()
-    if not raw:
-        return None
-    root = Path(raw).expanduser().resolve()
-    if not root.is_dir():
-        return None
-    return root
+    if raw:
+        root = Path(raw).expanduser().resolve()
+        return root if root.is_dir() else None
+    if DEFAULT_OLD_APP.is_dir():
+        return DEFAULT_OLD_APP.resolve()
+    return None
 
 
 def _is_engine_builtin_ui(index_path: Path) -> bool:
@@ -83,7 +94,6 @@ def resolve_old_app_static() -> tuple[Path | None, Path | None]:
         return None, None
 
     search_roots = [root, *_backup_roots(root)]
-    best: tuple[Path, Path] | None = None
 
     for search_root in search_roots:
         for base in _static_candidates(search_root):

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Open Trader — NEW unified app (chart + Bookmap + strategy + journal + backtest + optimizer)
+# Open Trader — serves YOUR old chart app when /home/heinz/opentrade-app exists
 # Run from repo root:  bash install_and_run.sh
-# Force restart on 8010:  FORCE=1 bash install_and_run.sh
+# Force restart:       FORCE=1 bash install_and_run.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
@@ -30,11 +30,10 @@ echo "==> Installing Python packages ..."
 pip install -q -r requirements.txt
 
 if [[ "$(uname -s)" == "Linux" ]]; then
-  echo "==> Linux — MetaTrader5 is Windows-only (use Yahoo, CSV, or Windows MT5 bridge)."
-  echo "    See opentrader/BLACKBULL_MT5.md"
+  echo "==> Linux — MetaTrader5 package is Windows-only."
 else
   if [[ -f requirements-mt5.txt ]]; then
-    pip install -q -r requirements-mt5.txt || echo "==> MetaTrader5 install skipped (optional)"
+    pip install -q -r requirements-mt5.txt || true
   fi
 fi
 
@@ -48,16 +47,21 @@ mkdir -p trading_data/blackbull_import
 PORT="${PORT:-8010}"
 HOST="${HOST:-127.0.0.1}"
 
-# Default: NEW unified app. Legacy chart only with OPENTRADER_USE_OLD_UI=1 in .env
-if [[ "${OPENTRADER_USE_OLD_UI:-0}" == "1" ]]; then
+# Default: YOUR old chart at /home/heinz/opentrade-app (set OPENTRADER_USE_NEW_UI=1 for git UI)
+if [[ "${OPENTRADER_USE_NEW_UI:-0}" == "1" ]]; then
+  unset OPENTRADER_OLD_APP
+  echo "==> New unified app UI (OPENTRADER_USE_NEW_UI=1)"
+else
+  export OPENTRADER_USE_OLD_UI=1
   if [[ -z "${OPENTRADER_OLD_APP:-}" ]] && [[ -d "/home/heinz/opentrade-app" ]]; then
     export OPENTRADER_OLD_APP="/home/heinz/opentrade-app"
   fi
-  echo "==> Legacy chart UI mode (OPENTRADER_USE_OLD_UI=1)"
-  [[ -n "${OPENTRADER_OLD_APP:-}" ]] && echo "    Path: $OPENTRADER_OLD_APP"
-else
-  unset OPENTRADER_OLD_APP
-  echo "==> New Open Trader app (unified UI)"
+  if [[ -n "${OPENTRADER_OLD_APP:-}" ]] && [[ -d "$OPENTRADER_OLD_APP" ]]; then
+    echo "==> Your old Open Trader chart UI: $OPENTRADER_OLD_APP"
+  else
+    echo "==> Old app path not found — serving built-in UI"
+    echo "    Run: bash scripts/bring_back_old_app.sh"
+  fi
 fi
 
 _port_in_use() {
@@ -66,7 +70,7 @@ _port_in_use() {
 
 if _port_in_use; then
   if [[ "${FORCE:-0}" == "1" ]]; then
-    echo "==> Port ${PORT} in use — stopping existing process (FORCE=1) ..."
+    echo "==> Port ${PORT} in use — stopping (FORCE=1) ..."
     if command -v fuser >/dev/null; then
       fuser -k "${PORT}/tcp" 2>/dev/null || true
     elif command -v lsof >/dev/null; then
@@ -76,18 +80,13 @@ if _port_in_use; then
   else
     echo ""
     echo "Port ${PORT} is already in use."
-    echo "  FORCE=1 bash install_and_run.sh   # stop and start new Open Trader"
-    echo "  PORT=8011 bash install_and_run.sh # alternate port"
+    echo "  FORCE=1 bash install_and_run.sh"
     exit 1
   fi
 fi
 
 echo ""
-echo "==> Starting Open Trader at http://${HOST}:${PORT}"
-echo "    Chart · Bookmap · Strategy · Journal · Backtest · Optimizer"
-if [[ "$(uname -s)" == "Linux" ]]; then
-  echo "    Tip: click Yahoo for live chart data, or run MT5 bridge from Windows"
-fi
+echo "==> Starting at http://${HOST}:${PORT}"
 echo "    Press Ctrl+C to stop."
 echo ""
 exec python -m uvicorn opentrader.main:app --host "$HOST" --port "$PORT"
