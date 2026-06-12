@@ -31,6 +31,7 @@ from opentrade.services import BacktestService, OptimizerService
 from opentrade.store import StrategyStore
 
 from .bookmap_bridge import BookmapBridge
+from .mt5_autosync import mt5_autosync
 
 APP_ROOT = Path(__file__).resolve().parent
 _env_path = APP_ROOT.parent / ".env"
@@ -52,6 +53,18 @@ app = FastAPI(
     version="2.0.0",
     description="Unified trading app: chart, Bookmap order flow, strategy, journal, backtest, and AI optimizer.",
 )
+
+
+@app.on_event("startup")
+def _startup_mt5_autosync() -> None:
+    """Auto-connect MT5 and sync all BlackBull symbols — same as old Open Trader."""
+    mt5_autosync.start()
+
+
+@app.on_event("shutdown")
+def _shutdown_mt5_autosync() -> None:
+    mt5_autosync.stop()
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -186,6 +199,7 @@ def health() -> dict[str, Any]:
         "modules": ["chart", "bookmap", "live", "journal", "backtest", "optimizer", "market"],
         "engine": "OpenTrade",
         "unified": True,
+        "mt5_autosync": mt5_autosync.status,
     }
 
 
@@ -274,7 +288,13 @@ def market_load(payload: MarketLoadRequest) -> dict[str, Any]:
 @app.get("/api/market/mt5/status")
 def market_mt5_status() -> dict[str, Any]:
     status = mt5_status()
-    return {"mt5": status}
+    return {"mt5": status, "autosync": mt5_autosync.status}
+
+
+@app.post("/api/market/mt5/sync-now")
+def market_mt5_sync_now() -> dict[str, Any]:
+    """Force immediate MT5 sync (all symbols) — old app did this automatically."""
+    return mt5_autosync.sync_now()
 
 
 @app.post("/api/market/mt5/connect")

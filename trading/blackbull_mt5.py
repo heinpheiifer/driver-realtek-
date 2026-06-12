@@ -372,9 +372,17 @@ def load_blackbull_candles(
     timeframe: str = "M5",
     bars: int = 800,
 ) -> tuple[list[Candle], str, str, dict[str, Any]]:
-    """Load BlackBull candles via MT5, cached CSV, or import folder."""
+    """Load BlackBull candles — cache first, then live MT5 (like old Open Trader)."""
     meta: dict[str, Any] = {"mt5": mt5_status()}
 
+    # 1. Cached / imported data (works on Linux after bridge sync — no error)
+    cached = load_cached_blackbull(symbol=symbol, timeframe=timeframe, bars=bars)
+    if cached:
+        candles, label, path = cached
+        meta["used_cache"] = True
+        return candles, label, path, meta
+
+    # 2. Live MT5 pull when terminal is connected (Windows, same machine as MT5)
     mt5 = _import_mt5()
     if mt5 is not None and (_last_status.get("connected") or connect_mt5()):
         live = fetch_mt5_candles(symbol=symbol, timeframe=timeframe, bars=bars)
@@ -383,16 +391,8 @@ def load_blackbull_candles(
             meta["mt5"]["connected"] = True
             return candles, label, path, meta
 
-    cached = load_cached_blackbull(symbol=symbol, timeframe=timeframe, bars=bars)
-    if cached:
-        candles, label, path = cached
-        meta["used_cache"] = True
-        return candles, label, path, meta
-
     meta["mt5"]["hint"] = (
-        "BlackBull data not connected. On Windows with MT5: run scripts/start_mt5_bridge.bat "
-        "(set MT5_LOGIN, MT5_PASSWORD, MT5_SERVER, OPENTRADER_URL in .env). "
-        "On Linux: bash scripts/setup_blackbull.sh for steps, or import CSV via "
-        "bash scripts/import_blackbull_csv.sh"
+        "No BlackBull data yet. Old app auto-syncs MT5 on startup when MT5 is on the same PC. "
+        "Set MT5_* in .env and restart, or run scripts/mt5_python_bridge.py from Windows."
     )
     return [], "blackbull:unavailable", "", meta
