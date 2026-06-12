@@ -27,6 +27,14 @@ let liveEquity = [];
 let lastOrderflow = null;
 let signalLog = [];
 
+let marketState = {
+  symbol: "BTCUSD",
+  source: "yahoo",
+  timeframe: "M5",
+  csv_path: null,
+  source_label: "",
+};
+
 function $(id) {
   return document.getElementById(id);
 }
@@ -46,6 +54,11 @@ async function api(path, options = {}) {
 function fmtMoney(v) {
   const sign = v >= 0 ? "+" : "";
   return `${sign}$${Number(v).toFixed(2)}`;
+}
+
+function fmtPrice(v) {
+  if (v == null || Number.isNaN(v)) return "—";
+  return v >= 100 ? v.toFixed(2) : v.toFixed(5);
 }
 
 function renderConfigFields(config = {}) {
@@ -74,8 +87,18 @@ function fillStrategyForm(strategy) {
   $("strategySymbol").value = strategy.symbol;
   $("strategyTimeframe").value = strategy.timeframe;
   $("chartSymbol").textContent = strategy.symbol;
+  $("symbolInput").value = strategy.symbol;
+  marketState.symbol = strategy.symbol;
+  marketState.timeframe = strategy.timeframe;
   renderConfigFields(strategy.config);
   $("modeBadge").textContent = strategy.mode;
+  syncTimeframeButtons(strategy.timeframe);
+}
+
+function syncTimeframeButtons(tf) {
+  document.querySelectorAll(".tf").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tf === tf);
+  });
 }
 
 function renderStrategyList() {
@@ -98,6 +121,8 @@ async function loadStrategies() {
   if (!activeStrategyId && strategies.length) {
     activeStrategyId = strategies[0].id;
     fillStrategyForm(strategies[0]);
+  } else if (!strategies.length) {
+    fillStrategyForm({ name: "Swarm Scalper", mode: "paper", symbol: "BTCUSD", timeframe: "M5", config: {} });
   }
   renderStrategyList();
 }
@@ -186,7 +211,7 @@ function drawPriceChart(canvasId, orderflow) {
     const price = priceMax - (priceRange * g) / 5;
     ctx.fillStyle = "#64748b";
     ctx.font = "11px sans-serif";
-    ctx.fillText(price.toFixed(5), width - pad.r + 4, y + 4);
+    ctx.fillText(fmtPrice(price), width - pad.r + 4, y + 4);
   }
 
   const barW = Math.max(2, (plotW / cols.length) * 0.65);
@@ -216,7 +241,7 @@ function drawPriceChart(canvasId, orderflow) {
 
   const last = cols[cols.length - 1];
   if (last) {
-    $("lastPriceLabel").textContent = last.close.toFixed(5);
+    $("lastPriceLabel").textContent = fmtPrice(last.close);
   }
 }
 
@@ -272,7 +297,7 @@ function drawOrderflow(canvasId, orderflow, deltaElId, pocElId) {
     $(deltaElId).className = d >= 0 ? "positive" : "negative";
   }
   if (pocElId && $(pocElId)) {
-    $(pocElId).textContent = orderflow.poc_price ?? "—";
+    $(pocElId).textContent = fmtPrice(orderflow.poc_price);
   }
 }
 
@@ -322,7 +347,7 @@ function appendSignal(signal) {
   feed.innerHTML = signalLog.map((s) => `
     <li class="${typeClass}">
       <span>${s.type}</span>
-      <span>${s.price?.toFixed?.(5) ?? "—"}</span>
+      <span>${fmtPrice(s.price)}</span>
       <span>${s.side ?? ""}</span>
       <span>${s.timestamp ?? ""}</span>
     </li>`).join("");
@@ -332,7 +357,11 @@ function setBookmapLive(live, source) {
   const dot = $("bookmapLiveDot");
   const src = $("bookmapSource");
   if (dot) dot.classList.toggle("live", live);
-  if (src) src.textContent = live ? `Live · ${source || "stream"}` : "waiting for signals…";
+  if (src) {
+    src.textContent = live
+      ? `Live · ${source || "stream"}`
+      : "Waiting for signals… Enable Bookmap export addon or use replay";
+  }
 }
 
 function connectBookmapStream() {
@@ -349,10 +378,12 @@ function connectBookmapStream() {
 }
 
 async function startBookmapReplay() {
+  if (!marketState.csv_path) return;
   try {
+    await api("/api/bookmap/stop", { method: "POST" }).catch(() => {});
     await api("/api/bookmap/start-replay", {
       method: "POST",
-      body: JSON.stringify({ tick_ms: 150, window: 100 }),
+      body: JSON.stringify({ csv_path: marketState.csv_path, tick_ms: 150, window: 100 }),
     });
     setBookmapLive(true, "replay");
     connectBookmapStream();
@@ -361,15 +392,23 @@ async function startBookmapReplay() {
   }
 }
 
-async function loadOrderflowPreview() {
-  try {
-    const flow = await api("/api/orderflow?window=120");
-    renderCharts(flow);
-    $("liveStatus").textContent = "Chart loaded · starting Bookmap order flow…";
-    await startBookmapReplay();
-  } catch (e) {
-    $("liveStatus").textContent = `Load error: ${e.message}`;
-  }
+async function loadMarket() {
+  marketState.symbol = ($("symbolInput")?.value || "BTCUSD").toUpperCase().replace("/", "");
+  marketState.timeframe = $("strategyTimeframe")?.value || "M5";
+  $("chartSymbol").textContent = marketState.symbol;
+  $("strategySymbol").value = marketState.symbol;
+  $("liveStatus").textContent = `Loading ${marketState.symbol} from ${marketState.source}…`;
+
+  const data = await api(
+    `/api/market/candles?symbol=${encodeURIComponent(marketState.symbol)}&source=${marketState.source}&timeframe=${marketState.timeframe}&bars=800&window=120`
+  );
+
+  marketState.csv_path = data.csv_path;
+  marketState.source_label = data.source;
+  $("dataSourceTag").textContent = `${data.source} · ${data.count} bars`;
+  renderCharts(data.orderflow);
+  $("liveStatus").textContent = `${marketState.symbol} ${marketState.timeframe} · ${data.source} · ${fmtPrice(data.last_price)}`;
+  await startBookmapReplay();
 }
 
 function updateLiveDashboard(state) {
@@ -395,13 +434,13 @@ function updateLiveDashboard(state) {
     drawEquity("liveEquityChart", liveEquity);
   }
   if (state.orderflow) renderCharts(state.orderflow);
-  if (state.last_price) $("lastPriceLabel").textContent = Number(state.last_price).toFixed(5);
+  if (state.last_price) $("lastPriceLabel").textContent = fmtPrice(state.last_price);
 
   const pos = state.open_position;
   if (pos) {
     $("openPositionPanel").innerHTML = `
-      <strong>${pos.side.toUpperCase()}</strong> @ ${pos.entry_price.toFixed(5)}<br />
-      SL ${pos.stop_loss.toFixed(5)} · TP ${pos.take_profit.toFixed(5)}<br />
+      <strong>${pos.side.toUpperCase()}</strong> @ ${fmtPrice(pos.entry_price)}<br />
+      SL ${fmtPrice(pos.stop_loss)} · TP ${fmtPrice(pos.take_profit)}<br />
       <span class="${pos.unrealized_pnl >= 0 ? "positive" : "negative"}">${fmtMoney(pos.unrealized_pnl)}</span>`;
   } else {
     $("openPositionPanel").textContent = "No open position";
@@ -422,10 +461,15 @@ function connectStream() {
 
 async function startSession() {
   if (!activeStrategyId) throw new Error("Select a strategy first.");
+  if (!marketState.csv_path) await loadMarket();
   await saveStrategy();
   const state = await api("/api/session/start", {
     method: "POST",
-    body: JSON.stringify({ strategy_id: activeStrategyId, tick_ms: 100 }),
+    body: JSON.stringify({
+      strategy_id: activeStrategyId,
+      csv_path: marketState.csv_path,
+      tick_ms: 100,
+    }),
   });
   updateLiveDashboard(state);
   connectStream();
@@ -451,42 +495,116 @@ async function loadJournal() {
     ["Trades", stats.total_trades, ""],
     ["WR%", `${stats.win_rate_pct}%`, stats.win_rate_pct >= 65 ? "positive" : "negative"],
     ["PnL", fmtMoney(stats.total_pnl), stats.total_pnl >= 0 ? "positive" : "negative"],
+    ["Avg", fmtMoney(stats.avg_pnl), ""],
   ]);
+
+  const tbody = $("journalTable")?.querySelector("tbody");
+  if (tbody) {
+    tbody.innerHTML = (data.trades || []).slice(0, 100).map((t) => `
+      <tr>
+        <td>${(t.exit_time || t.entry_time || "").slice(0, 16)}</td>
+        <td class="${t.side === "long" ? "positive" : "negative"}">${t.side}</td>
+        <td>${fmtPrice(t.entry_price)}</td>
+        <td>${fmtPrice(t.exit_price)}</td>
+        <td class="${t.pnl >= 0 ? "positive" : "negative"}">${fmtMoney(t.pnl)}</td>
+        <td>${t.confidence != null ? `${(t.confidence * 100).toFixed(0)}%` : "—"}</td>
+      </tr>`).join("");
+  }
+}
+
+function renderBacktestResults(result) {
+  const el = $("backtestResults");
+  if (!el) return;
+  const train = result.train || {};
+  const test = result.test || result.result || {};
+  el.innerHTML = `
+    <h3>Backtest Results</h3>
+    <div class="results-grid">
+      <div><span class="muted">Test Return</span><strong class="${test.total_return_pct >= 0 ? "positive" : "negative"}">${test.total_return_pct}%</strong></div>
+      <div><span class="muted">Win Rate</span><strong class="${test.win_rate_pct >= 65 ? "positive" : "negative"}">${test.win_rate_pct}%</strong></div>
+      <div><span class="muted">Trades</span><strong>${test.trades ?? test.trades_count ?? "—"}</strong></div>
+      <div><span class="muted">Max DD</span><strong class="negative">${test.max_drawdown_pct ?? "—"}%</strong></div>
+      <div><span class="muted">Profit Factor</span><strong>${test.profit_factor ?? "—"}</strong></div>
+      <div><span class="muted">Sharpe</span><strong>${test.sharpe ?? "—"}</strong></div>
+    </div>
+    ${train.total_return_pct != null ? `<p class="muted">Train: ${train.total_return_pct}% return · ${train.win_rate_pct}% WR</p>` : ""}
+    <p class="muted">Data: ${marketState.source_label || marketState.csv_path || "—"}</p>`;
+  switchRightTab("backtest");
 }
 
 async function runBacktest() {
+  if (!marketState.csv_path) await loadMarket();
   $("liveStatus").textContent = "Running backtest…";
   const result = await api("/api/backtest", {
     method: "POST",
-    body: JSON.stringify({ strategy_id: activeStrategyId, walk_forward: true }),
+    body: JSON.stringify({
+      strategy_id: activeStrategyId,
+      csv_path: marketState.csv_path,
+      walk_forward: true,
+    }),
   });
-  const test = result.test || result.result;
-  $("liveStatus").textContent = `Backtest: ${test.total_return_pct}% return · ${test.win_rate_pct}% WR`;
-  const flow = await api("/api/orderflow?window=120");
-  renderCharts(flow);
+  renderBacktestResults(result);
+  $("liveStatus").textContent = `Backtest: ${(result.test || result).total_return_pct}% return · ${(result.test || result).win_rate_pct}% WR`;
+  if (result.orderflow) renderCharts(result.orderflow);
+  else {
+    const flow = await api(`/api/orderflow?csv_path=${encodeURIComponent(marketState.csv_path)}&window=120`);
+    renderCharts(flow);
+  }
+}
+
+function renderOptimizerStatus(job) {
+  const el = $("optimizerStatus");
+  if (!el) return;
+  const best = job.best || {};
+  const gates = job.gates || {};
+  el.innerHTML = `
+    <h3>AI Optimizer</h3>
+    <p>Status: <strong class="${job.status === "running" ? "positive" : ""}">${job.status}</strong> · Iteration ${job.iteration ?? 0}</p>
+    <div class="results-grid">
+      <div><span class="muted">Best WR</span><strong class="${(best.win_rate_pct || 0) >= 65 ? "positive" : "negative"}">${best.win_rate_pct ?? "—"}%</strong></div>
+      <div><span class="muted">Best Return</span><strong>${best.total_return_pct ?? "—"}%</strong></div>
+      <div><span class="muted">Target WR</span><strong>${gates.min_win_rate ?? 65}%</strong></div>
+      <div><span class="muted">Gate Met</span><strong class="${job.gate_met ? "positive" : "negative"}">${job.gate_met ? "Yes" : "No"}</strong></div>
+    </div>
+    ${job.message ? `<p class="muted">${job.message}</p>` : ""}`;
+  switchRightTab("optimizer");
 }
 
 async function startOptimizer() {
+  if (!marketState.csv_path) await loadMarket();
   const job = await api("/api/optimizer/start", {
     method: "POST",
     body: JSON.stringify({
+      csv_path: marketState.csv_path,
       max_iterations: 0,
       gates: { min_win_rate: 65, max_test_drawdown: 10, target_test_return: 0.5, min_test_trades: 20 },
     }),
   });
   optimizerJobId = job.id;
+  renderOptimizerStatus(job);
   pollOptimizer();
 }
 
 async function pollOptimizer() {
   if (!optimizerJobId) return;
   const job = await api(`/api/optimizer/jobs/${optimizerJobId}`);
+  renderOptimizerStatus(job);
   if (job.status === "running") {
     optimizerPollTimer = setTimeout(pollOptimizer, 5000);
   }
 }
 
-// Sub-tabs below chart: Heatmap | Signals | Volume
+function switchRightTab(tab) {
+  document.querySelectorAll(".right-tab").forEach((t) => {
+    t.classList.toggle("active", t.dataset.rtab === tab);
+  });
+  ["Settings", "Journal", "Backtest", "Optimizer"].forEach((name) => {
+    const panel = $(`panel${name}`);
+    if (panel) panel.classList.toggle("hidden", tab !== name.toLowerCase());
+  });
+  if (tab === "journal") loadJournal();
+}
+
 document.querySelectorAll(".sub-tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     document.querySelectorAll(".sub-tab").forEach((t) => t.classList.remove("active"));
@@ -498,19 +616,21 @@ document.querySelectorAll(".sub-tab").forEach((tab) => {
   });
 });
 
+document.querySelectorAll(".right-tab").forEach((tab) => {
+  tab.addEventListener("click", () => switchRightTab(tab.dataset.rtab));
+});
+
+document.querySelectorAll(".source-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".source-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    marketState.source = btn.dataset.source;
+  });
+});
+
 $("btnBookmapToggle")?.addEventListener("click", () => {
   $("bookmapPanel")?.classList.toggle("collapsed");
   $("btnBookmapToggle")?.classList.toggle("active");
-});
-
-document.querySelectorAll(".sidebar-tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".sidebar-tab").forEach((t) => t.classList.remove("active"));
-    tab.classList.add("active");
-    $("sidebarResearch")?.classList.toggle("hidden", tab.dataset.stab !== "research");
-    $("sidebarJournal")?.classList.toggle("hidden", tab.dataset.stab !== "journal");
-    if (tab.dataset.stab === "journal") loadJournal();
-  });
 });
 
 document.querySelectorAll(".tf").forEach((btn) => {
@@ -518,7 +638,14 @@ document.querySelectorAll(".tf").forEach((btn) => {
     document.querySelectorAll(".tf").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     $("strategyTimeframe").value = btn.dataset.tf;
+    marketState.timeframe = btn.dataset.tf;
+    loadMarket().catch((e) => { $("liveStatus").textContent = e.message; });
   });
+});
+
+$("loadMarketBtn")?.addEventListener("click", () => loadMarket().catch((e) => alert(e.message)));
+$("symbolInput")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") loadMarket().catch((err) => alert(err.message));
 });
 
 $("saveStrategyBtn")?.addEventListener("click", () => saveStrategy().catch((e) => alert(e.message)));
@@ -528,14 +655,14 @@ $("startSessionBtn")?.addEventListener("click", () => startSession().catch((e) =
 $("stopSessionBtn")?.addEventListener("click", () => stopSession().catch((e) => alert(e.message)));
 $("newStrategyBtn")?.addEventListener("click", () => {
   activeStrategyId = null;
-  fillStrategyForm({ name: "New Strategy", mode: "paper", symbol: "EURUSD", timeframe: "M1", config: {} });
+  fillStrategyForm({ name: "New Strategy", mode: "paper", symbol: marketState.symbol, timeframe: marketState.timeframe, config: {} });
   renderStrategyList();
 });
 
 async function init() {
   await loadStrategies();
   await loadJournal();
-  await loadOrderflowPreview();
+  await loadMarket();
   connectBookmapStream();
   const status = await api("/api/session/status");
   if (status.status && status.status !== "idle") {
@@ -545,8 +672,11 @@ async function init() {
   try {
     const jobs = await api("/api/optimizer/jobs");
     const running = jobs.find((j) => j.status === "running");
-    if (!running) await startOptimizer();
-    else { optimizerJobId = running.id; pollOptimizer(); }
+    if (running) {
+      optimizerJobId = running.id;
+      renderOptimizerStatus(running);
+      pollOptimizer();
+    }
   } catch (_) { /* ignore */ }
   window.addEventListener("resize", () => { if (lastOrderflow) renderCharts(lastOrderflow); });
 }

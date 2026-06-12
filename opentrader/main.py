@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from trading.data import load_candles_from_csv
+from trading.market_data import load_market_candles
 from trading.orderflow import compute_orderflow
 from opentrade.journal import TradeJournal
 from opentrade.live_engine import LivePaperEngine
@@ -34,8 +35,8 @@ bookmap_bridge = BookmapBridge()
 
 app = FastAPI(
     title="OpenTrader",
-    version="1.0.0",
-    description="OpenTrade research engine + Bookmap bridge API. Chart UI may run separately on :8010.",
+    version="2.0.0",
+    description="Unified trading app: chart, Bookmap order flow, strategy, journal, backtest, and AI optimizer.",
 )
 
 app.add_middleware(
@@ -119,15 +120,109 @@ class BookmapReplayRequest(BaseModel):
     window: int = 80
 
 
+class MarketLoadRequest(BaseModel):
+    symbol: str = "BTCUSD"
+    source: str = "yahoo"
+    timeframe: str = "M5"
+    bars: int = 800
+    csv_path: str | None = None
+
+
+def _resolve_csv(
+    *,
+    symbol: str = "BTCUSD",
+    source: str = "yahoo",
+    timeframe: str = "M5",
+    csv_path: str | None = None,
+    bars: int = 800,
+) -> tuple[str, list]:
+    _, _, path = load_market_candles(
+        symbol=symbol,
+        source=source,
+        csv_path=csv_path,
+        bars=bars,
+        timeframe=timeframe,
+    )
+    return path, load_candles_from_csv(Path(path))
+
+
 @app.get("/api/health")
 def health() -> dict[str, Any]:
     return {
         "status": "ok",
         "app": "OpenTrader",
-        "version": "1.0.0",
-        "modules": ["live", "journal", "backtest", "optimizer"],
+        "version": "2.0.0",
+        "modules": ["chart", "bookmap", "live", "journal", "backtest", "optimizer", "market"],
         "engine": "OpenTrade",
+        "unified": True,
     }
+
+
+@app.get("/api/market/sources")
+def market_sources() -> dict[str, Any]:
+    return {
+        "sources": [
+            {"id": "yahoo", "label": "Yahoo Finance"},
+            {"id": "blackbull", "label": "BlackBull Markets"},
+            {"id": "csv", "label": "Local CSV"},
+        ],
+        "default_symbol": "BTCUSD",
+        "default_source": "yahoo",
+    }
+
+
+@app.get("/api/market/candles")
+def market_candles(
+    symbol: str = "BTCUSD",
+    source: str = "yahoo",
+    timeframe: str = "M5",
+    bars: int = 800,
+    csv_path: str | None = None,
+    window: int = 100,
+) -> dict[str, Any]:
+    candles, source_label, path = load_market_candles(
+        symbol=symbol,
+        source=source,
+        csv_path=csv_path,
+        bars=bars,
+        timeframe=timeframe,
+    )
+    if not candles:
+        raise HTTPException(status_code=404, detail=f"No candles for {symbol} ({source})")
+    orderflow = compute_orderflow(candles, window=min(window, len(candles)))
+    last = candles[-1]
+    return {
+        "symbol": symbol.upper(),
+        "source": source_label,
+        "timeframe": timeframe.upper(),
+        "csv_path": path,
+        "count": len(candles),
+        "last_price": last.close,
+        "last_timestamp": last.timestamp,
+        "candles": [
+            {
+                "timestamp": c.timestamp,
+                "open": c.open,
+                "high": c.high,
+                "low": c.low,
+                "close": c.close,
+                "volume": c.volume,
+            }
+            for c in candles[-min(bars, 500) :]
+        ],
+        "orderflow": orderflow,
+    }
+
+
+@app.post("/api/market/load")
+def market_load(payload: MarketLoadRequest) -> dict[str, Any]:
+    return market_candles(
+        symbol=payload.symbol,
+        source=payload.source,
+        timeframe=payload.timeframe,
+        bars=payload.bars,
+        csv_path=payload.csv_path,
+    )
 
 
 @app.get("/api/strategies")
@@ -377,16 +472,22 @@ async def bookmap_stream(request: Request) -> StreamingResponse:
 
 @app.get("/api/orderflow")
 def get_orderflow(
-    csv_path: str = str(DEFAULT_CSV),
+    csv_path: str | None = None,
+    symbol: str = "BTCUSD",
+    source: str = "yahoo",
+    timeframe: str = "M5",
     end_index: int | None = None,
     window: int = 100,
 ) -> dict[str, Any]:
-    path = Path(csv_path)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=f"CSV not found: {path}")
     if live_engine.is_running():
         return live_engine.get_orderflow(window=window)
-    candles = load_candles_from_csv(path)
+    if csv_path:
+        path = Path(csv_path)
+        if not path.exists():
+            raise HTTPException(status_code=404, detail=f"CSV not found: {path}")
+        candles = load_candles_from_csv(path)
+    else:
+        _, candles = _resolve_csv(symbol=symbol, source=source, timeframe=timeframe)
     return compute_orderflow(candles, end_index=end_index, window=window)
 
 

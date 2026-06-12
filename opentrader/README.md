@@ -1,7 +1,9 @@
 # OpenTrader
 
-Unified trading app combining:
+**One app** at **http://127.0.0.1:8010** — chart, Bookmap order flow, strategy, journal, backtest, and AI optimizer together.
 
+- **Chart** — BTCUSD and other symbols via Yahoo / BlackBull / CSV
+- **Bookmap Order Flow** — heatmap panel below the chart (replay or live Bookmap API)
 - **Live Dashboard** — real-time paper PnL and open positions
 - **Trade Journal** — every trade logged with full stats
 - **Strategy Editor** — swarm agent settings (OpenTrade engine)
@@ -18,13 +20,13 @@ From repo root:
 bash install_and_run.sh
 ```
 
-Open **http://127.0.0.1:8010**
-
-Port 8080:
+If port 8010 is already in use:
 
 ```bash
-PORT=8080 bash install_and_run.sh
+FORCE=1 bash install_and_run.sh
 ```
+
+Open **http://127.0.0.1:8010**
 
 ## Manual run
 

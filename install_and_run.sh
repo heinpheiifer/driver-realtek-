@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# OpenTrade one-shot setup + run. Run from repo root:
-#   bash install_and_run.sh
+# Open Trader — unified app (chart + Bookmap + strategy + journal + backtest + optimizer)
+# Run from repo root:  bash install_and_run.sh
+# Force restart on 8010:  FORCE=1 bash install_and_run.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
-echo "==> OpenTrader setup in: $ROOT"
+echo "==> Open Trader unified app setup in: $ROOT"
 
 if ! command -v python3 >/dev/null; then
   echo "python3 not found. Install: sudo apt install python3 python3-pip python3-venv"
@@ -36,21 +37,30 @@ fi
 PORT="${PORT:-8010}"
 HOST="${HOST:-127.0.0.1}"
 
-# If chart UI already on 8010, run research engine on 8011
-if [[ "$PORT" == "8010" ]] && command -v ss >/dev/null && ss -ltn "sport = :8010" 2>/dev/null | grep -q LISTEN; then
-  echo "==> Port 8010 in use (your Open Trader chart app). Starting engine on 8011."
-  PORT=8011
+_port_in_use() {
+  command -v ss >/dev/null && ss -ltn "sport = :${PORT}" 2>/dev/null | grep -q LISTEN
+}
+
+if _port_in_use; then
+  if [[ "${FORCE:-0}" == "1" ]]; then
+    echo "==> Port ${PORT} in use — stopping existing process (FORCE=1) ..."
+    if command -v fuser >/dev/null; then
+      fuser -k "${PORT}/tcp" 2>/dev/null || true
+    elif command -v lsof >/dev/null; then
+      lsof -ti ":${PORT}" | xargs -r kill -9 2>/dev/null || true
+    fi
+    sleep 1
+  else
+    echo ""
+    echo "Port ${PORT} is already in use."
+    echo "  FORCE=1 bash install_and_run.sh   # stop old app and start unified Open Trader"
+    echo "  PORT=8011 bash install_and_run.sh # use alternate port"
+    exit 1
+  fi
 fi
 
-if command -v ss >/dev/null && ss -ltn "sport = :${PORT}" 2>/dev/null | grep -q LISTEN; then
-  echo ""
-  echo "ERROR: Port ${PORT} is already in use."
-  echo "  PORT=8012 bash install_and_run.sh"
-  exit 1
-fi
-
-echo "==> Starting OpenTrade engine at http://${HOST}:${PORT}"
-echo "    Your chart UI can stay on :8010 — point it at this API."
-echo "    See opentrader/INTEGRATION.md"
+echo ""
+echo "==> Starting unified Open Trader at http://${HOST}:${PORT}"
+echo "    Chart · Bookmap · Strategy · Journal · Backtest · Optimizer — all in one"
 echo "    Press Ctrl+C to stop."
 exec python -m uvicorn opentrader.main:app --host "$HOST" --port "$PORT"

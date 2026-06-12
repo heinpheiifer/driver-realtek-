@@ -10,17 +10,26 @@
   <header class="topbar">
     <div class="brand">
       <h1>Open Trader</h1>
-      <span id="chartSymbol" class="symbol-badge">EURUSD</span>
+      <span id="chartSymbol" class="symbol-badge">BTCUSD</span>
+    </div>
+    <div class="symbol-bar">
+      <input id="symbolInput" type="text" value="BTCUSD" placeholder="Symbol" />
+      <div class="source-group" id="sourceGroup">
+        <button class="source-btn active" data-source="yahoo">Yahoo</button>
+        <button class="source-btn" data-source="blackbull">BlackBull</button>
+        <button class="source-btn" data-source="csv">CSV</button>
+      </div>
+      <button id="loadMarketBtn" class="toolbar-btn">Load</button>
     </div>
     <div class="toolbar">
       <div class="tf-group" id="timeframeGroup">
-        <button class="tf active" data-tf="M1">1m</button>
-        <button class="tf" data-tf="M5">5m</button>
+        <button class="tf" data-tf="M1">1m</button>
+        <button class="tf active" data-tf="M5">5m</button>
         <button class="tf" data-tf="M15">15m</button>
         <button class="tf" data-tf="H1">1h</button>
       </div>
       <button class="toolbar-btn active" id="btnCandles">Candles</button>
-      <button class="toolbar-btn" id="btnBookmapToggle">Bookmap</button>
+      <button class="toolbar-btn active" id="btnBookmapToggle">Bookmap</button>
     </div>
     <div class="header-stats">
       <div class="live-pnl" id="headerPnl">$0.00</div>
@@ -37,29 +46,21 @@
         <button id="newStrategyBtn" class="secondary">New</button>
         <button id="saveStrategyBtn" class="secondary">Save</button>
       </div>
-      <div class="sidebar-tabs">
-        <button class="sidebar-tab active" data-stab="research">Research</button>
-        <button class="sidebar-tab" data-stab="journal">Journal</button>
-      </div>
-      <div id="sidebarResearch">
+      <div class="sidebar-actions">
         <button id="startSessionBtn" class="success full-width">Start Session</button>
         <button id="stopSessionBtn" class="secondary full-width">Stop</button>
         <button id="runBacktestBtn" class="secondary full-width">Backtest</button>
         <button id="startOptimizerBtn" class="secondary full-width">Optimizer</button>
       </div>
-      <div id="sidebarJournal" class="hidden">
-        <div class="mini-metrics" id="journalStatsMini"></div>
-      </div>
     </aside>
 
     <section class="chart-terminal">
-      <!-- Main price chart -->
       <div class="chart-main">
         <canvas id="priceChart"></canvas>
         <div class="chart-overlay-price" id="lastPriceLabel">—</div>
+        <div class="data-source-tag" id="dataSourceTag">yahoo · loading…</div>
       </div>
 
-      <!-- Bookmap order flow BELOW chart -->
       <div class="bookmap-panel" id="bookmapPanel">
         <div class="bookmap-header">
           <div class="bookmap-title">
@@ -100,7 +101,6 @@
         </div>
       </div>
 
-      <!-- Bottom strip: equity + position -->
       <div class="bottom-strip">
         <div class="strip-item">
           <label>Equity</label>
@@ -112,25 +112,55 @@
         </div>
         <div class="strip-item metrics-compact" id="liveMetrics"></div>
       </div>
-      <div class="status-line" id="liveStatus">Loading chart…</div>
+      <div class="status-line" id="liveStatus">Loading market data…</div>
     </section>
-  </main>
 
-  <!-- Hidden panels for strategy config / backtest / optimizer (modal-style) -->
-  <dialog id="settingsDialog">
-    <h2>Strategy Settings</h2>
-    <div class="grid-2">
-      <div><label>Name</label><input id="strategyName" /></div>
-      <div>
-        <label>Mode</label>
-        <select id="strategyMode"><option value="paper">Paper</option><option value="live">Live</option></select>
+    <aside class="panel right-panel">
+      <div class="right-tabs">
+        <button class="right-tab active" data-rtab="settings">Settings</button>
+        <button class="right-tab" data-rtab="journal">Journal</button>
+        <button class="right-tab" data-rtab="backtest">Backtest</button>
+        <button class="right-tab" data-rtab="optimizer">Optimizer</button>
       </div>
-      <div><label>Symbol</label><input id="strategySymbol" value="EURUSD" /></div>
-      <div><label>Timeframe</label><input id="strategyTimeframe" value="M1" /></div>
-    </div>
-    <div class="grid-2" id="configFields"></div>
-    <div class="actions"><button id="closeSettingsBtn">Close</button></div>
-  </dialog>
+
+      <div id="panelSettings" class="right-panel-body">
+        <div class="grid-2">
+          <div><label>Name</label><input id="strategyName" /></div>
+          <div>
+            <label>Mode</label>
+            <select id="strategyMode"><option value="paper">Paper</option><option value="live">Live</option></select>
+          </div>
+          <div><label>Symbol</label><input id="strategySymbol" value="BTCUSD" /></div>
+          <div><label>Timeframe</label><input id="strategyTimeframe" value="M5" /></div>
+        </div>
+        <div class="grid-2" id="configFields"></div>
+      </div>
+
+      <div id="panelJournal" class="right-panel-body hidden">
+        <div class="mini-metrics" id="journalStatsMini"></div>
+        <div class="table-wrap">
+          <table class="data-table" id="journalTable">
+            <thead>
+              <tr><th>Time</th><th>Side</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Conf</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="panelBacktest" class="right-panel-body hidden">
+        <div id="backtestResults" class="results-panel">
+          <p class="muted">Run a backtest from the sidebar to see results here.</p>
+        </div>
+      </div>
+
+      <div id="panelOptimizer" class="right-panel-body hidden">
+        <div id="optimizerStatus" class="results-panel">
+          <p class="muted">Optimizer runs until 65%+ win rate is reached.</p>
+        </div>
+      </div>
+    </aside>
+  </main>
 
   <script src="/static/app.js"></script>
 </body>
