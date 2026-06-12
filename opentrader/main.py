@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from trading.data import load_candles_from_csv
 from trading.orderflow import compute_orderflow
+from opentrade.journal import TradeJournal
 from opentrade.live_engine import LivePaperEngine
 from opentrade.services import BacktestService, OptimizerService
 from opentrade.store import StrategyStore
