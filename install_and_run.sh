@@ -36,25 +36,21 @@ fi
 PORT="${PORT:-8010}"
 HOST="${HOST:-127.0.0.1}"
 
+# If chart UI already on 8010, run research engine on 8011
+if [[ "$PORT" == "8010" ]] && command -v ss >/dev/null && ss -ltn "sport = :8010" 2>/dev/null | grep -q LISTEN; then
+  echo "==> Port 8010 in use (your Open Trader chart app). Starting engine on 8011."
+  PORT=8011
+fi
+
 if command -v ss >/dev/null && ss -ltn "sport = :${PORT}" 2>/dev/null | grep -q LISTEN; then
   echo ""
-  echo "ERROR: Port ${PORT} is already in use (another OpenTrader instance is running)."
-  echo ""
-  echo "Stop the old instance, then run this script again:"
-  echo "  pkill -f 'uvicorn opentrader.main'"
-  echo "  pkill -f 'uvicorn opentrade.main'"
-  echo "  bash install_and_run.sh"
-  echo ""
-  echo "Or find what's using the port:"
-  echo "  ss -ltnp | grep :${PORT}"
-  echo "  kill <PID>"
-  echo ""
-  echo "Or use a different port:"
-  echo "  PORT=8080 bash install_and_run.sh"
+  echo "ERROR: Port ${PORT} is already in use."
+  echo "  PORT=8012 bash install_and_run.sh"
   exit 1
 fi
 
-echo "==> Starting OpenTrader at http://${HOST}:${PORT}"
-echo "    (includes OpenTrade backtest + optimizer engine)"
+echo "==> Starting OpenTrade engine at http://${HOST}:${PORT}"
+echo "    Your chart UI can stay on :8010 — point it at this API."
+echo "    See opentrader/INTEGRATION.md"
 echo "    Press Ctrl+C to stop."
 exec python -m uvicorn opentrader.main:app --host "$HOST" --port "$PORT"

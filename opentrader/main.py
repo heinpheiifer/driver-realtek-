@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -18,6 +19,8 @@ from opentrade.live_engine import LivePaperEngine
 from opentrade.services import BacktestService, OptimizerService
 from opentrade.store import StrategyStore
 
+from .bookmap_bridge import BookmapBridge
+
 APP_ROOT = Path(__file__).resolve().parent
 DATA_ROOT = Path(os.environ.get("OPENTRADER_DATA", "opentrader_data"))
 DEFAULT_CSV = Path("trading_data/eurusd_m1.csv")
@@ -27,11 +30,25 @@ journal = TradeJournal(DATA_ROOT / "journal.db")
 backtest_service = BacktestService()
 optimizer_service = OptimizerService()
 live_engine = LivePaperEngine(journal)
+bookmap_bridge = BookmapBridge()
 
 app = FastAPI(
     title="OpenTrader",
     version="1.0.0",
-    description="Unified trading app: live PnL, journal, backtesting, and AI optimizer (OpenTrade engine).",
+    description="OpenTrade research engine + Bookmap bridge API. Chart UI may run separately on :8010.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:8010",
+        "http://localhost:8010",
+        "http://127.0.0.1:8080",
+        "http://localhost:8080",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -85,6 +102,21 @@ class LiveSessionRequest(BaseModel):
     initial_balance: float = 10_000.0
     tick_ms: int = 150
     start_index: int = 0
+
+
+class BookmapEventPayload(BaseModel):
+    type: str
+    timestamp: str | None = None
+    price: float | None = None
+    size: float | None = None
+    delta: float = 0.0
+    side: str | None = None
+
+
+class BookmapReplayRequest(BaseModel):
+    csv_path: str = str(DEFAULT_CSV)
+    tick_ms: int = 200
+    window: int = 80
 
 
 @app.get("/api/health")
@@ -284,6 +316,63 @@ def get_run(run_id: str) -> dict[str, Any]:
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
     return run
+
+
+@app.get("/api/bookmap/status")
+def bookmap_status() -> dict[str, Any]:
+    return bookmap_bridge.status
+
+
+@app.get("/api/bookmap/signals")
+def bookmap_signals(limit: int = 100) -> dict[str, Any]:
+    return {"signals": bookmap_bridge.get_signals(limit=limit), **bookmap_bridge.status}
+
+
+@app.post("/api/bookmap/event")
+def bookmap_ingest_event(payload: BookmapEventPayload) -> dict[str, Any]:
+    bookmap_bridge.ingest_bookmap_event(payload.model_dump())
+    return bookmap_bridge.status
+
+
+@app.post("/api/bookmap/start-replay")
+def bookmap_start_replay(payload: BookmapReplayRequest) -> dict[str, Any]:
+    path = Path(payload.csv_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"CSV not found: {path}")
+    bookmap_bridge.start_replay(
+        csv_path=str(path),
+        tick_ms=payload.tick_ms,
+        window=payload.window,
+    )
+    return bookmap_bridge.status
+
+
+@app.post("/api/bookmap/stop")
+def bookmap_stop() -> dict[str, Any]:
+    bookmap_bridge.stop()
+    return bookmap_bridge.status
+
+
+@app.get("/api/bookmap/stream")
+async def bookmap_stream(request: Request) -> StreamingResponse:
+    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+    bookmap_bridge.subscribe(lambda payload: queue.put_nowait(payload))
+
+    async def generate():
+        try:
+            yield f"data: {json.dumps({'event': 'snapshot', **bookmap_bridge.status})}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    yield f"data: {json.dumps(payload)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            pass
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @app.get("/api/orderflow")
