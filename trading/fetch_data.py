@@ -48,7 +48,7 @@ def _generate_realistic_ohlcv(
         regime_bars_left -= 1
         shock = float(rng.normal(drift, vol))
         if regime == "range":
-            shock -= (price - start_price) * 0.015
+            shock -= ((price / start_price) - 1.0) * 0.05
 
         open_price = price
         close_price = max(0.5, open_price * (1.0 + shock))

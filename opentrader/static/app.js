@@ -108,10 +108,11 @@ function renderStrategyList() {
       <strong>${s.name}</strong><br /><small>${s.symbol} ${s.timeframe}</small>
     </div>`).join("");
   list.querySelectorAll(".strategy-item").forEach((item) => {
-    item.addEventListener("click", () => {
+    item.addEventListener("click", async () => {
       activeStrategyId = item.dataset.id;
       fillStrategyForm(strategies.find((r) => r.id === activeStrategyId));
       renderStrategyList();
+      await loadMarket().catch((e) => { $("liveStatus").textContent = e.message; });
     });
   });
 }
@@ -397,6 +398,7 @@ async function loadMarket() {
   marketState.timeframe = $("strategyTimeframe")?.value || "M5";
   $("chartSymbol").textContent = marketState.symbol;
   $("strategySymbol").value = marketState.symbol;
+  syncTimeframeButtons(marketState.timeframe);
   $("liveStatus").textContent = `Loading ${marketState.symbol} from ${marketState.source}…`;
 
   const data = await api(
@@ -405,9 +407,17 @@ async function loadMarket() {
 
   marketState.csv_path = data.csv_path;
   marketState.source_label = data.source;
-  $("dataSourceTag").textContent = `${data.source} · ${data.count} bars`;
+  const tag = $("dataSourceTag");
+  if (tag) {
+    tag.textContent = `${data.source} · ${data.count} bars`;
+    tag.classList.toggle("synthetic-warning", !!data.is_synthetic);
+  }
   renderCharts(data.orderflow);
-  $("liveStatus").textContent = `${marketState.symbol} ${marketState.timeframe} · ${data.source} · ${fmtPrice(data.last_price)}`;
+  let status = `${marketState.symbol} ${marketState.timeframe} · ${data.source} · ${fmtPrice(data.last_price)}`;
+  if (data.is_synthetic) {
+    status += " · ⚠ synthetic fallback — check network or try Yahoo";
+  }
+  $("liveStatus").textContent = status;
   await startBookmapReplay();
 }
 
@@ -661,6 +671,10 @@ $("newStrategyBtn")?.addEventListener("click", () => {
 
 async function init() {
   await loadStrategies();
+  marketState.symbol = ($("symbolInput")?.value || "BTCUSD").toUpperCase();
+  marketState.timeframe = document.querySelector(".tf.active")?.dataset.tf || "M5";
+  $("strategySymbol").value = marketState.symbol;
+  $("strategyTimeframe").value = marketState.timeframe;
   await loadJournal();
   await loadMarket();
   connectBookmapStream();

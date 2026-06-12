@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from .data import load_candles_from_csv
 from .fetch_data import _generate_realistic_ohlcv, save_ohlcv_csv
 from .models import Candle
+
+logger = logging.getLogger(__name__)
 
 TIMEFRAME_YAHOO = {
     "M1": ("5d", "1m"),
@@ -44,6 +47,61 @@ def _yahoo_ticker(symbol: str) -> str:
     return symbol
 
 
+def _flatten_yahoo_columns(data):
+    import pandas as pd
+
+    if isinstance(data.columns, pd.MultiIndex):
+        data = data.copy()
+        data.columns = data.columns.get_level_values(0)
+    return data
+
+
+def _scalar(value) -> float:
+    if hasattr(value, "iloc"):
+        return float(value.iloc[0])
+    return float(value)
+
+
+def _fetch_yahoo_candles(
+    *,
+    symbol: str,
+    timeframe: str,
+    bars: int,
+) -> tuple[list[Candle], str, str] | None:
+    try:
+        import yfinance as yf
+
+        ticker = _yahoo_ticker(symbol)
+        tf = timeframe.upper()
+        period, interval = TIMEFRAME_YAHOO.get(tf, ("5d", "5m"))
+        data = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
+        if data is None or data.empty:
+            return None
+
+        data = _flatten_yahoo_columns(data)
+        candles: list[Candle] = []
+        for ts, row in data.iterrows():
+            candles.append(
+                Candle(
+                    timestamp=str(ts)[:19],
+                    open=_scalar(row["Open"]),
+                    high=_scalar(row["High"]),
+                    low=_scalar(row["Low"]),
+                    close=_scalar(row["Close"]),
+                    volume=_scalar(row["Volume"]) if "Volume" in row else 0.0,
+                )
+            )
+        if not candles:
+            return None
+
+        out = Path("trading_data") / f"{symbol.lower()}_{tf.lower()}_yahoo.csv"
+        save_ohlcv_csv(out, _candles_to_dict(candles, len(candles)))
+        return candles[-bars:], f"yahoo:{ticker}", str(out)
+    except Exception as exc:
+        logger.warning("Yahoo fetch failed for %s: %s", symbol, exc)
+        return None
+
+
 def load_market_candles(
     *,
     symbol: str = "BTCUSD",
@@ -67,32 +125,13 @@ def load_market_candles(
             if candles:
                 return candles[-bars:], f"csv:{path.name}", str(path)
 
-    if source == "yahoo":
-        try:
-            import yfinance as yf
-
-            ticker = _yahoo_ticker(symbol)
-            period, interval = TIMEFRAME_YAHOO.get(tf, ("5d", "5m"))
-            data = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
-            if data is not None and not data.empty:
-                candles: list[Candle] = []
-                for ts, row in data.iterrows():
-                    candles.append(
-                        Candle(
-                            timestamp=str(ts)[:19],
-                            open=float(row["Open"]),
-                            high=float(row["High"]),
-                            low=float(row["Low"]),
-                            close=float(float(row["Close"])),
-                            volume=float(row.get("Volume", 0) or 0),
-                        )
-                    )
-                if candles:
-                    out = Path("trading_data") / f"{symbol.lower()}_{tf.lower()}_yahoo.csv"
-                    save_ohlcv_csv(out, _candles_to_dict(candles, len(candles)))
-                    return candles[-bars:], f"yahoo:{ticker}", str(out)
-        except Exception:
-            pass
+    if source in ("yahoo", "blackbull"):
+        yahoo = _fetch_yahoo_candles(symbol=symbol, timeframe=tf, bars=bars)
+        if yahoo:
+            candles, label, path = yahoo
+            if source == "blackbull":
+                return candles, f"blackbull:yahoo({label.split(':', 1)[-1]})", path
+            return candles, label, path
 
     if source == "blackbull":
         cached = Path("trading_data") / f"{symbol.lower()}_{tf.lower()}_blackbull.csv"

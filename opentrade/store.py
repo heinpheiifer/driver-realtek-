@@ -8,8 +8,8 @@ from typing import Any
 
 DEFAULT_STRATEGY = {
     "name": "Swarm Scalper Default",
-    "symbol": "EURUSD",
-    "timeframe": "M1",
+    "symbol": "BTCUSD",
+    "timeframe": "M5",
     "mode": "paper",
     "config": {
         "risk_per_trade": 0.0075,

@@ -132,6 +132,10 @@ body {
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
 }
+.data-source-tag.synthetic-warning {
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+}
 
 .right-panel {
   border-left: 1px solid var(--border);

@@ -191,9 +191,12 @@ def market_candles(
         raise HTTPException(status_code=404, detail=f"No candles for {symbol} ({source})")
     orderflow = compute_orderflow(candles, window=min(window, len(candles)))
     last = candles[-1]
+    is_synthetic = source_label.startswith("synthetic:")
     return {
         "symbol": symbol.upper(),
         "source": source_label,
+        "requested_source": source.lower(),
+        "is_synthetic": is_synthetic,
         "timeframe": timeframe.upper(),
         "csv_path": path,
         "count": len(candles),
