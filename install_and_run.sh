@@ -68,19 +68,50 @@ _port_in_use() {
   command -v ss >/dev/null && ss -ltn "sport = :${PORT}" 2>/dev/null | grep -q LISTEN
 }
 
-if _port_in_use; then
-  if [[ "${FORCE:-0}" == "1" ]]; then
-    echo "==> Port ${PORT} in use — stopping (FORCE=1) ..."
+_free_port() {
+  local tries=12
+  echo "==> Port ${PORT} in use — stopping existing Open Trader (FORCE=1) ..."
+  pkill -f "uvicorn opentrader.main" 2>/dev/null || true
+  pkill -f "uvicorn opentrade.main" 2>/dev/null || true
+  sleep 1
+
+  while (( tries > 0 )); do
+    if ! _port_in_use; then
+      echo "==> Port ${PORT} is free."
+      return 0
+    fi
     if command -v fuser >/dev/null; then
       fuser -k "${PORT}/tcp" 2>/dev/null || true
-    elif command -v lsof >/dev/null; then
-      lsof -ti ":${PORT}" | xargs -r kill -9 2>/dev/null || true
+    fi
+    if command -v lsof >/dev/null; then
+      lsof -ti ":${PORT}" 2>/dev/null | xargs -r kill -9 2>/dev/null || true
     fi
     sleep 1
+    tries=$((tries - 1))
+  done
+
+  if _port_in_use; then
+    echo ""
+    echo "ERROR: Port ${PORT} still in use. Another process is holding it."
+    if command -v ss >/dev/null; then
+      ss -ltnp "sport = :${PORT}" 2>/dev/null || true
+    fi
+    echo ""
+    echo "Stop it manually, then retry:"
+    echo "  bash scripts/stop_opentrader.sh"
+    echo "  FORCE=1 bash run.sh"
+    exit 1
+  fi
+}
+
+if _port_in_use; then
+  if [[ "${FORCE:-0}" == "1" ]]; then
+    _free_port
   else
     echo ""
     echo "Port ${PORT} is already in use."
     echo "  FORCE=1 bash install_and_run.sh"
+    echo "  bash scripts/stop_opentrader.sh && bash run.sh"
     exit 1
   fi
 fi
