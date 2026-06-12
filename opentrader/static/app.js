@@ -22,8 +22,10 @@ let activeStrategyId = null;
 let optimizerJobId = null;
 let optimizerPollTimer = null;
 let eventSource = null;
+let bookmapSource = null;
 let liveEquity = [];
 let lastOrderflow = null;
+let signalLog = [];
 
 function $(id) {
   return document.getElementById(id);
@@ -47,7 +49,9 @@ function fmtMoney(v) {
 }
 
 function renderConfigFields(config = {}) {
-  $("configFields").innerHTML = CONFIG_FIELDS.map(([key, label, fallback]) => {
+  const el = $("configFields");
+  if (!el) return;
+  el.innerHTML = CONFIG_FIELDS.map(([key, label, fallback]) => {
     const value = config[key] ?? fallback;
     const step = Number.isInteger(fallback) ? 1 : 0.01;
     return `<div><label>${label}</label><input data-config-key="${key}" type="number" step="${step}" value="${value}" /></div>`;
@@ -69,15 +73,16 @@ function fillStrategyForm(strategy) {
   $("strategyMode").value = strategy.mode;
   $("strategySymbol").value = strategy.symbol;
   $("strategyTimeframe").value = strategy.timeframe;
+  $("chartSymbol").textContent = strategy.symbol;
   renderConfigFields(strategy.config);
-  $("modeBadge").textContent = `${strategy.mode} mode`;
+  $("modeBadge").textContent = strategy.mode;
 }
 
 function renderStrategyList() {
   const list = $("strategyList");
   list.innerHTML = strategies.map((s) => `
     <div class="strategy-item ${s.id === activeStrategyId ? "active" : ""}" data-id="${s.id}">
-      <strong>${s.name}</strong><br /><small>${s.symbol} ${s.timeframe} · ${s.mode}</small>
+      <strong>${s.name}</strong><br /><small>${s.symbol} ${s.timeframe}</small>
     </div>`).join("");
   list.querySelectorAll(".strategy-item").forEach((item) => {
     item.addEventListener("click", () => {
@@ -110,34 +115,37 @@ async function saveStrategy() {
     }),
   });
   activeStrategyId = saved.id;
+  $("chartSymbol").textContent = saved.symbol;
   await loadStrategies();
 }
 
 function renderMetricCards(containerId, rows) {
-  $(containerId).innerHTML = rows.map(([label, value, cls]) =>
-    `<div class="metric"><div class="label">${label}</div><div class="value ${cls || ""}">${value}</div></div>`
+  const el = $(containerId);
+  if (!el) return;
+  el.innerHTML = rows.map(([label, value, cls]) =>
+    `<div><span class="muted">${label}</span> <strong class="${cls || ""}">${value}</strong></div>`
   ).join("");
 }
 
 function drawEquity(canvasId, curve) {
   const canvas = $(canvasId);
-  if (!canvas) return;
+  if (!canvas || !curve?.length) return;
   const ctx = canvas.getContext("2d");
-  const width = canvas.clientWidth || 600;
-  const height = canvas.clientHeight || 220;
+  const width = canvas.clientWidth || 300;
+  const height = canvas.clientHeight || 70;
   canvas.width = width;
   canvas.height = height;
   ctx.clearRect(0, 0, width, height);
-  if (!curve || curve.length < 2) return;
+  if (curve.length < 2) return;
   const min = Math.min(...curve);
   const max = Math.max(...curve);
   const range = Math.max(1, max - min);
-  ctx.strokeStyle = "#4f8cff";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = "#3b82f6";
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
   curve.forEach((value, index) => {
-    const x = (index / (curve.length - 1)) * (width - 20) + 10;
-    const y = height - 10 - ((value - min) / range) * (height - 20);
+    const x = (index / (curve.length - 1)) * (width - 8) + 4;
+    const y = height - 4 - ((value - min) / range) * (height - 8);
     if (index === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   });
@@ -148,14 +156,14 @@ function drawPriceChart(canvasId, orderflow) {
   const canvas = $(canvasId);
   if (!canvas || !orderflow?.columns?.length) return;
   const ctx = canvas.getContext("2d");
-  const width = canvas.clientWidth || 600;
-  const height = canvas.clientHeight || 260;
+  const width = canvas.clientWidth || 800;
+  const height = canvas.clientHeight || 320;
   canvas.width = width;
   canvas.height = height;
   ctx.clearRect(0, 0, width, height);
 
   const cols = orderflow.columns;
-  const pad = { l: 52, r: 12, t: 12, b: 22 };
+  const pad = { l: 56, r: 70, t: 16, b: 28 };
   const plotW = width - pad.l - pad.r;
   const plotH = height - pad.t - pad.b;
   const priceMin = orderflow.price_min;
@@ -165,47 +173,50 @@ function drawPriceChart(canvasId, orderflow) {
   const xAt = (i) => pad.l + (i / Math.max(1, cols.length - 1)) * plotW;
   const yAt = (p) => pad.t + plotH - ((p - priceMin) / priceRange) * plotH;
 
-  ctx.strokeStyle = "#24314f";
-  ctx.lineWidth = 1;
-  for (let g = 0; g <= 4; g++) {
-    const y = pad.t + (plotH * g) / 4;
+  ctx.fillStyle = "#0a0e14";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = "#1e293b";
+  for (let g = 0; g <= 5; g++) {
+    const y = pad.t + (plotH * g) / 5;
     ctx.beginPath();
     ctx.moveTo(pad.l, y);
     ctx.lineTo(width - pad.r, y);
     ctx.stroke();
-    const price = priceMax - (priceRange * g) / 4;
-    ctx.fillStyle = "#93a4c7";
-    ctx.font = "10px sans-serif";
-    ctx.fillText(price.toFixed(5), 4, y + 3);
+    const price = priceMax - (priceRange * g) / 5;
+    ctx.fillStyle = "#64748b";
+    ctx.font = "11px sans-serif";
+    ctx.fillText(price.toFixed(5), width - pad.r + 4, y + 4);
   }
 
-  const barW = Math.max(2, plotW / cols.length * 0.6);
+  const barW = Math.max(2, (plotW / cols.length) * 0.65);
   cols.forEach((col, i) => {
-    const x = xAt(i) - barW / 2;
     const bullish = col.close >= col.open;
-    const bodyTop = yAt(Math.max(col.open, col.close));
-    const bodyBot = yAt(Math.min(col.open, col.close));
-    const wickTop = yAt(col.high);
-    const wickBot = yAt(col.low);
-    ctx.strokeStyle = bullish ? "#22c997" : "#ff6b6b";
-    ctx.fillStyle = bullish ? "rgba(34,201,151,0.85)" : "rgba(255,107,107,0.85)";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = bullish ? "#22c997" : "#ef4444";
+    ctx.fillStyle = bullish ? "rgba(34,201,151,0.9)" : "rgba(239,68,68,0.9)";
     ctx.beginPath();
-    ctx.moveTo(xAt(i), wickTop);
-    ctx.lineTo(xAt(i), wickBot);
+    ctx.moveTo(xAt(i), yAt(col.high));
+    ctx.lineTo(xAt(i), yAt(col.low));
     ctx.stroke();
-    ctx.fillRect(x, bodyTop, barW, Math.max(1, bodyBot - bodyTop));
+    const top = yAt(Math.max(col.open, col.close));
+    const bot = yAt(Math.min(col.open, col.close));
+    ctx.fillRect(xAt(i) - barW / 2, top, barW, Math.max(1, bot - top));
   });
 
   if (orderflow.poc_price) {
     const pocY = yAt(orderflow.poc_price);
-    ctx.strokeStyle = "rgba(255, 200, 80, 0.8)";
-    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = "rgba(251,191,36,0.7)";
+    ctx.setLineDash([5, 4]);
     ctx.beginPath();
     ctx.moveTo(pad.l, pocY);
     ctx.lineTo(width - pad.r, pocY);
     ctx.stroke();
     ctx.setLineDash([]);
+  }
+
+  const last = cols[cols.length - 1];
+  if (last) {
+    $("lastPriceLabel").textContent = last.close.toFixed(5);
   }
 }
 
@@ -213,28 +224,27 @@ function drawOrderflow(canvasId, orderflow, deltaElId, pocElId) {
   const canvas = $(canvasId);
   if (!canvas || !orderflow?.columns?.length) return;
   const ctx = canvas.getContext("2d");
-  const width = canvas.clientWidth || 600;
-  const height = canvas.clientHeight || 200;
+  const width = canvas.clientWidth || 800;
+  const height = canvas.clientHeight || 160;
   canvas.width = width;
   canvas.height = height;
   ctx.clearRect(0, 0, width, height);
 
   const cols = orderflow.columns;
   const bins = orderflow.bins;
-  const pad = { l: 52, r: 12, t: 8, b: 8 };
+  const pad = { l: 56, r: 12, t: 6, b: 6 };
   const plotW = width - pad.l - pad.r;
   const plotH = height - pad.t - pad.b;
   const priceMin = orderflow.price_min;
   const priceMax = orderflow.price_max;
   const priceRange = Math.max(1e-9, priceMax - priceMin);
 
-  let maxVol = 0;
+  let maxVol = 1e-9;
   cols.forEach((col) => {
     for (let b = 0; b < bins; b++) {
       maxVol = Math.max(maxVol, (col.buy[b] || 0) + (col.sell[b] || 0));
     }
   });
-  maxVol = Math.max(maxVol, 1e-9);
 
   const colW = plotW / cols.length;
   const binH = plotH / bins;
@@ -249,49 +259,117 @@ function drawOrderflow(canvasId, orderflow, deltaElId, pocElId) {
       const price = priceMin + (b + 0.5) * (priceRange / bins);
       const y = pad.t + plotH - ((price - priceMin) / priceRange) * plotH - binH;
       const intensity = Math.min(1, total / maxVol);
-      if (buy >= sell) {
-        ctx.fillStyle = `rgba(34, 201, 151, ${0.15 + intensity * 0.75})`;
-      } else {
-        ctx.fillStyle = `rgba(255, 107, 107, ${0.15 + intensity * 0.75})`;
-      }
+      ctx.fillStyle = buy >= sell
+        ? `rgba(34, 201, 151, ${0.12 + intensity * 0.82})`
+        : `rgba(239, 68, 68, ${0.12 + intensity * 0.82})`;
       ctx.fillRect(x, y, Math.max(1, colW - 0.5), Math.max(1, binH - 0.5));
     }
   });
 
-  ctx.fillStyle = "#93a4c7";
-  ctx.font = "10px sans-serif";
-  for (let g = 0; g <= 4; g++) {
-    const price = priceMax - (priceRange * g) / 4;
-    const y = pad.t + (plotH * g) / 4;
-    ctx.fillText(price.toFixed(5), 4, y + 3);
-  }
-
   if (deltaElId && $(deltaElId)) {
     const d = orderflow.delta || 0;
-    $(deltaElId).textContent = `Delta: ${d >= 0 ? "+" : ""}${d}`;
-    $(deltaElId).className = d >= 0 ? "legend-buy" : "legend-sell";
+    $(deltaElId).textContent = d >= 0 ? `+${d}` : `${d}`;
+    $(deltaElId).className = d >= 0 ? "positive" : "negative";
   }
   if (pocElId && $(pocElId)) {
-    $(pocElId).textContent = `POC: ${orderflow.poc_price ?? "—"}`;
+    $(pocElId).textContent = orderflow.poc_price ?? "—";
   }
 }
 
-function renderCharts(orderflow, prefix = "") {
+function drawVolumeChart(orderflow) {
+  const canvas = $("volumeChart");
+  if (!canvas || !orderflow?.columns?.length) return;
+  const ctx = canvas.getContext("2d");
+  const width = canvas.clientWidth || 800;
+  const height = canvas.clientHeight || 160;
+  canvas.width = width;
+  canvas.height = height;
+  ctx.clearRect(0, 0, width, height);
+
+  const cols = orderflow.columns;
+  const volumes = cols.map((c) => (c.buy || []).reduce((a, b) => a + b, 0) + (c.sell || []).reduce((a, b) => a + b, 0));
+  const maxV = Math.max(...volumes, 1);
+  const barW = (width - 20) / cols.length;
+
+  cols.forEach((col, i) => {
+    const v = volumes[i];
+    const h = (v / maxV) * (height - 20);
+    const bullish = col.close >= col.open;
+    ctx.fillStyle = bullish ? "rgba(34,201,151,0.7)" : "rgba(239,68,68,0.7)";
+    ctx.fillRect(10 + i * barW, height - 10 - h, Math.max(1, barW - 1), h);
+  });
+}
+
+function renderCharts(orderflow) {
   if (!orderflow) return;
   lastOrderflow = orderflow;
-  const priceId = prefix ? `${prefix}PriceChart` : "priceChart";
-  const flowId = prefix ? `${prefix}OrderflowChart` : "orderflowChart";
-  const deltaId = prefix ? `${prefix}OrderflowDelta` : "orderflowDelta";
-  const pocId = prefix ? null : "orderflowPoc";
-  drawPriceChart(priceId, orderflow);
-  drawOrderflow(flowId, orderflow, deltaId, pocId);
+  drawPriceChart("priceChart", orderflow);
+  drawOrderflow("orderflowChart", orderflow, "orderflowDelta", "orderflowPoc");
+  drawVolumeChart(orderflow);
+}
+
+function appendSignal(signal) {
+  signalLog.unshift(signal);
+  signalLog = signalLog.slice(0, 100);
+  const feed = $("signalFeed");
+  if (!feed) return;
+  const typeClass = {
+    sweep: "legend-sweep",
+    absorption: "legend-absorption",
+    large_print: "legend-large",
+    imbalance: "legend-imbalance",
+  }[signal.type] || "";
+  feed.innerHTML = signalLog.map((s) => `
+    <li class="${typeClass}">
+      <span>${s.type}</span>
+      <span>${s.price?.toFixed?.(5) ?? "—"}</span>
+      <span>${s.side ?? ""}</span>
+      <span>${s.timestamp ?? ""}</span>
+    </li>`).join("");
+}
+
+function setBookmapLive(live, source) {
+  const dot = $("bookmapLiveDot");
+  const src = $("bookmapSource");
+  if (dot) dot.classList.toggle("live", live);
+  if (src) src.textContent = live ? `Live · ${source || "stream"}` : "waiting for signals…";
+}
+
+function connectBookmapStream() {
+  if (bookmapSource) bookmapSource.close();
+  bookmapSource = new EventSource("/api/bookmap/stream");
+  bookmapSource.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.cvd !== undefined) $("bookmapCvd").textContent = Number(data.cvd).toFixed(3);
+    if (data.orderflow) renderCharts(data.orderflow);
+    if (data.signals?.length) data.signals.forEach(appendSignal);
+    if (data.source || data.status) setBookmapLive(data.status === "live" || data.connected, data.source);
+  };
+  bookmapSource.onerror = () => setTimeout(connectBookmapStream, 3000);
+}
+
+async function startBookmapReplay() {
+  try {
+    await api("/api/bookmap/start-replay", {
+      method: "POST",
+      body: JSON.stringify({ tick_ms: 150, window: 100 }),
+    });
+    setBookmapLive(true, "replay");
+    connectBookmapStream();
+  } catch (e) {
+    $("liveStatus").textContent = `Bookmap: ${e.message}`;
+  }
 }
 
 async function loadOrderflowPreview() {
   try {
     const flow = await api("/api/orderflow?window=120");
     renderCharts(flow);
-  } catch (_) { /* ignore */ }
+    $("liveStatus").textContent = "Chart loaded · starting Bookmap order flow…";
+    await startBookmapReplay();
+  } catch (e) {
+    $("liveStatus").textContent = `Load error: ${e.message}`;
+  }
 }
 
 function updateLiveDashboard(state) {
@@ -305,40 +383,29 @@ function updateLiveDashboard(state) {
 
   renderMetricCards("liveMetrics", [
     ["Equity", `$${Number(state.equity).toFixed(2)}`, state.equity >= state.initial_balance ? "positive" : "negative"],
-    ["Realized PnL", fmtMoney(state.realized_pnl), state.realized_pnl >= 0 ? "positive" : "negative"],
-    ["Unrealized PnL", fmtMoney(state.unrealized_pnl || 0), (state.unrealized_pnl || 0) >= 0 ? "positive" : "negative"],
-    ["Win Rate %", `${state.win_rate_pct}%`, state.win_rate_pct >= 65 ? "positive" : ""],
+    ["Win%", `${state.win_rate_pct}%`, state.win_rate_pct >= 65 ? "positive" : ""],
     ["Trades", state.trades_count, ""],
-    ["Return %", `${state.total_return_pct}%`, state.total_return_pct >= 0 ? "positive" : "negative"],
-    ["Last Price", state.last_price, ""],
-    ["Candle", `${state.candle_index}/${state.candles_total}`, ""],
+    ["Return", `${state.total_return_pct}%`, state.total_return_pct >= 0 ? "positive" : "negative"],
   ]);
 
-  $("liveStatus").textContent =
-    `${state.strategy_name} · ${state.symbol} · ${state.last_timestamp || "—"} · ${state.mode} mode`;
+  $("liveStatus").textContent = `${state.strategy_name} · ${state.symbol} · ${state.last_timestamp || "—"}`;
 
   if (state.equity_curve) {
     liveEquity = state.equity_curve;
     drawEquity("liveEquityChart", liveEquity);
   }
-
-  if (state.orderflow) {
-    renderCharts(state.orderflow);
-  }
+  if (state.orderflow) renderCharts(state.orderflow);
+  if (state.last_price) $("lastPriceLabel").textContent = Number(state.last_price).toFixed(5);
 
   const pos = state.open_position;
   if (pos) {
     $("openPositionPanel").innerHTML = `
-      <div><strong>${pos.side.toUpperCase()}</strong> @ ${pos.entry_price.toFixed(5)}</div>
-      <div>Qty: ${pos.quantity.toFixed(4)}</div>
-      <div>SL: ${pos.stop_loss.toFixed(5)} · TP: ${pos.take_profit.toFixed(5)}</div>
-      <div class="${pos.unrealized_pnl >= 0 ? "positive" : "negative"}">Unrealized: ${fmtMoney(pos.unrealized_pnl)}</div>`;
+      <strong>${pos.side.toUpperCase()}</strong> @ ${pos.entry_price.toFixed(5)}<br />
+      SL ${pos.stop_loss.toFixed(5)} · TP ${pos.take_profit.toFixed(5)}<br />
+      <span class="${pos.unrealized_pnl >= 0 ? "positive" : "negative"}">${fmtMoney(pos.unrealized_pnl)}</span>`;
   } else {
     $("openPositionPanel").textContent = "No open position";
   }
-
-  $("progressFill").style.width = `${state.progress_pct || 0}%`;
-  $("progressLabel").textContent = `${state.progress_pct || 0}%`;
 }
 
 function connectStream() {
@@ -346,16 +413,11 @@ function connectStream() {
   eventSource = new EventSource("/api/session/stream");
   eventSource.onmessage = (event) => {
     const payload = JSON.parse(event.data);
-    if (payload.equity !== undefined || payload.event) {
-      updateLiveDashboard(payload);
-    }
-    if (payload.event === "trade_closed") {
-      loadJournal();
-    }
+    if (payload.equity !== undefined || payload.event) updateLiveDashboard(payload);
+    if (payload.orderflow) renderCharts(payload.orderflow);
+    if (payload.event === "trade_closed") loadJournal();
   };
-  eventSource.onerror = () => {
-    setTimeout(connectStream, 3000);
-  };
+  eventSource.onerror = () => setTimeout(connectStream, 3000);
 }
 
 async function startSession() {
@@ -365,101 +427,43 @@ async function startSession() {
     method: "POST",
     body: JSON.stringify({ strategy_id: activeStrategyId, tick_ms: 100 }),
   });
-  liveEquity = state.equity_curve || [];
   updateLiveDashboard(state);
   connectStream();
-  setActiveTab("dashboard");
+  connectBookmapStream();
 }
 
 async function stopSession() {
   try {
     const state = await api("/api/session/stop", { method: "POST" });
     updateLiveDashboard(state);
-  } catch (_) {
-    /* no active session */
-  }
+  } catch (_) { /* ok */ }
+  await api("/api/bookmap/stop", { method: "POST" }).catch(() => {});
   if (eventSource) eventSource.close();
+  if (bookmapSource) bookmapSource.close();
+  setBookmapLive(false);
   await loadJournal();
 }
 
 async function loadJournal() {
   const data = await api("/api/journal?limit=500");
   const stats = data.stats;
-  renderMetricCards("journalStats", [
-    ["Total Trades", stats.total_trades, ""],
-    ["Win Rate %", `${stats.win_rate_pct}%`, stats.win_rate_pct >= 65 ? "positive" : "negative"],
-    ["Total PnL", fmtMoney(stats.total_pnl), stats.total_pnl >= 0 ? "positive" : "negative"],
-    ["Profit Factor", stats.profit_factor, stats.profit_factor >= 1 ? "positive" : "negative"],
-    ["Avg Win", fmtMoney(stats.avg_win), "positive"],
-    ["Avg Loss", fmtMoney(stats.avg_loss), "negative"],
-    ["Best Trade", fmtMoney(stats.best_trade), "positive"],
-    ["Worst Trade", fmtMoney(stats.worst_trade), "negative"],
+  renderMetricCards("journalStatsMini", [
+    ["Trades", stats.total_trades, ""],
+    ["WR%", `${stats.win_rate_pct}%`, stats.win_rate_pct >= 65 ? "positive" : "negative"],
+    ["PnL", fmtMoney(stats.total_pnl), stats.total_pnl >= 0 ? "positive" : "negative"],
   ]);
-  $("journalBody").innerHTML = (data.trades || []).map((t) => `
-    <tr>
-      <td>${t.side}</td>
-      <td>${t.entry_time}</td>
-      <td>${t.exit_time}</td>
-      <td>${Number(t.entry_price).toFixed(5)}</td>
-      <td>${Number(t.exit_price).toFixed(5)}</td>
-      <td>${Number(t.quantity).toFixed(4)}</td>
-      <td class="${t.pnl >= 0 ? "positive" : "negative"}">${fmtMoney(t.pnl)}</td>
-      <td>$${Number(t.balance_after).toFixed(2)}</td>
-      <td>${Number(t.entry_confidence).toFixed(2)}</td>
-      <td>${t.reason}</td>
-    </tr>`).join("");
 }
 
 async function runBacktest() {
-  $("backtestStatus").textContent = "Running backtest...";
+  $("liveStatus").textContent = "Running backtest…";
   const result = await api("/api/backtest", {
     method: "POST",
     body: JSON.stringify({ strategy_id: activeStrategyId, walk_forward: true }),
   });
   const test = result.test || result.result;
-  $("backtestStatus").textContent = result.walk_forward
-    ? `Train ${result.train.total_return_pct}% · Test ${test.total_return_pct}% · WR ${test.win_rate_pct}%`
-    : `Return ${test.total_return_pct}% · WR ${test.win_rate_pct}%`;
-  renderMetricCards("metrics", [
-    ["Return %", `${test.total_return_pct}%`, test.total_return_pct >= 0 ? "positive" : "negative"],
-    ["Win Rate %", `${test.win_rate_pct}%`, test.win_rate_pct >= 65 ? "positive" : "negative"],
-    ["Max DD %", `${test.max_drawdown_pct}%`, "negative"],
-    ["Trades", test.trades, ""],
-    ["Trades/Day", test.trades_per_day, ""],
-  ]);
-  drawEquity("equityChart", test.equity_curve);
-  try {
-    const flow = await api("/api/orderflow?window=120");
-    renderCharts(flow, "backtest");
-  } catch (_) { /* ignore */ }
-  $("tradesBody").innerHTML = (test.trade_rows || []).slice(-50).reverse().map((t) => `
-    <tr>
-      <td>${t.side}</td><td>${t.entry_time}</td><td>${t.exit_time}</td>
-      <td>${t.entry_price}</td><td>${t.exit_price}</td>
-      <td class="${t.pnl >= 0 ? "positive" : "negative"}">${t.pnl}</td><td>${t.reason}</td>
-    </tr>`).join("");
-  setActiveTab("backtest");
-}
-
-function renderOptimizerMetrics(best) {
-  if (!best) { $("optimizerMetrics").innerHTML = ""; return; }
-  renderMetricCards("optimizerMetrics", [
-    ["Objective", best.objective, ""],
-    ["Rolling Min WR %", `${best.rolling_min_win_rate_pct}%`, best.rolling_min_win_rate_pct >= 65 ? "positive" : ""],
-    ["Test WR %", `${best.win_rate_test_pct}%`, ""],
-    ["Test Return %", `${best.total_return_test_pct}%`, ""],
-    ["Rolling Min Return %", `${best.rolling_min_return_pct}%`, ""],
-    ["Test Trades", best.trades_test, ""],
-  ]);
-}
-
-async function pollOptimizer() {
-  if (!optimizerJobId) return;
-  const job = await api(`/api/optimizer/jobs/${optimizerJobId}`);
-  $("optimizerStatus").textContent = `Iter ${job.iteration} · ${job.message} · ${job.status}`;
-  renderOptimizerMetrics(job.best);
-  if (job.status === "running") optimizerPollTimer = setTimeout(pollOptimizer, 3000);
-  else if (job.gate_met) $("optimizerStatus").textContent = "Gate met: 65%+ win rate achieved.";
+  $("liveStatus").textContent = `Backtest: ${test.total_return_pct}% return · ${test.win_rate_pct}% WR`;
+  const flow = await api("/api/orderflow?window=120");
+  renderCharts(flow);
 }
 
 async function startOptimizer() {
@@ -467,59 +471,84 @@ async function startOptimizer() {
     method: "POST",
     body: JSON.stringify({
       max_iterations: 0,
-      gates: {
-        min_win_rate: parseFloat($("gateWinRate").value),
-        max_test_drawdown: parseFloat($("gateMaxDd").value),
-        target_test_return: 0.5,
-        min_test_trades: 20,
-      },
+      gates: { min_win_rate: 65, max_test_drawdown: 10, target_test_return: 0.5, min_test_trades: 20 },
     }),
   });
   optimizerJobId = job.id;
-  setActiveTab("optimizer");
   pollOptimizer();
 }
 
-function setActiveTab(tabName) {
-  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === tabName));
-  ["dashboard", "journal", "settings", "backtest", "optimizer"].forEach((name) => {
-    $(`${name}Tab`).classList.toggle("hidden", tabName !== name);
-  });
-  if (tabName === "journal") loadJournal().catch(console.error);
+async function pollOptimizer() {
+  if (!optimizerJobId) return;
+  const job = await api(`/api/optimizer/jobs/${optimizerJobId}`);
+  if (job.status === "running") {
+    optimizerPollTimer = setTimeout(pollOptimizer, 5000);
+  }
 }
 
-document.querySelectorAll(".tab").forEach((tab) => {
-  tab.addEventListener("click", () => setActiveTab(tab.dataset.tab));
+// Sub-tabs below chart: Heatmap | Signals | Volume
+document.querySelectorAll(".sub-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".sub-tab").forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    ["Heatmap", "Signals", "Volume"].forEach((name) => {
+      const panel = $(`sub${name}`);
+      if (panel) panel.classList.toggle("hidden", tab.dataset.sub !== name.toLowerCase());
+    });
+  });
 });
 
-$("saveStrategyBtn").addEventListener("click", () => saveStrategy().then(() => alert("Saved")).catch((e) => alert(e.message)));
-$("runBacktestBtn").addEventListener("click", () => runBacktest().catch((e) => alert(e.message)));
-$("startOptimizerBtn").addEventListener("click", () => startOptimizer().catch((e) => alert(e.message)));
-$("startSessionBtn").addEventListener("click", () => startSession().catch((e) => alert(e.message)));
-$("stopSessionBtn").addEventListener("click", () => stopSession().catch((e) => alert(e.message)));
-$("newStrategyBtn").addEventListener("click", () => {
+$("btnBookmapToggle")?.addEventListener("click", () => {
+  $("bookmapPanel")?.classList.toggle("collapsed");
+  $("btnBookmapToggle")?.classList.toggle("active");
+});
+
+document.querySelectorAll(".sidebar-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".sidebar-tab").forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    $("sidebarResearch")?.classList.toggle("hidden", tab.dataset.stab !== "research");
+    $("sidebarJournal")?.classList.toggle("hidden", tab.dataset.stab !== "journal");
+    if (tab.dataset.stab === "journal") loadJournal();
+  });
+});
+
+document.querySelectorAll(".tf").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tf").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    $("strategyTimeframe").value = btn.dataset.tf;
+  });
+});
+
+$("saveStrategyBtn")?.addEventListener("click", () => saveStrategy().catch((e) => alert(e.message)));
+$("runBacktestBtn")?.addEventListener("click", () => runBacktest().catch((e) => alert(e.message)));
+$("startOptimizerBtn")?.addEventListener("click", () => startOptimizer().catch((e) => alert(e.message)));
+$("startSessionBtn")?.addEventListener("click", () => startSession().catch((e) => alert(e.message)));
+$("stopSessionBtn")?.addEventListener("click", () => stopSession().catch((e) => alert(e.message)));
+$("newStrategyBtn")?.addEventListener("click", () => {
   activeStrategyId = null;
   fillStrategyForm({ name: "New Strategy", mode: "paper", symbol: "EURUSD", timeframe: "M1", config: {} });
   renderStrategyList();
 });
-$("strategyMode").addEventListener("change", (e) => { $("modeBadge").textContent = `${e.target.value} mode`; });
 
 async function init() {
   await loadStrategies();
   await loadJournal();
   await loadOrderflowPreview();
+  connectBookmapStream();
   const status = await api("/api/session/status");
   if (status.status && status.status !== "idle") {
     updateLiveDashboard(status);
     connectStream();
   }
-  // Auto-start optimizer in background
   try {
     const jobs = await api("/api/optimizer/jobs");
     const running = jobs.find((j) => j.status === "running");
     if (!running) await startOptimizer();
     else { optimizerJobId = running.id; pollOptimizer(); }
   } catch (_) { /* ignore */ }
+  window.addEventListener("resize", () => { if (lastOrderflow) renderCharts(lastOrderflow); });
 }
 
 init().catch((err) => { $("liveStatus").textContent = `Init error: ${err.message}`; });

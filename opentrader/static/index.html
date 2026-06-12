@@ -3,169 +3,134 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OpenTrader</title>
+  <title>Open Trader</title>
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <header>
-    <div>
-      <h1>OpenTrader</h1>
-      <p>Live trading · Journal · OpenTrade research engine · AI optimizer</p>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Open Trader</h1>
+      <span id="chartSymbol" class="symbol-badge">EURUSD</span>
+    </div>
+    <div class="toolbar">
+      <div class="tf-group" id="timeframeGroup">
+        <button class="tf active" data-tf="M1">1m</button>
+        <button class="tf" data-tf="M5">5m</button>
+        <button class="tf" data-tf="M15">15m</button>
+        <button class="tf" data-tf="H1">1h</button>
+      </div>
+      <button class="toolbar-btn active" id="btnCandles">Candles</button>
+      <button class="toolbar-btn" id="btnBookmapToggle">Bookmap</button>
     </div>
     <div class="header-stats">
       <div class="live-pnl" id="headerPnl">$0.00</div>
-      <span id="modeBadge" class="badge">paper mode</span>
+      <span id="modeBadge" class="badge">paper</span>
       <span id="sessionBadge" class="badge idle">idle</span>
     </div>
   </header>
 
-  <main class="layout">
+  <main class="terminal-layout">
     <aside class="panel sidebar">
       <h2>Strategies</h2>
       <div id="strategyList"></div>
       <div class="actions">
-        <button id="newStrategyBtn" class="secondary">New Strategy</button>
+        <button id="newStrategyBtn" class="secondary">New</button>
+        <button id="saveStrategyBtn" class="secondary">Save</button>
+      </div>
+      <div class="sidebar-tabs">
+        <button class="sidebar-tab active" data-stab="research">Research</button>
+        <button class="sidebar-tab" data-stab="journal">Journal</button>
+      </div>
+      <div id="sidebarResearch">
+        <button id="startSessionBtn" class="success full-width">Start Session</button>
+        <button id="stopSessionBtn" class="secondary full-width">Stop</button>
+        <button id="runBacktestBtn" class="secondary full-width">Backtest</button>
+        <button id="startOptimizerBtn" class="secondary full-width">Optimizer</button>
+      </div>
+      <div id="sidebarJournal" class="hidden">
+        <div class="mini-metrics" id="journalStatsMini"></div>
       </div>
     </aside>
 
-    <section class="panel">
-      <div class="tabs">
-        <button class="tab active" data-tab="dashboard">Live Dashboard</button>
-        <button class="tab" data-tab="journal">Trade Journal</button>
-        <button class="tab" data-tab="settings">Strategy</button>
-        <button class="tab" data-tab="backtest">Backtest</button>
-        <button class="tab" data-tab="optimizer">AI Optimizer</button>
+    <section class="chart-terminal">
+      <!-- Main price chart -->
+      <div class="chart-main">
+        <canvas id="priceChart"></canvas>
+        <div class="chart-overlay-price" id="lastPriceLabel">—</div>
       </div>
 
-      <div id="dashboardTab">
-        <div class="status-line" id="liveStatus">Start a paper session to stream real-time P&amp;L.</div>
-        <div class="metrics" id="liveMetrics"></div>
-
-        <div class="chart-stack">
-          <div class="chart-panel">
-            <h3>Price Chart</h3>
-            <canvas id="priceChart"></canvas>
+      <!-- Bookmap order flow BELOW chart -->
+      <div class="bookmap-panel" id="bookmapPanel">
+        <div class="bookmap-header">
+          <div class="bookmap-title">
+            <span class="bookmap-dot" id="bookmapLiveDot"></span>
+            Bookmap Order Flow
+            <small id="bookmapSource">connecting…</small>
           </div>
-          <div class="chart-panel">
-            <h3>Bookmap Order Flow</h3>
-            <canvas id="orderflowChart"></canvas>
-            <div class="orderflow-legend">
-              <span class="legend-buy">■ Buy / Bid volume</span>
-              <span class="legend-sell">■ Sell / Ask volume</span>
-              <span id="orderflowDelta">Delta: 0</span>
-              <span id="orderflowPoc">POC: —</span>
-            </div>
+          <div class="bookmap-stats">
+            <span>CVD <strong id="bookmapCvd">0.000</strong></span>
+            <span>Delta <strong id="orderflowDelta">0</strong></span>
+            <span>POC <strong id="orderflowPoc">—</strong></span>
+          </div>
+          <div class="sub-tabs">
+            <button class="sub-tab active" data-sub="heatmap">Heatmap</button>
+            <button class="sub-tab" data-sub="signals">Signals</button>
+            <button class="sub-tab" data-sub="volume">Volume</button>
+          </div>
+        </div>
+
+        <div id="subHeatmap" class="sub-panel">
+          <canvas id="orderflowChart"></canvas>
+          <div class="orderflow-legend">
+            <span class="legend-sweep">● Sweep</span>
+            <span class="legend-absorption">● Absorption</span>
+            <span class="legend-large">● Large print</span>
+            <span class="legend-imbalance">● Imbalance</span>
+            <span class="legend-buy">■ Buy heat</span>
+            <span class="legend-sell">■ Sell heat</span>
           </div>
         </div>
 
-        <div class="grid-2 dashboard-charts">
-          <div>
-            <h3>Equity Curve</h3>
-            <canvas id="liveEquityChart"></canvas>
-          </div>
-          <div>
-            <h3>Open Position</h3>
-            <div id="openPositionPanel" class="open-position-panel">No open position</div>
-            <div class="progress-wrap">
-              <label>Replay progress</label>
-              <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
-              <small id="progressLabel">0%</small>
-            </div>
-          </div>
+        <div id="subSignals" class="sub-panel hidden">
+          <ul id="signalFeed" class="signal-feed"></ul>
         </div>
-        <div class="actions">
-          <button id="startSessionBtn" class="success">Start Paper Session</button>
-          <button id="stopSessionBtn" class="secondary">Stop Session</button>
+
+        <div id="subVolume" class="sub-panel hidden">
+          <canvas id="volumeChart"></canvas>
         </div>
       </div>
 
-      <div id="journalTab" class="hidden">
-        <div class="metrics" id="journalStats"></div>
-        <table class="journal-table">
-          <thead>
-            <tr>
-              <th>Side</th>
-              <th>Entry Time</th>
-              <th>Exit Time</th>
-              <th>Entry</th>
-              <th>Exit</th>
-              <th>Qty</th>
-              <th>PnL</th>
-              <th>Balance</th>
-              <th>Conf</th>
-              <th>Reason</th>
-            </tr>
-          </thead>
-          <tbody id="journalBody"></tbody>
-        </table>
+      <!-- Bottom strip: equity + position -->
+      <div class="bottom-strip">
+        <div class="strip-item">
+          <label>Equity</label>
+          <canvas id="liveEquityChart"></canvas>
+        </div>
+        <div class="strip-item">
+          <label>Open Position</label>
+          <div id="openPositionPanel" class="open-position-panel">No open position</div>
+        </div>
+        <div class="strip-item metrics-compact" id="liveMetrics"></div>
       </div>
-
-      <div id="settingsTab" class="hidden">
-        <div class="grid-2">
-          <div><label>Name</label><input id="strategyName" /></div>
-          <div>
-            <label>Mode</label>
-            <select id="strategyMode">
-              <option value="paper">Paper</option>
-              <option value="live">Live (signal export)</option>
-            </select>
-          </div>
-          <div><label>Symbol</label><input id="strategySymbol" value="EURUSD" /></div>
-          <div><label>Timeframe</label><input id="strategyTimeframe" value="M1" /></div>
-        </div>
-        <h2 style="margin-top:1rem;">Risk &amp; Swarm Agents</h2>
-        <div class="grid-2" id="configFields"></div>
-        <div class="actions">
-          <button id="saveStrategyBtn">Save Strategy</button>
-          <button id="runBacktestBtn" class="success">Run Backtest</button>
-        </div>
-      </div>
-
-      <div id="backtestTab" class="hidden">
-        <div class="status-line" id="backtestStatus">No backtest run yet.</div>
-        <div class="metrics" id="metrics"></div>
-        <div class="chart-stack">
-          <div class="chart-panel">
-            <h3>Price Chart</h3>
-            <canvas id="backtestPriceChart"></canvas>
-          </div>
-          <div class="chart-panel">
-            <h3>Bookmap Order Flow</h3>
-            <canvas id="backtestOrderflowChart"></canvas>
-            <div class="orderflow-legend">
-              <span class="legend-buy">■ Buy volume</span>
-              <span class="legend-sell">■ Sell volume</span>
-              <span id="backtestOrderflowDelta">Delta: 0</span>
-            </div>
-          </div>
-        </div>
-        <canvas id="equityChart"></canvas>
-        <h2 style="margin-top:1rem;">Backtest Trades</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Side</th><th>Entry</th><th>Exit</th><th>Entry $</th><th>Exit $</th><th>PnL</th><th>Reason</th>
-            </tr>
-          </thead>
-          <tbody id="tradesBody"></tbody>
-        </table>
-      </div>
-
-      <div id="optimizerTab" class="hidden">
-        <div class="status-line" id="optimizerStatus">
-          Target: 65%+ win rate · positive forward return · runs until gate met.
-        </div>
-        <div class="grid-2">
-          <div><label>Min Win Rate (%)</label><input id="gateWinRate" type="number" value="65" /></div>
-          <div><label>Max Drawdown (%)</label><input id="gateMaxDd" type="number" step="0.1" value="10" /></div>
-        </div>
-        <div class="actions">
-          <button id="startOptimizerBtn">Start Optimizer</button>
-        </div>
-        <div class="metrics" id="optimizerMetrics"></div>
-      </div>
+      <div class="status-line" id="liveStatus">Loading chart…</div>
     </section>
   </main>
+
+  <!-- Hidden panels for strategy config / backtest / optimizer (modal-style) -->
+  <dialog id="settingsDialog">
+    <h2>Strategy Settings</h2>
+    <div class="grid-2">
+      <div><label>Name</label><input id="strategyName" /></div>
+      <div>
+        <label>Mode</label>
+        <select id="strategyMode"><option value="paper">Paper</option><option value="live">Live</option></select>
+      </div>
+      <div><label>Symbol</label><input id="strategySymbol" value="EURUSD" /></div>
+      <div><label>Timeframe</label><input id="strategyTimeframe" value="M1" /></div>
+    </div>
+    <div class="grid-2" id="configFields"></div>
+    <div class="actions"><button id="closeSettingsBtn">Close</button></div>
+  </dialog>
 
   <script src="/static/app.js"></script>
 </body>
