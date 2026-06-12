@@ -33,6 +33,7 @@ from opentrade.store import StrategyStore
 from .bookmap_bridge import BookmapBridge
 from .mt5_autosync import mt5_autosync
 from .old_app_static import old_app_asset_dirs, resolve_old_app_root, resolve_old_app_static
+from .ui_restore import ensure_old_ui_restored
 
 APP_ROOT = Path(__file__).resolve().parent
 
@@ -57,12 +58,15 @@ def _load_dotenv() -> None:
 
 
 _load_dotenv()
+UI_RESTORE = ensure_old_ui_restored()
 OLD_APP_ROOT = resolve_old_app_root()
 OLD_APP_STATIC, OLD_APP_INDEX = resolve_old_app_static()
 # .env may set OPENTRADER_OLD_APP — load again and re-resolve
 _load_dotenv()
 OLD_APP_ROOT = resolve_old_app_root()
 OLD_APP_STATIC, OLD_APP_INDEX = resolve_old_app_static()
+if UI_RESTORE.get("restored"):
+    OLD_APP_STATIC, OLD_APP_INDEX = resolve_old_app_static()
 
 DATA_ROOT = Path(os.environ.get("OPENTRADER_DATA", "opentrader_data"))
 DEFAULT_CSV = Path("trading_data/eurusd_m1.csv")
@@ -228,6 +232,7 @@ def health() -> dict[str, Any]:
         "mt5_autosync": mt5_autosync.status,
         "old_app": str(OLD_APP_ROOT) if OLD_APP_ROOT else None,
         "old_app_index": str(OLD_APP_INDEX) if OLD_APP_INDEX else None,
+        "ui_restore": UI_RESTORE,
         "serving": "old_app" if OLD_APP_INDEX else "builtin",
     }
 

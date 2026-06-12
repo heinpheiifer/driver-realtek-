@@ -72,6 +72,7 @@ mkdir -p "$OLD_APP/scripts"
 cp "$ENGINE_ROOT/scripts/backup_old_ui.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/restore_old_ui.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/setup_old_app.sh" "$OLD_APP/scripts/"
+cp "$ENGINE_ROOT/scripts/diagnose_old_app.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/integrate_old_app.sh" "$OLD_APP/scripts/"
 chmod +x "$OLD_APP/scripts/"*.sh
 

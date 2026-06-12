@@ -789,6 +789,16 @@ $("newStrategyBtn")?.addEventListener("click", () => {
 });
 
 async function init() {
+  const health = await api("/api/health").catch(() => ({}));
+  if (health.serving === "builtin" && health.old_app) {
+    $("liveStatus").textContent =
+      "Wrong UI: git engine is showing instead of your old chart. "
+      + "Run: bash scripts/restore_old_ui.sh && FORCE=1 bash run.sh";
+  }
+  if (health.ui_restore?.restored) {
+    $("liveStatus").textContent = "Old chart UI restored from backup — refresh the page (F5).";
+  }
+
   await loadStrategies();
   await loadSymbols();
   marketState.symbol = ($("symbolInput")?.value || "BTCUSD").toUpperCase();

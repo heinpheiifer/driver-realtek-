@@ -382,6 +382,17 @@ def load_blackbull_candles(
         meta["used_cache"] = True
         return candles, label, path, meta
 
+    # 1b. Same symbol, different timeframe cache (e.g. M5 when M1 not synced yet)
+    for alt_tf in ("M5", "M1", "M15", "H1", "H4", "D1"):
+        if alt_tf == timeframe.upper():
+            continue
+        alt = load_cached_blackbull(symbol=symbol, timeframe=alt_tf, bars=bars)
+        if alt:
+            candles, label, path = alt
+            meta["used_cache"] = True
+            meta["timeframe_fallback"] = alt_tf
+            return candles, label, path, meta
+
     # 2. Live MT5 pull when terminal is connected (Windows, same machine as MT5)
     mt5 = _import_mt5()
     if mt5 is not None and (_last_status.get("connected") or connect_mt5()):
@@ -392,7 +403,9 @@ def load_blackbull_candles(
             return candles, label, path, meta
 
     meta["mt5"]["hint"] = (
-        "No BlackBull data yet. Old app auto-syncs MT5 on startup when MT5 is on the same PC. "
-        "Set MT5_* in .env and restart, or run scripts/mt5_python_bridge.py from Windows."
+        "No BlackBull data for this symbol/timeframe yet. "
+        "If your old app had MT5 working, run: bash scripts/restore_old_ui.sh && FORCE=1 bash run.sh. "
+        "On Linux, run scripts/mt5_python_bridge.py on Windows pointing at this machine, "
+        "or click Yahoo/CSV until MT5 cache is populated."
     )
     return [], "blackbull:unavailable", "", meta
