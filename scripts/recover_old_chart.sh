@@ -28,15 +28,27 @@ for d in "${SEARCH_DIRS[@]}"; do
 done
 
 echo ""
+echo "=== YOUR REAL CHART IS PROBABLY HERE ==="
+for f in \
+  "$HOME_DIR/OpenTrader/frontend/dist/index.html" \
+  "$HOME_DIR/OpenTrader/frontend/index.html" \
+  "$HOME_DIR/OpenTrader/staticfiles/index.html"; do
+  [[ -f "$f" ]] && echo "  ★★ $f  ← USE THIS"
+done
+
+echo ""
 echo "--- HTML with OLD chart markers (heikin / drawing / lightweight-charts) ---"
 FOUND=0
 while IFS= read -r f; do
+  case "$f" in
+    *missing_old_ui*|*/.mt5/*|*/Python311/Doc/*|*/idlelib/*) continue ;;
+  esac
   if grep -qiE 'heikin|drawing|lightweight-charts|LightweightCharts' "$f" 2>/dev/null && \
      ! grep -q 'runBacktestBtn' "$f" 2>/dev/null; then
     echo "  ★ $f"
     FOUND=$((FOUND + 1))
   fi
-done < <(find "$HOME_DIR" \
+done < <(find "$HOME_DIR/OpenTrader" "$HOME_DIR/opentrade-app" \
   -maxdepth 8 \
   \( -path '*/.venv/*' -o -path '*/node_modules/*' -o -path '*/.git/*' \) -prune -o \
   -name '*.html' -print 2>/dev/null)
@@ -69,11 +81,15 @@ grep -rl --include='*.py' -E 'FastAPI|Flask|uvicorn|8010' \
   "$HOME_DIR/opentrade-app" "$HOME_DIR/opentrader-app" 2>/dev/null | head -15 || true
 
 echo ""
-if [[ "$FOUND" -gt 0 ]]; then
-  echo "NEXT: pick the ★ file and add to /home/heinz/opentrade-app/.env"
-  echo "  OPENTRADER_UI_INDEX=/full/path/to/chart.html"
+if [[ "$FOUND" -gt 0 ]] || [[ -f "$HOME_DIR/OpenTrader/frontend/dist/index.html" ]]; then
+  echo ""
+  echo "NEXT (one command):"
+  echo "  cd ~/opentrader-app && FORCE=1 bash scripts/connect_opentrader_chart.sh"
+  echo ""
+  echo "Or manual .env in /home/heinz/opentrade-app:"
   echo "  OPENTRADER_USE_OLD_UI=1"
-  echo "Then: cd /home/heinz/opentrade-app && FORCE=1 bash run.sh"
+  echo "  OPENTRADER_OLD_APP=/home/heinz/OpenTrader"
+  echo "  OPENTRADER_UI_INDEX=/home/heinz/OpenTrader/frontend/dist/index.html"
 else
   echo "No old chart HTML found on this PC."
   echo "Check: another machine, USB backup, Windows partition, or email/cloud zip of the old app."

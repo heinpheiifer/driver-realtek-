@@ -52,6 +52,19 @@ def test_index_override(tmp_path, monkeypatch):
     assert static_dir == custom.parent.resolve()
 
 
+def test_preferred_opentrader_dist(tmp_path, monkeypatch):
+    root = tmp_path / "OpenTrader"
+    dist = root / "frontend" / "dist"
+    dist.mkdir(parents=True)
+    index = dist / "index.html"
+    index.write_text("<html>heikin bookmap blackbull chart</html>", encoding="utf-8")
+    monkeypatch.setenv("OPENTRADER_OLD_APP", str(root))
+    monkeypatch.delenv("OPENTRADER_USE_NEW_UI", raising=False)
+    static_dir, found = resolve_old_app_static()
+    assert found == index
+    assert static_dir == dist
+
+
 def test_is_engine_builtin_ui_detects_git_ui(tmp_path):
     path = tmp_path / "index.html"
     path.write_text(

@@ -47,20 +47,23 @@ mkdir -p trading_data/blackbull_import
 PORT="${PORT:-8010}"
 HOST="${HOST:-127.0.0.1}"
 
-# Default: YOUR old chart at /home/heinz/opentrade-app (set OPENTRADER_USE_NEW_UI=1 for git UI)
+# Default: YOUR old chart in ~/OpenTrader (engine runs from ~/opentrade-app)
 if [[ "${OPENTRADER_USE_NEW_UI:-0}" == "1" ]]; then
   unset OPENTRADER_OLD_APP
   echo "==> New unified app UI (OPENTRADER_USE_NEW_UI=1)"
 else
   export OPENTRADER_USE_OLD_UI=1
-  if [[ -z "${OPENTRADER_OLD_APP:-}" ]] && [[ -d "/home/heinz/opentrade-app" ]]; then
-    export OPENTRADER_OLD_APP="/home/heinz/opentrade-app"
+  if [[ -z "${OPENTRADER_OLD_APP:-}" ]]; then
+    if [[ -d "/home/heinz/OpenTrader/frontend" ]]; then
+      export OPENTRADER_OLD_APP="/home/heinz/OpenTrader"
+    elif [[ -d "/home/heinz/opentrade-app" ]]; then
+      export OPENTRADER_OLD_APP="/home/heinz/opentrade-app"
+    fi
   fi
   if [[ -n "${OPENTRADER_OLD_APP:-}" ]] && [[ -d "$OPENTRADER_OLD_APP" ]]; then
-    echo "==> Your old Open Trader chart UI: $OPENTRADER_OLD_APP"
+    echo "==> Your OpenTrader chart UI: $OPENTRADER_OLD_APP"
   else
-    echo "==> Old app path not found — serving built-in UI"
-    echo "    Run: bash scripts/bring_back_old_app.sh"
+    echo "==> Old chart not found — run: bash scripts/connect_opentrader_chart.sh"
   fi
 fi
 

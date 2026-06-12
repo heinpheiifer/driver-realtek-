@@ -5,7 +5,19 @@ import os
 from pathlib import Path
 
 UI_BACKUP_DIRNAME = ".opentrader_ui_backup"
-DEFAULT_OLD_APP = Path("/home/heinz/opentrade-app")
+# Real chart lives in OpenTrader (capital T) — not opentrade-app (engine only)
+DEFAULT_CHART_ROOTS = (
+    Path("/home/heinz/OpenTrader"),
+    Path("/home/heinz/opentrade-app"),
+)
+PREFERRED_INDEX_RELATIVE = (
+    "frontend/dist/index.html",
+    "frontend/index.html",
+    "staticfiles/index.html",
+    "static/index.html",
+    "public/index.html",
+    "index.html",
+)
 ENGINE_STATIC_MARKERS = ("btnBookmapToggle", "runBacktestBtn", "strategyList", "startOptimizerBtn")
 OLD_CHART_MARKERS = (
     "heikin",
@@ -17,6 +29,8 @@ OLD_CHART_MARKERS = (
     "chart-container",
     "bookmap",
     "Bookmap",
+    "blackbull",
+    "BlackBull",
 )
 _SKIP_DIR_NAMES = {
     ".git",
@@ -28,6 +42,7 @@ _SKIP_DIR_NAMES = {
     UI_BACKUP_DIRNAME,
     "opentrader_data",
     "trading_runs",
+    ".mt5",
 }
 
 
@@ -39,23 +54,12 @@ def use_old_ui() -> bool:
         return True
     if os.environ.get("OPENTRADER_OLD_APP", "").strip():
         return True
-    return DEFAULT_OLD_APP.is_dir()
-
-
-def resolve_old_app_root() -> Path | None:
-    if not use_old_ui():
-        return None
-    raw = os.environ.get("OPENTRADER_OLD_APP", "").strip()
-    if raw:
-        root = Path(raw).expanduser().resolve()
-        return root if root.is_dir() else None
-    if DEFAULT_OLD_APP.is_dir():
-        return DEFAULT_OLD_APP.resolve()
-    return None
+    return any(p.is_dir() for p in DEFAULT_CHART_ROOTS)
 
 
 def _is_engine_builtin_ui(index_path: Path) -> bool:
-    """Detect git unified UI — must not serve as the user's original chart."""
+    if index_path.name == "missing_old_ui.html":
+        return True
     try:
         text = index_path.read_text(encoding="utf-8", errors="ignore")[:16000]
     except OSError:
@@ -77,6 +81,10 @@ def _chart_score(path: Path) -> int:
             score += 3
     if path.name == "index.html":
         score += 2
+    if "frontend" in path.parts and "dist" in path.parts:
+        score += 4
+    if "opentrader" in path.parts or "opentrade-app" in path.parts:
+        score -= 5
     if "static" in path.parts or "public" in path.parts or "dist" in path.parts:
         score += 1
     return score
@@ -88,6 +96,29 @@ def _index_override() -> Path | None:
         return None
     path = Path(raw).expanduser().resolve()
     return path if path.is_file() else None
+
+
+def _preferred_index(root: Path) -> Path | None:
+    for rel in PREFERRED_INDEX_RELATIVE:
+        path = root / rel
+        if path.is_file() and not _is_engine_builtin_ui(path):
+            return path
+    return None
+
+
+def resolve_old_app_root() -> Path | None:
+    if not use_old_ui():
+        return None
+    raw = os.environ.get("OPENTRADER_OLD_APP", "").strip()
+    if raw:
+        root = Path(raw).expanduser().resolve()
+        return root if root.is_dir() else None
+    for candidate in DEFAULT_CHART_ROOTS:
+        if not candidate.is_dir():
+            continue
+        if _preferred_index(candidate) or discover_chart_html(candidate):
+            return candidate.resolve()
+    return None
 
 
 def _backup_roots(root: Path, *, oldest_first: bool = False) -> list[Path]:
@@ -108,14 +139,18 @@ def _backup_roots(root: Path, *, oldest_first: bool = False) -> list[Path]:
 
 def _should_skip(path: Path, search_root: Path) -> bool:
     names = _SKIP_DIR_NAMES
-    # When explicitly scanning a backup folder, allow HTML inside it
     if UI_BACKUP_DIRNAME in search_root.parts:
         names = names - {UI_BACKUP_DIRNAME}
+    if path.name == "missing_old_ui.html":
+        return True
     return any(part in names for part in path.parts)
 
 
 def discover_chart_html(search_root: Path) -> Path | None:
-    """Find the best chart HTML under a directory tree."""
+    preferred = _preferred_index(search_root)
+    if preferred is not None:
+        return preferred
+
     best: tuple[int, Path] | None = None
     if not search_root.is_dir():
         return None
@@ -123,10 +158,8 @@ def discover_chart_html(search_root: Path) -> Path | None:
     for html in search_root.rglob("*.html"):
         if _should_skip(html, search_root):
             continue
-        if "opentrader" in html.parts and "static" in html.parts and "engine_static" not in html.parts:
-            # Skip git engine copy under opentrader/static unless nothing else exists
-            if _is_engine_builtin_ui(html):
-                continue
+        if "opentrader" in html.parts and "static" in html.parts and _is_engine_builtin_ui(html):
+            continue
         score = _chart_score(html)
         if score < 0:
             continue
@@ -138,12 +171,12 @@ def discover_chart_html(search_root: Path) -> Path | None:
 
 def _static_candidates(root: Path) -> list[Path]:
     return [
+        root / "frontend" / "dist",
+        root / "frontend",
+        root / "staticfiles",
         root / "static",
         root / "public",
         root / "dist",
-        root / "frontend" / "dist",
-        root / "frontend" / "public",
-        root / "frontend",
         root / "web",
         root / "ui",
         root / "client",
@@ -155,7 +188,6 @@ def _static_candidates(root: Path) -> list[Path]:
 
 
 def resolve_old_app_static() -> tuple[Path | None, Path | None]:
-    """Return (static_dir, index_html) for the old app, or (None, None)."""
     override = _index_override()
     if override is not None:
         return override.parent, override
@@ -164,13 +196,15 @@ def resolve_old_app_static() -> tuple[Path | None, Path | None]:
     if root is None:
         return None, None
 
-    # Search backups oldest-first first (latest may be corrupted git UI)
+    preferred = _preferred_index(root)
+    if preferred is not None:
+        return preferred.parent, preferred
+
     for search_root in [*_backup_roots(root, oldest_first=True), root]:
         found = discover_chart_html(search_root)
         if found is not None:
             return found.parent, found
 
-    # Legacy path-based lookup
     for search_root in [root, *_backup_roots(root)]:
         for base in _static_candidates(search_root):
             if not base.is_dir():
@@ -183,10 +217,11 @@ def resolve_old_app_static() -> tuple[Path | None, Path | None]:
 
 
 def old_app_asset_dirs(root: Path | None) -> list[Path]:
-    """Extra directories under the old app root to expose as static mounts."""
     if root is None:
         return []
     names = (
+        "frontend",
+        "staticfiles",
         "assets",
         "js",
         "css",
@@ -196,7 +231,6 @@ def old_app_asset_dirs(root: Path | None) -> list[Path]:
         "web",
         "ui",
         "client",
-        "frontend",
         "chart",
     )
     dirs: list[Path] = []
@@ -207,4 +241,9 @@ def old_app_asset_dirs(root: Path | None) -> list[Path]:
             continue
         seen.add(path)
         dirs.append(path)
+    # frontend/dist assets often referenced as /assets/ from dist root
+    fdist = (root / "frontend" / "dist").resolve()
+    if fdist.is_dir() and fdist not in seen:
+        seen.add(fdist)
+        dirs.append(fdist)
     return dirs

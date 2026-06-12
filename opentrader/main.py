@@ -742,3 +742,11 @@ for subdir in old_app_asset_dirs(OLD_APP_ROOT):
         continue
     _mounted_asset_dirs.add(resolved)
     app.mount(f"/{subdir.name}", StaticFiles(directory=subdir), name=f"old_{subdir.name}")
+
+# Vite/React build assets (e.g. OpenTrader frontend/dist/assets)
+if OLD_APP_STATIC:
+    for sub in ("assets", "js", "css", "media"):
+        asset_dir = OLD_APP_STATIC / sub
+        if asset_dir.is_dir() and asset_dir.resolve() not in _mounted_asset_dirs:
+            _mounted_asset_dirs.add(asset_dir.resolve())
+            app.mount(f"/{sub}", StaticFiles(directory=asset_dir), name=f"old_chart_{sub}")
