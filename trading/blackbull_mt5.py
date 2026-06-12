@@ -65,6 +65,56 @@ def _import_path(symbol: str, timeframe: str) -> Path:
     return Path("trading_data") / "blackbull_import" / f"{symbol.lower()}_{timeframe.lower()}.csv"
 
 
+def _extra_data_roots() -> list[Path]:
+    """Also load BlackBull CSV cache from OpenTrader project folder."""
+    roots: list[Path] = []
+    seen: set[Path] = set()
+    for raw in (
+        os.environ.get("OPENTRADER_OLD_APP", ""),
+        os.environ.get("OPENTRADER_CHART_ROOT", ""),
+        "/home/heinz/OpenTrader",
+    ):
+        if not raw:
+            continue
+        base = Path(raw).expanduser().resolve()
+        if base in seen or not base.is_dir():
+            continue
+        seen.add(base)
+        roots.append(base)
+    return roots
+
+
+def _resolve_cache_file(symbol: str, timeframe: str) -> Path | None:
+    symbol = symbol.upper().replace("/", "")
+    tf = timeframe.upper()
+    names = (
+        f"{symbol.lower()}_{tf.lower()}.csv",
+        f"{symbol.lower()}_{tf.lower()}_blackbull.csv",
+    )
+    rel_dirs = (
+        Path("trading_data") / "blackbull_import",
+        Path("trading_data"),
+        Path("data") / "blackbull_import",
+        Path("data") / "market",
+        Path("market_data"),
+    )
+    search_roots = [Path.cwd(), *_extra_data_roots()]
+    for root in search_roots:
+        for rel in rel_dirs:
+            for name in names:
+                path = (root / rel / name).resolve()
+                if path.is_file():
+                    return path
+        for name in names:
+            direct = (root / name).resolve()
+            if direct.is_file():
+                return direct
+    for path in (_cache_path(symbol, tf), _import_path(symbol, tf)):
+        if path.is_file():
+            return path
+    return None
+
+
 def _candles_to_rows(candles: list[Candle]) -> list[dict[str, str | float]]:
     return [
         {
@@ -104,12 +154,12 @@ def load_cached_blackbull(
 
     symbol = symbol.upper().replace("/", "")
     tf = timeframe.upper()
-    for path in (_cache_path(symbol, tf), _import_path(symbol, tf)):
-        if path.exists():
-            candles = load_candles_from_csv(path)
-            if candles:
-                label = "blackbull:import" if "blackbull_import" in str(path) else "blackbull:cache"
-                return candles[-bars:], label, str(path)
+    path = _resolve_cache_file(symbol, tf)
+    if path is not None:
+        candles = load_candles_from_csv(path)
+        if candles:
+            label = "blackbull:import" if "blackbull_import" in str(path) else "blackbull:cache"
+            return candles[-bars:], label, str(path)
     return None
 
 

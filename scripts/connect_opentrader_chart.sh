@@ -57,6 +57,9 @@ _set_env() {
 _set_env "OPENTRADER_USE_OLD_UI" "1"
 _set_env "OPENTRADER_OLD_APP" "$CHART_ROOT"
 _set_env "OPENTRADER_UI_INDEX" "$CHART_INDEX"
+_set_env "OPENTRADER_CHART_ROOT" "$CHART_ROOT"
+_set_env "OPENTRADER_URL" "http://127.0.0.1:8010"
+# MT5 via Django backend proxy or bridge — not engine autosync
 _set_env "MT5_AUTO_SYNC" "0"
 sed -i '/^OPENTRADER_USE_NEW_UI=/d' "$ENV_FILE" 2>/dev/null || true
 

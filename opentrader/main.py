@@ -31,6 +31,7 @@ from opentrade.services import BacktestService, OptimizerService
 from opentrade.store import StrategyStore
 
 from .bookmap_bridge import BookmapBridge
+from .django_proxy import DjangoBackendProxy, backend_url
 from .mt5_autosync import mt5_autosync
 from .old_app_static import (
     discover_chart_html,
@@ -89,6 +90,9 @@ app = FastAPI(
     version="2.0.0",
     description="Unified trading app: chart, Bookmap order flow, strategy, journal, backtest, and AI optimizer.",
 )
+
+if backend_url():
+    app.add_middleware(DjangoBackendProxy)
 
 
 @app.on_event("startup")
@@ -242,6 +246,12 @@ def health() -> dict[str, Any]:
         "serving": "old_app" if OLD_APP_INDEX else ("missing_old_ui" if use_old_ui() and OLD_APP_ROOT else "builtin"),
         "chart_discovered": (
             str(p) if OLD_APP_ROOT and (p := discover_chart_html(OLD_APP_ROOT)) else None
+        ),
+        "django_backend": backend_url(),
+        "mt5_bridge_hint": (
+            "Start: bash scripts/start_blackbull_bridge.sh"
+            if not backend_url()
+            else None
         ),
     }
 

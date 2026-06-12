@@ -26,8 +26,11 @@ import time
 from pathlib import Path
 
 import requests
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(ROOT / ".env")
+load_dotenv(Path.cwd() / ".env")
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
