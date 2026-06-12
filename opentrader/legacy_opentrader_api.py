@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import requests
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from trading.blackbull_mt5 import mt5_status
 from trading.market_data import BlackbullDataError, load_market_candles
@@ -195,11 +195,13 @@ def _load_history_candles(
         except Exception:
             continue
 
-    raise BlackbullDataError(
-        "No BlackBull data. Start: bash ~/opentrader-app/scripts/start_opentrader_django.sh "
-        "/home/heinz/OpenTrader  OR  MT5 bridge from Windows.",
-        {"mt5": mt5_status()},
+    candles, label, path, meta = load_market_candles(
+        symbol=symbol,
+        source="synthetic",
+        timeframe=tf,
+        bars=limit,
     )
+    return candles, label, path, meta, True, "blackbull unavailable — using synthetic"
 
 
 router = APIRouter()
@@ -228,17 +230,14 @@ def opentrader_history(
             symbol=symbol, tf=tf, limit=limit, source=source
         )
     except BlackbullDataError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "message": str(exc),
-                "mt5": (exc.meta or {}).get("mt5"),
-                "hint": (
-                    "cd ~/opentrader-app && bash scripts/start_opentrader_django.sh "
-                    "/home/heinz/OpenTrader /home/heinz/opentrade-app"
-                ),
-            },
-        ) from exc
+        candles, source_label, path, meta = load_market_candles(
+            symbol=symbol,
+            source="synthetic",
+            timeframe=tf,
+            bars=limit,
+        )
+        fallback = True
+        reason = str(exc)
 
     return _history_response(
         symbol=symbol,

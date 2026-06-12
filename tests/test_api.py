@@ -30,6 +30,18 @@ def test_symbols():
     assert "symbols" in data
     assert "count" in data
     assert isinstance(data["symbols"], list)
+    assert data["count"] > 0
+
+
+def test_symbols_trailing_slash_search():
+    response = client.get(
+        "/api/symbols/",
+        params={"source": "blackbull", "q": "btc", "limit": 300},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["count"] > 0
+    assert any("BTC" in sym.upper() for sym in data["symbols"])
 
 
 def test_candles_synthetic_source():

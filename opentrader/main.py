@@ -79,6 +79,44 @@ if UI_RESTORE.get("restored"):
 DATA_ROOT = Path(os.environ.get("OPENTRADER_DATA", "opentrader_data"))
 DEFAULT_CSV = Path("trading_data/eurusd_m1.csv")
 
+_DEFAULT_SYMBOLS = [
+    "EURUSD",
+    "GBPUSD",
+    "USDJPY",
+    "AUDUSD",
+    "USDCAD",
+    "NZDUSD",
+    "BTCUSD",
+    "ETHUSD",
+    "XRPUSD",
+    "SOLUSD",
+    "LTCUSD",
+    "ADAUSD",
+    "DOGEUSD",
+]
+
+
+def _symbol_names_from_manifest(manifest: dict[str, Any] | None) -> list[str]:
+    if not manifest:
+        return list(_DEFAULT_SYMBOLS)
+    raw = manifest.get("symbols") or manifest.get("details") or []
+    names: list[str] = []
+    for item in raw:
+        if isinstance(item, dict):
+            name = item.get("name") or item.get("symbol") or ""
+            if name:
+                names.append(str(name).upper().replace("/", ""))
+        elif item:
+            names.append(str(item).upper().replace("/", ""))
+    return names or list(_DEFAULT_SYMBOLS)
+
+
+def _filter_symbol_names(names: list[str], q: str, limit: int) -> list[str]:
+    needle = q.strip().lower().replace("/", "")
+    if needle:
+        names = [name for name in names if needle in name.lower().replace("/", "")]
+    return names[: max(1, min(limit, 1000))]
+
 store = StrategyStore(DATA_ROOT)
 journal = TradeJournal(DATA_ROOT / "journal.db")
 backtest_service = BacktestService()
@@ -408,18 +446,48 @@ def market_blackbull_import(payload: BlackbullImportPayload) -> dict[str, Any]:
 @app.get("/api/mt5/symbols")
 @app.get("/api/market/symbols")
 @app.get("/api/symbols")
-def market_symbols(live: bool = False) -> dict[str, Any]:
+@app.get("/api/symbols/")
+def market_symbols(
+    live: bool = False,
+    source: str = "blackbull",
+    q: str = "",
+    limit: int = 300,
+) -> dict[str, Any]:
     """All BlackBull/MT5 symbols — used by the Open Trader chart symbol search."""
     if live:
         symbols = list_mt5_symbols()
-        return {"source": "mt5", "count": len(symbols), "symbols": symbols, "mt5": mt5_status()}
+        names = [row["name"] for row in symbols if isinstance(row, dict) and row.get("name")]
+        filtered = _filter_symbol_names(names, q, limit)
+        return {
+            "source": "mt5",
+            "requested_source": source,
+            "count": len(filtered),
+            "symbols": filtered,
+            "results": filtered,
+            "mt5": mt5_status(),
+        }
+
     manifest = load_symbols_manifest()
+    names = _symbol_names_from_manifest(manifest)
+    filtered = _filter_symbol_names(names, q, limit)
     if manifest:
-        return {"source": "manifest", **manifest, "mt5": mt5_status()}
+        return {
+            "source": "manifest",
+            "requested_source": source,
+            "count": len(filtered),
+            "symbols": filtered,
+            "results": filtered,
+            "updated": manifest.get("updated"),
+            "broker": manifest.get("broker"),
+            "server": manifest.get("server"),
+            "mt5": mt5_status(),
+        }
     return {
-        "source": "empty",
-        "count": 0,
-        "symbols": [],
+        "source": "default",
+        "requested_source": source,
+        "count": len(filtered),
+        "symbols": filtered,
+        "results": filtered,
         "message": "Run scripts/mt5_python_bridge.py --all-symbols on Windows with BlackBull MT5",
         "mt5": mt5_status(),
     }

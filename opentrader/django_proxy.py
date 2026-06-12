@@ -10,11 +10,10 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 # Old OpenTrader chart expects these from Django/MT5 backend.
-# /api/history is handled by legacy_opentrader_api (Django fetch + yahoo/synthetic fallback).
+# /api/history and /api/symbols are handled locally (Django fetch + fallbacks).
 PROXY_PREFIXES = (
     "/api/candles",
     "/api/bars",
-    "/api/symbols",
     "/api/mt5",
     "/api/market",
     "/api/data",
