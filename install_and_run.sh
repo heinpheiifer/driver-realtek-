@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
-echo "==> OpenTrade setup in: $ROOT"
+echo "==> OpenTrader setup in: $ROOT"
 
 if ! command -v python3 >/dev/null; then
   echo "python3 not found. Install: sudo apt install python3 python3-pip python3-venv"
@@ -35,6 +35,7 @@ fi
 
 PORT="${PORT:-8080}"
 HOST="${HOST:-127.0.0.1}"
-echo "==> Starting OpenTrade at http://${HOST}:${PORT}"
+echo "==> Starting OpenTrader at http://${HOST}:${PORT}"
+echo "    (includes OpenTrade backtest + optimizer engine)"
 echo "    Press Ctrl+C to stop."
-exec python -m uvicorn opentrade.main:app --host "$HOST" --port "$PORT"
+exec python -m uvicorn opentrader.main:app --host "$HOST" --port "$PORT"

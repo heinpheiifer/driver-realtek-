@@ -20,5 +20,5 @@ fi
 PORT="${PORT:-8080}"
 HOST="${HOST:-127.0.0.1}"
 
-echo "Starting OpenTrade at http://${HOST}:${PORT}"
-exec python3 -m uvicorn opentrade.main:app --host "$HOST" --port "$PORT"
+echo "Starting OpenTrader at http://${HOST}:${PORT}"
+exec python3 -m uvicorn opentrader.main:app --host "$HOST" --port "$PORT"

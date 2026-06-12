@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenTrader</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <h1>OpenTrader</h1>
+      <p>Live trading · Journal · OpenTrade research engine · AI optimizer</p>
+    </div>
+    <div class="header-stats">
+      <div class="live-pnl" id="headerPnl">$0.00</div>
+      <span id="modeBadge" class="badge">paper mode</span>
+      <span id="sessionBadge" class="badge idle">idle</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel sidebar">
+      <h2>Strategies</h2>
+      <div id="strategyList"></div>
+      <div class="actions">
+        <button id="newStrategyBtn" class="secondary">New Strategy</button>
+      </div>
+    </aside>
+
+    <section class="panel">
+      <div class="tabs">
+        <button class="tab active" data-tab="dashboard">Live Dashboard</button>
+        <button class="tab" data-tab="journal">Trade Journal</button>
+        <button class="tab" data-tab="settings">Strategy</button>
+        <button class="tab" data-tab="backtest">Backtest</button>
+        <button class="tab" data-tab="optimizer">AI Optimizer</button>
+      </div>
+
+      <div id="dashboardTab">
+        <div class="status-line" id="liveStatus">Start a paper session to stream real-time P&amp;L.</div>
+        <div class="metrics" id="liveMetrics"></div>
+        <div class="grid-2 dashboard-charts">
+          <div>
+            <h3>Equity Curve</h3>
+            <canvas id="liveEquityChart"></canvas>
+          </div>
+          <div>
+            <h3>Open Position</h3>
+            <div id="openPositionPanel" class="open-position-panel">No open position</div>
+            <div class="progress-wrap">
+              <label>Replay progress</label>
+              <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+              <small id="progressLabel">0%</small>
+            </div>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="startSessionBtn" class="success">Start Paper Session</button>
+          <button id="stopSessionBtn" class="secondary">Stop Session</button>
+        </div>
+      </div>
+
+      <div id="journalTab" class="hidden">
+        <div class="metrics" id="journalStats"></div>
+        <table class="journal-table">
+          <thead>
+            <tr>
+              <th>Side</th>
+              <th>Entry Time</th>
+              <th>Exit Time</th>
+              <th>Entry</th>
+              <th>Exit</th>
+              <th>Qty</th>
+              <th>PnL</th>
+              <th>Balance</th>
+              <th>Conf</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="journalBody"></tbody>
+        </table>
+      </div>
+
+      <div id="settingsTab" class="hidden">
+        <div class="grid-2">
+          <div><label>Name</label><input id="strategyName" /></div>
+          <div>
+            <label>Mode</label>
+            <select id="strategyMode">
+              <option value="paper">Paper</option>
+              <option value="live">Live (signal export)</option>
+            </select>
+          </div>
+          <div><label>Symbol</label><input id="strategySymbol" value="EURUSD" /></div>
+          <div><label>Timeframe</label><input id="strategyTimeframe" value="M1" /></div>
+        </div>
+        <h2 style="margin-top:1rem;">Risk &amp; Swarm Agents</h2>
+        <div class="grid-2" id="configFields"></div>
+        <div class="actions">
+          <button id="saveStrategyBtn">Save Strategy</button>
+          <button id="runBacktestBtn" class="success">Run Backtest</button>
+        </div>
+      </div>
+
+      <div id="backtestTab" class="hidden">
+        <div class="status-line" id="backtestStatus">No backtest run yet.</div>
+        <div class="metrics" id="metrics"></div>
+        <canvas id="equityChart"></canvas>
+        <h2 style="margin-top:1rem;">Backtest Trades</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Side</th><th>Entry</th><th>Exit</th><th>Entry $</th><th>Exit $</th><th>PnL</th><th>Reason</th>
+            </tr>
+          </thead>
+          <tbody id="tradesBody"></tbody>
+        </table>
+      </div>
+
+      <div id="optimizerTab" class="hidden">
+        <div class="status-line" id="optimizerStatus">
+          Target: 65%+ win rate · positive forward return · runs until gate met.
+        </div>
+        <div class="grid-2">
+          <div><label>Min Win Rate (%)</label><input id="gateWinRate" type="number" value="65" /></div>
+          <div><label>Max Drawdown (%)</label><input id="gateMaxDd" type="number" step="0.1" value="10" /></div>
+        </div>
+        <div class="actions">
+          <button id="startOptimizerBtn">Start Optimizer</button>
+        </div>
+        <div class="metrics" id="optimizerMetrics"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
