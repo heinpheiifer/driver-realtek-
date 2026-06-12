@@ -49,7 +49,7 @@ def _yahoo_ticker(symbol: str) -> str:
         return "BTC-USD"
     if symbol == "ETHUSD":
         return "ETH-USD"
-    if symbol.endswith("USD") and len(symbol) > 6:
+    if symbol.endswith("USD") and len(symbol) >= 6:
         return f"{symbol[:-3]}-USD"
     return symbol
 

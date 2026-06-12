@@ -9,11 +9,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-# Old OpenTrader chart expects these from Django/MT5 backend
+# Old OpenTrader chart expects these from Django/MT5 backend.
+# /api/history is handled by legacy_opentrader_api (Django fetch + yahoo/synthetic fallback).
 PROXY_PREFIXES = (
     "/api/candles",
     "/api/bars",
-    "/api/history",
     "/api/symbols",
     "/api/mt5",
     "/api/market",
@@ -56,6 +56,8 @@ class DjangoBackendProxy(BaseHTTPMiddleware):
                 timeout=30,
                 allow_redirects=False,
             )
+            if resp.status_code >= 500:
+                return await call_next(request)
             return Response(
                 content=resp.content,
                 status_code=resp.status_code,
