@@ -33,6 +33,7 @@ from opentrade.store import StrategyStore
 from .bookmap_bridge import BookmapBridge
 from .mt5_autosync import mt5_autosync
 from .old_app_static import (
+    discover_chart_html,
     old_app_asset_dirs,
     resolve_old_app_root,
     resolve_old_app_static,
@@ -238,7 +239,10 @@ def health() -> dict[str, Any]:
         "old_app": str(OLD_APP_ROOT) if OLD_APP_ROOT else None,
         "old_app_index": str(OLD_APP_INDEX) if OLD_APP_INDEX else None,
         "ui_restore": UI_RESTORE,
-        "serving": "old_app" if OLD_APP_INDEX else "builtin",
+        "serving": "old_app" if OLD_APP_INDEX else ("missing_old_ui" if use_old_ui() and OLD_APP_ROOT else "builtin"),
+        "chart_discovered": (
+            str(p) if OLD_APP_ROOT and (p := discover_chart_html(OLD_APP_ROOT)) else None
+        ),
     }
 
 
@@ -716,6 +720,10 @@ def default_csv_info() -> dict[str, Any]:
 def index() -> FileResponse:
     if OLD_APP_INDEX and OLD_APP_INDEX.is_file():
         return FileResponse(OLD_APP_INDEX)
+    if use_old_ui() and OLD_APP_ROOT:
+        missing = APP_ROOT / "static" / "missing_old_ui.html"
+        if missing.is_file():
+            return FileResponse(missing, status_code=503)
     return FileResponse(APP_ROOT / "static" / "index.html")
 
 

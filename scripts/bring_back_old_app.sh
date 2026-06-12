@@ -25,6 +25,8 @@ bash "$ENGINE_ROOT/scripts/backup_old_ui.sh" "$OLD_APP" || true
 bash "$ENGINE_ROOT/scripts/integrate_old_app.sh" "$OLD_APP"
 
 # Restore if missing OR replaced by git engine UI
+bash "$ENGINE_ROOT/scripts/find_old_chart.sh" "$OLD_APP" || true
+
 _restore_needed() {
   local idx="$OLD_APP/static/index.html"
   if [[ ! -f "$OLD_APP/index.html" ]] && [[ ! -f "$idx" ]] && \

@@ -5,35 +5,43 @@
 ```bash
 cd ~/opentrader-app
 git pull
+bash scripts/integrate_old_app.sh /home/heinz/opentrade-app
+bash scripts/stop_opentrader.sh
 FORCE=1 bash scripts/bring_back_old_app.sh
 ```
 
-Open **http://127.0.0.1:8010** — your original chart (Heikin Ashi, Bookmap, drawing tools).
+## Find your chart if restore fails
 
-## What it does
+```bash
+bash scripts/find_old_chart.sh /home/heinz/opentrade-app
+```
 
-1. Backs up UI files
-2. Merges engine API (backtest, journal, optimizer) **without** overwriting your chart
-3. Restores from `.opentrader_ui_backup/latest` if git UI replaced your chart
-4. Sets `OPENTRADER_USE_OLD_UI=1` in `.env`
-5. Starts on port 8010
+If it finds your chart path, add to `/home/heinz/opentrade-app/.env`:
 
-## Manual restore only
+```
+OPENTRADER_USE_OLD_UI=1
+OPENTRADER_UI_INDEX=/full/path/to/your/chart.html
+```
+
+Then:
 
 ```bash
 cd /home/heinz/opentrade-app
-bash scripts/restore_old_ui.sh
 FORCE=1 bash run.sh
 ```
 
-## Verify
+## Verify (must NOT say "builtin")
 
 ```bash
 curl -s http://127.0.0.1:8010/api/health | python3 -m json.tool
 ```
 
-Want `"serving": "old_app"` and `"old_app_index"` pointing at your chart `index.html`.
+- `"serving": "old_app"` — your chart
+- `"serving": "missing_old_ui"` — old mode on but chart file not found (won't show new app)
+- `"serving": "builtin"` — new git app (wrong for you)
 
-## New git UI instead?
+## New git app instead?
 
-Set in `.env`: `OPENTRADER_USE_NEW_UI=1`
+```
+OPENTRADER_USE_NEW_UI=1
+```

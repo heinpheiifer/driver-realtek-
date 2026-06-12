@@ -6,7 +6,29 @@ from pathlib import Path
 
 UI_BACKUP_DIRNAME = ".opentrader_ui_backup"
 DEFAULT_OLD_APP = Path("/home/heinz/opentrade-app")
-ENGINE_STATIC_MARKERS = ("Open Trader", "btnBookmapToggle", "runBacktestBtn")
+ENGINE_STATIC_MARKERS = ("btnBookmapToggle", "runBacktestBtn", "strategyList", "startOptimizerBtn")
+OLD_CHART_MARKERS = (
+    "heikin",
+    "Heikin",
+    "drawing",
+    "lightweight-charts",
+    "LightweightCharts",
+    "tradingview",
+    "chart-container",
+    "bookmap",
+    "Bookmap",
+)
+_SKIP_DIR_NAMES = {
+    ".git",
+    ".venv",
+    "venv",
+    "node_modules",
+    "__pycache__",
+    "engine_static",
+    UI_BACKUP_DIRNAME,
+    "opentrader_data",
+    "trading_runs",
+}
 
 
 def use_old_ui() -> bool:
@@ -33,12 +55,31 @@ def resolve_old_app_root() -> Path | None:
 
 
 def _is_engine_builtin_ui(index_path: Path) -> bool:
-    """Detect git unified UI — must not replace user's original chart app."""
+    """Detect git unified UI — must not serve as the user's original chart."""
     try:
-        text = index_path.read_text(encoding="utf-8", errors="ignore")[:12000]
+        text = index_path.read_text(encoding="utf-8", errors="ignore")[:16000]
     except OSError:
         return False
-    return sum(1 for marker in ENGINE_STATIC_MARKERS if marker in text) >= 2
+    hits = sum(1 for marker in ENGINE_STATIC_MARKERS if marker in text)
+    return hits >= 2
+
+
+def _chart_score(path: Path) -> int:
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")[:16000].lower()
+    except OSError:
+        return -1
+    if _is_engine_builtin_ui(path):
+        return -1
+    score = 0
+    for marker in OLD_CHART_MARKERS:
+        if marker.lower() in text:
+            score += 3
+    if path.name == "index.html":
+        score += 2
+    if "static" in path.parts or "public" in path.parts or "dist" in path.parts:
+        score += 1
+    return score
 
 
 def _index_override() -> Path | None:
@@ -49,21 +90,50 @@ def _index_override() -> Path | None:
     return path if path.is_file() else None
 
 
-def _backup_roots(root: Path) -> list[Path]:
+def _backup_roots(root: Path, *, oldest_first: bool = False) -> list[Path]:
     backup_base = root / UI_BACKUP_DIRNAME
     if not backup_base.is_dir():
         return []
-    latest = backup_base / "latest"
-    roots: list[Path] = []
-    if latest.is_dir():
-        roots.append(latest.resolve())
-    roots.extend(
-        sorted(
-            (p for p in backup_base.iterdir() if p.is_dir() and p.name != "latest"),
-            reverse=True,
-        )
+    dated = sorted(
+        (p for p in backup_base.iterdir() if p.is_dir() and p.name != "latest"),
+        reverse=not oldest_first,
     )
-    return roots
+    latest = backup_base / "latest"
+    if latest.is_dir():
+        return ([latest.resolve()] if not oldest_first else []) + [p.resolve() for p in dated] + (
+            [latest.resolve()] if oldest_first else []
+        )
+    return [p.resolve() for p in dated]
+
+
+def _should_skip(path: Path, search_root: Path) -> bool:
+    names = _SKIP_DIR_NAMES
+    # When explicitly scanning a backup folder, allow HTML inside it
+    if UI_BACKUP_DIRNAME in search_root.parts:
+        names = names - {UI_BACKUP_DIRNAME}
+    return any(part in names for part in path.parts)
+
+
+def discover_chart_html(search_root: Path) -> Path | None:
+    """Find the best chart HTML under a directory tree."""
+    best: tuple[int, Path] | None = None
+    if not search_root.is_dir():
+        return None
+
+    for html in search_root.rglob("*.html"):
+        if _should_skip(html, search_root):
+            continue
+        if "opentrader" in html.parts and "static" in html.parts and "engine_static" not in html.parts:
+            # Skip git engine copy under opentrader/static unless nothing else exists
+            if _is_engine_builtin_ui(html):
+                continue
+        score = _chart_score(html)
+        if score < 0:
+            continue
+        if best is None or score > best[0]:
+            best = (score, html)
+
+    return best[1] if best else None
 
 
 def _static_candidates(root: Path) -> list[Path]:
@@ -77,6 +147,7 @@ def _static_candidates(root: Path) -> list[Path]:
         root / "web",
         root / "ui",
         root / "client",
+        root / "chart",
         root / "templates",
         root / "assets",
         root,
@@ -93,28 +164,20 @@ def resolve_old_app_static() -> tuple[Path | None, Path | None]:
     if root is None:
         return None, None
 
-    search_roots = [root, *_backup_roots(root)]
+    # Search backups oldest-first first (latest may be corrupted git UI)
+    for search_root in [*_backup_roots(root, oldest_first=True), root]:
+        found = discover_chart_html(search_root)
+        if found is not None:
+            return found.parent, found
 
-    for search_root in search_roots:
+    # Legacy path-based lookup
+    for search_root in [root, *_backup_roots(root)]:
         for base in _static_candidates(search_root):
             if not base.is_dir():
                 continue
             index = base / "index.html"
-            if not index.is_file():
-                continue
-            if search_root is root and _is_engine_builtin_ui(index):
-                continue
-            return base, index
-
-        for base in _static_candidates(search_root):
-            if not base.is_dir():
-                continue
-            for html in sorted(base.glob("*.html")):
-                if html.name.startswith("."):
-                    continue
-                if search_root is root and _is_engine_builtin_ui(html):
-                    continue
-                return base, html
+            if index.is_file() and not _is_engine_builtin_ui(index):
+                return base, index
 
     return None, None
 
@@ -123,7 +186,19 @@ def old_app_asset_dirs(root: Path | None) -> list[Path]:
     """Extra directories under the old app root to expose as static mounts."""
     if root is None:
         return []
-    names = ("assets", "js", "css", "public", "static", "dist", "web", "ui", "client", "frontend")
+    names = (
+        "assets",
+        "js",
+        "css",
+        "public",
+        "static",
+        "dist",
+        "web",
+        "ui",
+        "client",
+        "frontend",
+        "chart",
+    )
     dirs: list[Path] = []
     seen: set[Path] = set()
     for name in names:

@@ -74,6 +74,7 @@ cp "$ENGINE_ROOT/scripts/restore_old_ui.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/setup_old_app.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/diagnose_old_app.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/bring_back_old_app.sh" "$OLD_APP/scripts/"
+cp "$ENGINE_ROOT/scripts/find_old_chart.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/stop_opentrader.sh" "$OLD_APP/scripts/"
 chmod +x "$OLD_APP/scripts/"*.sh
 

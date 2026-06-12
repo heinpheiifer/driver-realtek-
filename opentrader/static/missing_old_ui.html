@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Open Trader — old chart not found</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0d1117; color: #e6edf3; padding: 2rem; max-width: 720px; margin: 0 auto; }
+    code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 4px; }
+    pre { background: #161b22; padding: 1rem; border-radius: 8px; overflow-x: auto; }
+    h1 { color: #f85149; }
+  </style>
+</head>
+<body>
+  <h1>Your old chart UI was not found</h1>
+  <p>The server is in <strong>old app mode</strong> but could not locate your original chart HTML
+     (Heikin Ashi / Bookmap / drawing tools). It will <em>not</em> show the new git UI.</p>
+
+  <h2>Fix</h2>
+  <pre>cd ~/opentrader-app
+git pull
+FORCE=1 bash scripts/bring_back_old_app.sh
+
+# or find your chart file:
+find /home/heinz/opentrade-app -name '*.html'
+
+# then in /home/heinz/opentrade-app/.env add:
+OPENTRADER_UI_INDEX=/path/to/your/chart.html
+
+cd /home/heinz/opentrade-app
+FORCE=1 bash run.sh</pre>
+
+  <p>Check status: <code>curl -s http://127.0.0.1:8010/api/health | python3 -m json.tool</code></p>
+</body>
+</html>
