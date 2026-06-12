@@ -29,6 +29,16 @@ source .venv/bin/activate
 echo "==> Installing Python packages ..."
 pip install -q -r requirements.txt
 
+if [[ "$(uname -s)" == "Linux" ]]; then
+  echo "==> Linux detected — MetaTrader5 is Windows-only (skipped)."
+  echo "    For BlackBull data: export CSV from MT5 → trading_data/blackbull_import/"
+  echo "    See opentrader/BLACKBULL_MT5.md"
+else
+  if [[ -f requirements-mt5.txt ]]; then
+    pip install -q -r requirements-mt5.txt || echo "==> MetaTrader5 install skipped (optional, Windows + MT5 only)"
+  fi
+fi
+
 if [[ ! -f trading_data/eurusd_m1.csv ]]; then
   echo "==> Generating sample data ..."
   python -m trading.fetch_data --output trading_data/eurusd_m1.csv --bars 8000

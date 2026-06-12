@@ -2,25 +2,63 @@
 
 Open Trader loads **real BlackBull market data** from your MT5 terminal — the same prices you trade on.
 
-## Option A — Python bridge (recommended, Windows)
+## Linux (your setup — heinz-Predator)
+
+**Do not run `pip install` system-wide.** Use the project venv:
+
+```bash
+cd ~/opentrader-app
+bash install_and_run.sh
+```
+
+MetaTrader5 **does not install on Linux**. Use the MT5 CSV export workflow below.
+
+### BlackBull on Linux — MT5 export → Open Trader
+
+**On Windows** (where your BlackBull MT5 runs):
+
+1. Copy `scripts/BlackBullExportToOpenTrader.mq5` to MT5 **File → Open Data Folder → MQL5 → Scripts**
+2. In MT5: **Navigator → Scripts → BlackBullExportToOpenTrader** → drag onto BTCUSD chart
+3. Find the exported file in **MQL5/Files/blackbull_import/btcusd_m5.csv**
+
+**Copy to Linux** (USB, shared folder, scp, etc.):
+
+```bash
+cd ~/opentrader-app
+bash scripts/import_blackbull_csv.sh /path/to/btcusd_m5.csv BTCUSD M5
+```
+
+**In Open Trader:** select **BlackBull** → click **Load**
+
+Re-run the MT5 script (or set it on a timer) whenever you want fresh candles.
+
+---
+
+## Option A — Python bridge (Windows only)
 
 Run on the same PC as your BlackBull MT5 terminal:
 
 ```bash
-pip install MetaTrader5 requests
+cd ~/opentrader-app
+bash install_and_run.sh   # creates .venv and installs everything
 
+# Windows cmd:
 set MT5_PATH=C:\Program Files\BlackBull Markets MT5\terminal64.exe
 set MT5_LOGIN=YOUR_ACCOUNT
 set MT5_PASSWORD=YOUR_PASSWORD
 set MT5_SERVER=BlackBullMarkets-Live
 set OPENTRADER_URL=http://127.0.0.1:8010
 
-python scripts/mt5_python_bridge.py --symbol BTCUSD --timeframe M5 --interval 15
+.venv\Scripts\python scripts/mt5_python_bridge.py --symbol BTCUSD --timeframe M5 --interval 15
 ```
 
-This syncs live MT5 candles to Open Trader every 15 seconds.
+On Windows, install MT5 package inside venv:
 
-## Option B — Direct MT5 connection (same machine)
+```bash
+.venv/Scripts/pip install -r requirements-mt5.txt
+```
+
+## Option B — Direct MT5 connection (Windows only)
 
 Set environment variables before starting Open Trader:
 
@@ -35,14 +73,14 @@ bash install_and_run.sh
 
 In the app, select **BlackBull** and click **Sync MT5** or **Load**.
 
-## Option C — MT5 script export (any OS)
+## Option C — MT5 script export (works with Linux Open Trader)
 
 1. Copy `scripts/BlackBullExportToOpenTrader.mq5` into your MT5 `Scripts` folder
 2. Run the script on your chart in BlackBull MT5
-3. Copy exported CSV from `MQL5/Files/blackbull_import/` to Open Trader:
+3. Copy exported CSV to Open Trader:
 
-   ```
-   trading_data/blackbull_import/btcusd_m5.csv
+   ```bash
+   bash scripts/import_blackbull_csv.sh /path/to/export.csv BTCUSD M5
    ```
 
 4. Click **Load** with **BlackBull** selected
@@ -82,6 +120,10 @@ Common MT5 server values:
 
 Check **Tools → Options → Server** in your MT5 terminal for the exact name.
 
-## Linux note
+## Troubleshooting
 
-MetaTrader5 Python API requires the MT5 terminal on **Windows**. On Linux, use Option C (CSV export) or run the Python bridge on a Windows machine/VPS with MT5 installed.
+| Error | Fix |
+|-------|-----|
+| `externally-managed-environment` | Use `bash install_and_run.sh` (venv), not system `pip install` |
+| `No matching distribution MetaTrader5` | Normal on Linux — use Option C (CSV export) |
+| `MT5 bridge needed` in UI | Export CSV from MT5 and run `import_blackbull_csv.sh` |
