@@ -61,7 +61,9 @@ _set_env "OPENTRADER_CHART_ROOT" "$CHART_ROOT"
 _set_env "OPENTRADER_URL" "http://127.0.0.1:8010"
 # MT5 via Django backend proxy or bridge — not engine autosync
 _set_env "MT5_AUTO_SYNC" "0"
+_set_env "OPENTRADER_DJANGO_PROXY" "0"
 sed -i '/^OPENTRADER_USE_NEW_UI=/d' "$ENV_FILE" 2>/dev/null || true
+sed -i '/^OPENTRADER_BACKEND_URL=/d' "$ENV_FILE" 2>/dev/null || true
 
 echo ""
 echo "==> .env configured:"

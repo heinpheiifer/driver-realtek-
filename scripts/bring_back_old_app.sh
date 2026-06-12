@@ -48,7 +48,7 @@ fi
 # Ensure .env enables old UI
 ENV_FILE="$OLD_APP/.env"
 touch "$ENV_FILE"
-for kv in "OPENTRADER_USE_OLD_UI=1" "OPENTRADER_OLD_APP=$OLD_APP" "MT5_AUTO_SYNC=0"; do
+for kv in "OPENTRADER_USE_OLD_UI=1" "OPENTRADER_OLD_APP=$OLD_APP" "MT5_AUTO_SYNC=0" "OPENTRADER_DJANGO_PROXY=0"; do
   key="${kv%%=*}"
   if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
     sed -i "s|^${key}=.*|${kv}|" "$ENV_FILE"
@@ -59,6 +59,7 @@ done
 
 # Remove new-app-only flag if present
 sed -i '/^OPENTRADER_USE_NEW_UI=/d' "$ENV_FILE" 2>/dev/null || true
+sed -i '/^OPENTRADER_BACKEND_URL=/d' "$ENV_FILE" 2>/dev/null || true
 
 echo ""
 echo "==> Starting your old app ..."

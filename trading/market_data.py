@@ -178,3 +178,48 @@ def load_market_candles(
     rows = _generate_realistic_ohlcv(bars=bars, start_price=start_price, seed=hash(symbol + tf) % 10000)
     save_ohlcv_csv(out, rows)
     return load_candles_from_csv(out)[-bars:], f"synthetic:{symbol}", str(out), None
+
+
+def load_candles_with_fallback(
+    *,
+    symbol: str = "BTCUSD",
+    source: str = "blackbull",
+    timeframe: str = "M5",
+    bars: int = 800,
+    csv_path: str | None = None,
+) -> tuple[list[Candle], str, str, dict | None, bool, str | None]:
+    """Load candles; never raises. Falls back yahoo → synthetic when blackbull empty."""
+    try:
+        candles, label, path, meta = load_market_candles(
+            symbol=symbol,
+            source=source,
+            csv_path=csv_path,
+            bars=bars,
+            timeframe=timeframe,
+        )
+        if candles:
+            return candles, label, path, meta, False, None
+    except BlackbullDataError:
+        if source.lower() != "blackbull":
+            raise
+
+    for alt in ("yahoo", "synthetic"):
+        try:
+            candles, label, path, meta = load_market_candles(
+                symbol=symbol,
+                source=alt,
+                timeframe=timeframe,
+                bars=bars,
+            )
+            if candles:
+                return candles, label, path, meta, True, f"blackbull unavailable — using {alt}"
+        except Exception:
+            continue
+
+    candles, label, path, meta = load_market_candles(
+        symbol=symbol,
+        source="synthetic",
+        timeframe=timeframe,
+        bars=bars,
+    )
+    return candles, label, path, meta, True, "blackbull unavailable — using synthetic"

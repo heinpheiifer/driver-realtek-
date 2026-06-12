@@ -143,9 +143,18 @@ if [[ "$UP" -eq 0 ]]; then
   exit 1
 fi
 
-_set_engine_env "OPENTRADER_BACKEND_URL" "http://127.0.0.1:${PORT}"
 _set_engine_env "OPENTRADER_USE_OLD_UI" "1"
 _set_engine_env "MT5_AUTO_SYNC" "0"
+
+if [[ "$DATA_OK" -eq 1 ]]; then
+  _set_engine_env "OPENTRADER_BACKEND_URL" "http://127.0.0.1:${PORT}"
+  _set_engine_env "OPENTRADER_DJANGO_PROXY" "1"
+  echo "==> Django has live data — enabled OPENTRADER_DJANGO_PROXY=1"
+else
+  sed -i '/^OPENTRADER_BACKEND_URL=/d' "$ENGINE_DIR/.env" 2>/dev/null || true
+  _set_engine_env "OPENTRADER_DJANGO_PROXY" "0"
+  echo "==> Django up but no MT5 data yet — proxy disabled, chart uses local fallback"
+fi
 
 echo ""
 echo "==> Django is up on ${BASE}"

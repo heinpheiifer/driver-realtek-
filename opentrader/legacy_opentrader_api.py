@@ -10,8 +10,9 @@ import requests
 from fastapi import APIRouter
 
 from trading.blackbull_mt5 import mt5_status
-from trading.market_data import BlackbullDataError, load_market_candles
+from trading.market_data import load_candles_with_fallback
 
+from .django_proxy import django_proxy_enabled
 from .mt5_autosync import mt5_autosync
 
 logger = logging.getLogger(__name__)
@@ -138,6 +139,8 @@ def _try_django_history(
     range_: str,
     source: str,
 ) -> dict[str, Any] | None:
+    if not django_proxy_enabled():
+        return None
     backend = os.environ.get("OPENTRADER_BACKEND_URL", "").strip().rstrip("/")
     if not backend:
         return None
@@ -150,7 +153,7 @@ def _try_django_history(
                 "range": range_,
                 "source": source,
             },
-            timeout=20,
+            timeout=5,
         )
         if resp.ok:
             data = resp.json()
@@ -161,50 +164,9 @@ def _try_django_history(
     return None
 
 
-def _load_history_candles(
-    *,
-    symbol: str,
-    tf: str,
-    limit: int,
-    source: str,
-) -> tuple[list, str, str, dict | None, bool, str | None]:
-    """Load candles; fallback yahoo/synthetic when blackbull unavailable."""
-    try:
-        candles, label, path, meta = load_market_candles(
-            symbol=symbol,
-            source=source,
-            timeframe=tf,
-            bars=limit,
-        )
-        if candles:
-            return candles, label, path, meta, False, None
-    except BlackbullDataError:
-        if source.lower() != "blackbull":
-            raise
-
-    for alt in ("yahoo", "synthetic"):
-        try:
-            candles, label, path, meta = load_market_candles(
-                symbol=symbol,
-                source=alt,
-                timeframe=tf,
-                bars=limit,
-            )
-            if candles:
-                return candles, label, path, meta, True, f"blackbull unavailable — using {alt}"
-        except Exception:
-            continue
-
-    candles, label, path, meta = load_market_candles(
-        symbol=symbol,
-        source="synthetic",
-        timeframe=tf,
-        bars=limit,
-    )
-    return candles, label, path, meta, True, "blackbull unavailable — using synthetic"
-
-
 router = APIRouter()
+
+
 @router.get("/api/history")
 @router.get("/api/history/")
 def opentrader_history(
@@ -225,19 +187,12 @@ def opentrader_history(
     if django_data is not None:
         return django_data
 
-    try:
-        candles, source_label, path, meta, fallback, reason = _load_history_candles(
-            symbol=symbol, tf=tf, limit=limit, source=source
-        )
-    except BlackbullDataError as exc:
-        candles, source_label, path, meta = load_market_candles(
-            symbol=symbol,
-            source="synthetic",
-            timeframe=tf,
-            bars=limit,
-        )
-        fallback = True
-        reason = str(exc)
+    candles, source_label, path, meta, fallback, reason = load_candles_with_fallback(
+        symbol=symbol,
+        source=source,
+        timeframe=tf,
+        bars=limit,
+    )
 
     return _history_response(
         symbol=symbol,

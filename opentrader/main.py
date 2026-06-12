@@ -23,7 +23,7 @@ from trading.blackbull_mt5 import (
     mt5_status,
     sync_all_mt5_symbols,
 )
-from trading.market_data import BlackbullDataError, import_blackbull_candles, load_market_candles
+from trading.market_data import import_blackbull_candles, load_candles_with_fallback, load_market_candles
 from trading.orderflow import compute_orderflow
 from opentrade.journal import TradeJournal
 from opentrade.live_engine import LivePaperEngine
@@ -31,7 +31,7 @@ from opentrade.services import BacktestService, OptimizerService
 from opentrade.store import StrategyStore
 
 from .bookmap_bridge import BookmapBridge
-from .django_proxy import DjangoBackendProxy, backend_url
+from .django_proxy import DjangoBackendProxy, backend_url, django_proxy_enabled
 from .legacy_opentrader_api import router as legacy_opentrader_router
 from .mt5_autosync import mt5_autosync
 from .old_app_static import (
@@ -290,6 +290,8 @@ def health() -> dict[str, Any]:
             str(p) if OLD_APP_ROOT and (p := discover_chart_html(OLD_APP_ROOT)) else None
         ),
         "django_backend": backend_url(),
+        "django_proxy": django_proxy_enabled(),
+        "engine_build": "2025-06-fix-now",
         "mt5_bridge_hint": (
             "Start: bash scripts/start_blackbull_bridge.sh"
             if not backend_url()
@@ -320,23 +322,13 @@ def market_candles(
     csv_path: str | None = None,
     window: int = 100,
 ) -> dict[str, Any]:
-    try:
-        candles, source_label, path, meta = load_market_candles(
-            symbol=symbol,
-            source=source,
-            csv_path=csv_path,
-            bars=bars,
-            timeframe=timeframe,
-        )
-    except BlackbullDataError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "message": str(exc),
-                "mt5": (exc.meta or {}).get("mt5"),
-                "hint": "Start BlackBull MT5, set MT5_* env vars, or run scripts/mt5_python_bridge.py",
-            },
-        ) from exc
+    candles, source_label, path, meta, fallback, fallback_reason = load_candles_with_fallback(
+        symbol=symbol,
+        source=source,
+        csv_path=csv_path,
+        bars=bars,
+        timeframe=timeframe,
+    )
     if not candles:
         raise HTTPException(status_code=404, detail=f"No candles for {symbol} ({source})")
     orderflow = compute_orderflow(candles, window=min(window, len(candles)))
@@ -346,6 +338,8 @@ def market_candles(
         "symbol": symbol.upper(),
         "source": source_label,
         "requested_source": source.lower(),
+        "fallback": fallback,
+        "fallback_reason": fallback_reason,
         "is_synthetic": is_synthetic,
         "timeframe": timeframe.upper(),
         "csv_path": path,

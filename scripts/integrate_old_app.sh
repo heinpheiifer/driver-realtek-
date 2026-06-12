@@ -81,6 +81,7 @@ cp "$ENGINE_ROOT/scripts/start_opentrader_stack.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/recover_old_chart.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/find_old_chart.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/stop_opentrader.sh" "$OLD_APP/scripts/"
+cp "$ENGINE_ROOT/scripts/fix_opentrader_now.sh" "$OLD_APP/scripts/"
 chmod +x "$OLD_APP/scripts/"*.sh
 
 mkdir -p "$OLD_APP/trading_data/blackbull_import"
@@ -103,6 +104,11 @@ fi
 if ! grep -q "^MT5_AUTO_SYNC=" "$ENV_FILE" 2>/dev/null; then
   echo "MT5_AUTO_SYNC=0" >> "$ENV_FILE"
 fi
+
+if ! grep -q "^OPENTRADER_DJANGO_PROXY=" "$ENV_FILE" 2>/dev/null; then
+  echo "OPENTRADER_DJANGO_PROXY=0" >> "$ENV_FILE"
+fi
+sed -i '/^OPENTRADER_BACKEND_URL=/d' "$ENV_FILE" 2>/dev/null || true
 
 cat > "$OLD_APP/run.sh" << 'LAUNCHER'
 #!/usr/bin/env bash

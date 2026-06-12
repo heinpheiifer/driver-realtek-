@@ -1,4 +1,8 @@
-"""Proxy market-data API to original OpenTrader Django backend (has MT5)."""
+"""Optional proxy to original OpenTrader Django backend (has MT5).
+
+Disabled by default — set OPENTRADER_DJANGO_PROXY=1 to enable.
+Without that flag, all chart API is served locally (yahoo/synthetic fallback).
+"""
 from __future__ import annotations
 
 import os
@@ -9,19 +13,20 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-# Old OpenTrader chart expects these from Django/MT5 backend.
-# /api/history and /api/symbols are handled locally (Django fetch + fallbacks).
 PROXY_PREFIXES = (
     "/api/candles",
     "/api/bars",
-    "/api/mt5",
-    "/api/market",
     "/api/data",
 )
-# Bookmap SSE stays on this engine — do not proxy /api/bookmap/stream
+
+
+def django_proxy_enabled() -> bool:
+    return os.environ.get("OPENTRADER_DJANGO_PROXY", "").strip().lower() in ("1", "true", "yes")
 
 
 def backend_url() -> str | None:
+    if not django_proxy_enabled():
+        return None
     raw = os.environ.get("OPENTRADER_BACKEND_URL", "").strip().rstrip("/")
     return raw or None
 
@@ -52,10 +57,10 @@ class DjangoBackendProxy(BaseHTTPMiddleware):
                 url=target,
                 headers=headers,
                 data=body if body else None,
-                timeout=30,
+                timeout=8,
                 allow_redirects=False,
             )
-            if resp.status_code >= 500:
+            if resp.status_code >= 400:
                 return await call_next(request)
             return Response(
                 content=resp.content,
