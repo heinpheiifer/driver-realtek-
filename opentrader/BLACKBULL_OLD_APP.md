@@ -51,10 +51,11 @@ FORCE=1 bash scripts/start_opentrader_stack.sh
 ## Test XRPUSD
 
 ```bash
-curl -s "http://127.0.0.1:8010/api/candles?symbol=XRPUSD&timeframe=M1&source=blackbull" | head -c 300
+curl -s "http://127.0.0.1:8010/api/history/?symbol=XRPUSD&interval=1m&range=1d&source=blackbull" | head -c 400
+curl -s "http://127.0.0.1:8010/api/mt5/status/" | python3 -m json.tool
 ```
 
-Should return JSON with `"candles": [...]`, not an error.
+Should return JSON with `"bars": [...]`, not 404.
 
 ## Check status
 

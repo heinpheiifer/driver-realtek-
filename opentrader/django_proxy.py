@@ -13,6 +13,7 @@ from starlette.responses import Response
 PROXY_PREFIXES = (
     "/api/candles",
     "/api/bars",
+    "/api/history",
     "/api/symbols",
     "/api/mt5",
     "/api/market",

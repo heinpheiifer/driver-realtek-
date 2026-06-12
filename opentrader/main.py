@@ -32,6 +32,7 @@ from opentrade.store import StrategyStore
 
 from .bookmap_bridge import BookmapBridge
 from .django_proxy import DjangoBackendProxy, backend_url
+from .legacy_opentrader_api import router as legacy_opentrader_router
 from .mt5_autosync import mt5_autosync
 from .old_app_static import (
     discover_chart_html,
@@ -89,7 +90,10 @@ app = FastAPI(
     title="OpenTrader",
     version="2.0.0",
     description="Unified trading app: chart, Bookmap order flow, strategy, journal, backtest, and AI optimizer.",
+    redirect_slashes=False,
 )
+
+app.include_router(legacy_opentrader_router)
 
 if backend_url():
     app.add_middleware(DjangoBackendProxy)
@@ -639,6 +643,7 @@ def get_run(run_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/bookmap/status")
+@app.get("/api/bookmap/status/")
 def bookmap_status() -> dict[str, Any]:
     return bookmap_bridge.status
 
