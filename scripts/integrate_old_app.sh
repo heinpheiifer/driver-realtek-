@@ -61,7 +61,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 export OPENTRADER_OLD_APP="$(pwd)"
 export PORT="${PORT:-8010}"
-if [[ -f .env ]]; then set -a; source .env; set +a; fi
+# Do not "source .env" — MT5_PATH often has spaces (Program Files) and breaks bash.
+# Python loads .env via dotenv when the server starts.
 bash install_and_run.sh
 LAUNCHER
 chmod +x "$OLD_APP/run.sh"

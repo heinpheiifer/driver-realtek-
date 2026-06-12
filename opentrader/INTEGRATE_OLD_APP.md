@@ -65,8 +65,11 @@ MT5_AUTO_SYNC=0
 MT5_LOGIN=...
 MT5_PASSWORD=...
 MT5_SERVER=BlackBullMarkets-Live
-MT5_PATH=...
+MT5_PATH="C:\Program Files\BlackBull Markets MT5\terminal64.exe"
 ```
+
+If `run.sh` fails with `FilesBlackBull: command not found`, quote `MT5_PATH` in `.env` (spaces in the path).  
+Or pull latest and re-run `integrate_old_app.sh` — `run.sh` no longer sources `.env` in bash.
 
 ## Verify
 

@@ -37,9 +37,26 @@ from .old_app_static import resolve_old_app_root, resolve_old_app_static
 APP_ROOT = Path(__file__).resolve().parent
 OLD_APP_ROOT = resolve_old_app_root()
 OLD_APP_STATIC, OLD_APP_INDEX = resolve_old_app_static()
-_env_path = APP_ROOT.parent / ".env"
-if _env_path.exists():
-    load_dotenv(_env_path)
+
+
+def _load_dotenv() -> None:
+    """Load .env from old app dir, cwd, or repo root (Python dotenv handles spaces in paths)."""
+    seen: set[Path] = set()
+    for candidate in (
+        OLD_APP_ROOT / ".env" if OLD_APP_ROOT else None,
+        Path.cwd() / ".env",
+        APP_ROOT.parent / ".env",
+    ):
+        if candidate is None:
+            continue
+        path = candidate.resolve()
+        if path in seen or not path.is_file():
+            continue
+        seen.add(path)
+        load_dotenv(path, override=False)
+
+
+_load_dotenv()
 
 DATA_ROOT = Path(os.environ.get("OPENTRADER_DATA", "opentrader_data"))
 DEFAULT_CSV = Path("trading_data/eurusd_m1.csv")
