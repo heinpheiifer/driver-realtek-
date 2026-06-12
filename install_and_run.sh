@@ -90,4 +90,6 @@ else
   echo "    Chart · Bookmap · Strategy · Journal · Backtest · Optimizer — all in one"
 fi
 echo "    Press Ctrl+C to stop."
+echo ""
+echo "    Run tests: pip install -r requirements-dev.txt && pytest tests/ -v"
 exec python -m uvicorn opentrader.main:app --host "$HOST" --port "$PORT"
