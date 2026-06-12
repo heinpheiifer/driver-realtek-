@@ -71,6 +71,12 @@ if _port_in_use; then
       lsof -ti ":${PORT}" | xargs -r kill -9 2>/dev/null || true
     fi
     sleep 1
+  elif [[ -n "${OPENTRADER_OLD_APP:-}" ]] && [[ -d "$OPENTRADER_OLD_APP" ]]; then
+    echo "==> Port ${PORT} in use (likely your old Open Trader app)."
+    echo "    MT5 already runs there — merge once, then restart with:"
+    echo "      cd $OPENTRADER_OLD_APP && FORCE=1 bash run.sh"
+    echo "    See opentrader/INTEGRATE_OLD_APP.md"
+    exit 1
   elif [[ "$PORT" == "8010" ]]; then
     echo "==> Port 8010 in use (your old Open Trader chart app)."
     echo "    Starting MT5 bridge API on 8011 instead."

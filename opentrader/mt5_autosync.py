@@ -21,7 +21,15 @@ class Mt5AutoSync:
 
     @property
     def enabled(self) -> bool:
-        return os.environ.get("MT5_AUTO_SYNC", "1").lower() not in ("0", "false", "no")
+        raw = os.environ.get("MT5_AUTO_SYNC", "").strip().lower()
+        if raw in ("0", "false", "no"):
+            return False
+        if raw in ("1", "true", "yes"):
+            return True
+        # Old Open Trader app already connects to MT5 — skip duplicate sync unless opted in.
+        if os.environ.get("OPENTRADER_OLD_APP", "").strip():
+            return False
+        return True
 
     @property
     def interval_sec(self) -> int:
