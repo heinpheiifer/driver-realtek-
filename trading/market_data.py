@@ -146,12 +146,19 @@ def load_market_candles(
     source = source.lower()
     tf = timeframe.upper()
 
-    if source == "csv" and csv_path:
-        path = Path(csv_path)
-        if path.exists():
-            candles = load_candles_from_csv(path)
-            if candles:
-                return candles[-bars:], f"csv:{path.name}", str(path), None
+    if source == "csv":
+        if csv_path:
+            path = Path(csv_path)
+            if path.exists():
+                candles = load_candles_from_csv(path)
+                if candles:
+                    return candles[-bars:], f"csv:{path.name}", str(path), None
+        else:
+            path = Path("trading_data") / "blackbull_import" / f"{symbol.lower()}_{tf.lower()}.csv"
+            if path.exists():
+                candles = load_candles_from_csv(path)
+                if candles:
+                    return candles[-bars:], f"csv:{path.name}", str(path), None
 
     if source == "blackbull":
         candles, label, path, meta = load_blackbull_candles(symbol=symbol, timeframe=tf, bars=bars)

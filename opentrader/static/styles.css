@@ -105,6 +105,9 @@ body {
   font-weight: 700;
   font-size: 0.85rem;
 }
+#symbolList option {
+  font-size: 0.85rem;
+}
 .source-group { display: flex; gap: 2px; }
 .source-btn {
   background: var(--panel-2);

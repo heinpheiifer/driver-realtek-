@@ -6,7 +6,9 @@ import threading
 import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
+from math import sqrt
 from pathlib import Path
+from statistics import mean, stdev
 from typing import Any
 
 from trading.backtest import PaperTradingEngine
@@ -58,12 +60,24 @@ class BacktestService:
         return engine.run(candles, build_swarm(strategy))
 
     def _serialize_result(self, result) -> dict[str, Any]:
+        pnls = [trade.pnl for trade in result.trades]
+        gross_wins = sum(p for p in pnls if p > 0)
+        gross_losses = abs(sum(p for p in pnls if p < 0))
+        profit_factor = round(gross_wins / gross_losses, 4) if gross_losses > 0 else 0.0
+        sharpe: float | None = None
+        if len(pnls) >= 2:
+            pnl_std = stdev(pnls)
+            if pnl_std > 0:
+                sharpe = round(mean(pnls) / pnl_std * sqrt(252), 4)
+
         return {
             "initial_balance": result.initial_balance,
             "ending_balance": result.ending_balance,
             "total_return_pct": round(result.total_return_pct, 4),
             "max_drawdown_pct": round(result.max_drawdown_pct, 4),
             "win_rate_pct": round(result.win_rate_pct, 4),
+            "profit_factor": profit_factor,
+            "sharpe": sharpe,
             "trades": len(result.trades),
             "trading_days": result.trading_days,
             "trades_per_day": round(result.trades_per_day, 4),

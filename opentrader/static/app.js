@@ -448,6 +448,40 @@ async function syncMt5() {
   await startBookmapReplay();
 }
 
+function defaultCsvPath() {
+  const sym = marketState.symbol.toLowerCase();
+  const tf = marketState.timeframe.toLowerCase();
+  return `trading_data/blackbull_import/${sym}_${tf}.csv`;
+}
+
+function resolveCsvPath(quiet = false) {
+  const autoPath = defaultCsvPath();
+  if (!quiet) {
+    const entered = prompt("CSV file path:", marketState.csv_path || autoPath);
+    if (entered !== null) {
+      marketState.csv_path = entered.trim() || autoPath;
+    } else if (!marketState.csv_path) {
+      marketState.csv_path = autoPath;
+    }
+  } else if (!marketState.csv_path) {
+    marketState.csv_path = autoPath;
+  }
+  return marketState.csv_path;
+}
+
+async function loadSymbols() {
+  try {
+    const data = await api("/api/symbols");
+    const list = $("symbolList");
+    if (!list) return;
+    const symbols = data.symbols || [];
+    list.innerHTML = symbols.map((s) => {
+      const name = typeof s === "string" ? s : s.name || s.symbol || "";
+      return name ? `<option value="${name}"></option>` : "";
+    }).join("");
+  } catch (_) { /* symbols optional until MT5 manifest exists */ }
+}
+
 async function loadMarket(quiet = false) {
   marketState.symbol = ($("symbolInput")?.value || "BTCUSD").toUpperCase().replace("/", "");
   marketState.timeframe = $("strategyTimeframe")?.value || "M5";
@@ -456,9 +490,15 @@ async function loadMarket(quiet = false) {
   syncTimeframeButtons(marketState.timeframe);
   if (!quiet) $("liveStatus").textContent = `Loading ${marketState.symbol} from ${marketState.source}…`;
 
+  let csvParam = "";
+  if (marketState.source === "csv") {
+    const csvPath = resolveCsvPath(quiet);
+    csvParam = `&csv_path=${encodeURIComponent(csvPath)}`;
+  }
+
   try {
     const data = await api(
-      `/api/market/candles?symbol=${encodeURIComponent(marketState.symbol)}&source=${marketState.source}&timeframe=${marketState.timeframe}&bars=800&window=120`
+      `/api/market/candles?symbol=${encodeURIComponent(marketState.symbol)}&source=${marketState.source}&timeframe=${marketState.timeframe}&bars=800&window=120${csvParam}`
     );
 
     marketState.csv_path = data.csv_path;
@@ -591,7 +631,7 @@ async function loadJournal() {
         <td>${fmtPrice(t.entry_price)}</td>
         <td>${fmtPrice(t.exit_price)}</td>
         <td class="${t.pnl >= 0 ? "positive" : "negative"}">${fmtMoney(t.pnl)}</td>
-        <td>${t.confidence != null ? `${(t.confidence * 100).toFixed(0)}%` : "—"}</td>
+        <td>${t.entry_confidence != null ? Number(t.entry_confidence).toFixed(2) : "—"}</td>
       </tr>`).join("");
   }
 }
@@ -645,8 +685,9 @@ function renderOptimizerStatus(job) {
     <h3>AI Optimizer</h3>
     <p>Status: <strong class="${job.status === "running" ? "positive" : ""}">${job.status}</strong> · Iteration ${job.iteration ?? 0}</p>
     <div class="results-grid">
-      <div><span class="muted">Best WR</span><strong class="${(best.win_rate_pct || 0) >= 65 ? "positive" : "negative"}">${best.win_rate_pct ?? "—"}%</strong></div>
-      <div><span class="muted">Best Return</span><strong>${best.total_return_pct ?? "—"}%</strong></div>
+      <div><span class="muted">Rolling Min WR</span><strong class="${(best.rolling_min_win_rate_pct || 0) >= 65 ? "positive" : "negative"}">${best.rolling_min_win_rate_pct ?? "—"}%</strong></div>
+      <div><span class="muted">Test WR</span><strong>${best.win_rate_test_pct ?? "—"}%</strong></div>
+      <div><span class="muted">Test Return</span><strong>${best.total_return_test_pct ?? "—"}%</strong></div>
       <div><span class="muted">Target WR</span><strong>${gates.min_win_rate ?? 65}%</strong></div>
       <div><span class="muted">Gate Met</span><strong class="${job.gate_met ? "positive" : "negative"}">${job.gate_met ? "Yes" : "No"}</strong></div>
     </div>
@@ -749,6 +790,7 @@ $("newStrategyBtn")?.addEventListener("click", () => {
 
 async function init() {
   await loadStrategies();
+  await loadSymbols();
   marketState.symbol = ($("symbolInput")?.value || "BTCUSD").toUpperCase();
   marketState.timeframe = document.querySelector(".tf.active")?.dataset.tf || "M5";
   marketState.source = document.querySelector(".source-btn.active")?.dataset.source || "blackbull";

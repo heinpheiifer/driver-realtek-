@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
@@ -31,6 +33,10 @@ from opentrade.store import StrategyStore
 from .bookmap_bridge import BookmapBridge
 
 APP_ROOT = Path(__file__).resolve().parent
+_env_path = APP_ROOT.parent / ".env"
+if _env_path.exists():
+    load_dotenv(_env_path)
+
 DATA_ROOT = Path(os.environ.get("OPENTRADER_DATA", "opentrader_data"))
 DEFAULT_CSV = Path("trading_data/eurusd_m1.csv")
 
@@ -597,7 +603,11 @@ def bookmap_stop() -> dict[str, Any]:
 @app.get("/api/bookmap/stream")
 async def bookmap_stream(request: Request) -> StreamingResponse:
     queue: asyncio.Queue = asyncio.Queue(maxsize=100)
-    bookmap_bridge.subscribe(lambda payload: queue.put_nowait(payload))
+
+    def on_event(payload: dict[str, Any]) -> None:
+        queue.put_nowait(payload)
+
+    bookmap_bridge.subscribe(on_event)
 
     async def generate():
         try:
@@ -611,7 +621,7 @@ async def bookmap_stream(request: Request) -> StreamingResponse:
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
         finally:
-            pass
+            bookmap_bridge.unsubscribe(on_event)
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 

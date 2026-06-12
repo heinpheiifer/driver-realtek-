@@ -41,6 +41,10 @@ class BookmapBridge:
     def subscribe(self, callback: Callable[[dict[str, Any]], None]) -> None:
         self._subscribers.append(callback)
 
+    def unsubscribe(self, callback: Callable[[dict[str, Any]], None]) -> None:
+        if callback in self._subscribers:
+            self._subscribers.remove(callback)
+
     def _emit(self, payload: dict[str, Any]) -> None:
         for callback in list(self._subscribers):
             try:

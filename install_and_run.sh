@@ -81,7 +81,13 @@ if _port_in_use; then
 fi
 
 echo ""
-echo "==> Starting unified Open Trader at http://${HOST}:${PORT}"
-echo "    Chart · Bookmap · Strategy · Journal · Backtest · Optimizer — all in one"
+if [[ "$PORT" == "8011" ]]; then
+  echo "==> MT5 bridge API at http://${HOST}:${PORT}"
+  echo "    Old chart app on :8010 — point BlackBull feed here"
+  echo "    Run mt5_python_bridge.py --all-symbols on Windows with BlackBull MT5"
+else
+  echo "==> Starting unified Open Trader at http://${HOST}:${PORT}"
+  echo "    Chart · Bookmap · Strategy · Journal · Backtest · Optimizer — all in one"
+fi
 echo "    Press Ctrl+C to stop."
 exec python -m uvicorn opentrader.main:app --host "$HOST" --port "$PORT"

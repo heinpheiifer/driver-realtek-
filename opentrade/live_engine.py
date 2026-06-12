@@ -7,7 +7,6 @@ import time
 from dataclasses import dataclass, field
 from statistics import mean
 from typing import Any
-from statistics import mean
 
 from trading.data import load_candles_from_csv
 from trading.models import Candle, Trade
