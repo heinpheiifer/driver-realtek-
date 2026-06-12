@@ -49,6 +49,15 @@ mkdir -p trading_data/blackbull_import
 PORT="${PORT:-8010}"
 HOST="${HOST:-127.0.0.1}"
 
+# Serve user's original Open Trader UI from OPENTRADER_OLD_APP (e.g. /home/heinz/opentrade-app)
+if [[ -z "${OPENTRADER_OLD_APP:-}" ]] && [[ -d "/home/heinz/opentrade-app" ]]; then
+  export OPENTRADER_OLD_APP="/home/heinz/opentrade-app"
+  echo "==> Using old Open Trader UI: $OPENTRADER_OLD_APP"
+fi
+if [[ -n "${OPENTRADER_OLD_APP:-}" ]] && [[ -d "$OPENTRADER_OLD_APP" ]]; then
+  echo "==> Serving old app UI from: $OPENTRADER_OLD_APP"
+fi
+
 _port_in_use() {
   command -v ss >/dev/null && ss -ltn "sport = :${PORT}" 2>/dev/null | grep -q LISTEN
 }

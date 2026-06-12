@@ -32,8 +32,11 @@ from opentrade.store import StrategyStore
 
 from .bookmap_bridge import BookmapBridge
 from .mt5_autosync import mt5_autosync
+from .old_app_static import resolve_old_app_root, resolve_old_app_static
 
 APP_ROOT = Path(__file__).resolve().parent
+OLD_APP_ROOT = resolve_old_app_root()
+OLD_APP_STATIC, OLD_APP_INDEX = resolve_old_app_static()
 _env_path = APP_ROOT.parent / ".env"
 if _env_path.exists():
     load_dotenv(_env_path)
@@ -200,6 +203,8 @@ def health() -> dict[str, Any]:
         "engine": "OpenTrade",
         "unified": True,
         "mt5_autosync": mt5_autosync.status,
+        "old_app": str(OLD_APP_ROOT) if OLD_APP_ROOT else None,
+        "serving": "old_app" if OLD_APP_INDEX else "builtin",
     }
 
 
@@ -675,7 +680,19 @@ def default_csv_info() -> dict[str, Any]:
 
 @app.get("/")
 def index() -> FileResponse:
+    if OLD_APP_INDEX and OLD_APP_INDEX.is_file():
+        return FileResponse(OLD_APP_INDEX)
     return FileResponse(APP_ROOT / "static" / "index.html")
 
 
-app.mount("/static", StaticFiles(directory=APP_ROOT / "static"), name="static")
+if OLD_APP_STATIC and OLD_APP_STATIC.is_dir():
+    app.mount("/static", StaticFiles(directory=OLD_APP_STATIC), name="static")
+else:
+    app.mount("/static", StaticFiles(directory=APP_ROOT / "static"), name="static")
+
+# Extra mounts for common old-app asset paths
+if OLD_APP_ROOT:
+    for sub in ("assets", "js", "css", "public"):
+        subdir = OLD_APP_ROOT / sub
+        if subdir.is_dir() and sub not in ("static",):
+            app.mount(f"/{sub}", StaticFiles(directory=subdir), name=f"old_{sub}")
