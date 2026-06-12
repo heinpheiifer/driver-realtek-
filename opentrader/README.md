@@ -18,12 +18,12 @@ From repo root:
 bash install_and_run.sh
 ```
 
-Open **http://127.0.0.1:8080**
+Open **http://127.0.0.1:8010**
 
-Port 8010:
+Port 8080:
 
 ```bash
-PORT=8010 bash install_and_run.sh
+PORT=8080 bash install_and_run.sh
 ```
 
 ## Manual run

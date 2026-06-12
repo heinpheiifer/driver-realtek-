@@ -22,10 +22,10 @@ Or manually:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python3 -m uvicorn opentrade.main:app --host 127.0.0.1 --port 8080
+python3 -m uvicorn opentrader.main:app --host 127.0.0.1 --port 8010
 ```
 
-Open `http://127.0.0.1:8080` (or set `PORT=8010` to use a different port).
+Open `http://127.0.0.1:8010` (or set `PORT=8080` for a different port).
 
 If you see `No module named uvicorn`, you skipped `pip install -r requirements.txt` — run setup first.
 

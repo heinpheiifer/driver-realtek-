@@ -24,7 +24,7 @@ It is designed for Victron Cerbo GX systems running Venus OS Large with Node-RED
 bash install_and_run.sh
 ```
 
-Open **http://127.0.0.1:8080** — includes all OpenTrade features built in.
+Open **http://127.0.0.1:8010** — includes all OpenTrade features built in.
 
 ## What the flow controls
 
