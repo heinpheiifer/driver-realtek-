@@ -196,16 +196,6 @@ def connect_mt5() -> bool:
     return True
 
 
-def shutdown_mt5() -> None:
-    mt5 = _import_mt5()
-    if mt5 is not None:
-        try:
-            mt5.shutdown()
-        except Exception:
-            pass
-    _set_status(connected=False)
-
-
 def fetch_mt5_candles(
     *,
     symbol: str,
@@ -260,6 +250,122 @@ def fetch_mt5_candles(
     return candles, f"blackbull:mt5({mt5_symbol})", path
 
 
+def shutdown_mt5() -> None:
+    mt5 = _import_mt5()
+    if mt5 is not None:
+        try:
+            mt5.shutdown()
+        except Exception:
+            pass
+    _set_status(connected=False)
+
+
+def list_mt5_symbols(*, visible_only: bool = False, tradeable_only: bool = True) -> list[dict[str, Any]]:
+    """Return all BlackBull/MT5 symbols for the Open Trader symbol picker."""
+    mt5 = _import_mt5()
+    if mt5 is None:
+        return []
+    if not _last_status.get("connected") and not connect_mt5():
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for info in mt5.symbols_get() or []:
+        if visible_only and not info.visible:
+            continue
+        if tradeable_only and getattr(info, "trade_mode", 0) == 0:
+            continue
+        rows.append(
+            {
+                "name": info.name,
+                "description": getattr(info, "description", "") or "",
+                "path": getattr(info, "path", "") or "",
+                "digits": getattr(info, "digits", 5),
+                "visible": bool(info.visible),
+                "currency_base": getattr(info, "currency_base", ""),
+                "currency_profit": getattr(info, "currency_profit", ""),
+            }
+        )
+    rows.sort(key=lambda r: r["name"])
+    _set_status(symbol_count=len(rows))
+    return rows
+
+
+def _symbols_manifest_path() -> Path:
+    return Path("trading_data") / "blackbull_symbols.json"
+
+
+def save_symbols_manifest(symbols: list[dict[str, Any]], *, timeframes: list[str]) -> str:
+    import json
+
+    manifest = {
+        "updated": datetime.now(tz=timezone.utc).isoformat(),
+        "broker": _last_status.get("broker"),
+        "server": _last_status.get("server"),
+        "count": len(symbols),
+        "timeframes": timeframes,
+        "symbols": [s["name"] for s in symbols],
+        "details": symbols,
+    }
+    path = _symbols_manifest_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return str(path)
+
+
+def load_symbols_manifest() -> dict[str, Any] | None:
+    import json
+
+    path = _symbols_manifest_path()
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def sync_all_mt5_symbols(
+    *,
+    timeframes: list[str] | None = None,
+    bars: int = 800,
+    visible_only: bool = False,
+) -> dict[str, Any]:
+    """Pull all BlackBull symbols from MT5 and cache OHLCV CSVs."""
+    tfs = timeframes or ["M1", "M5", "H1"]
+    symbols = list_mt5_symbols(visible_only=visible_only)
+    if not symbols:
+        return {"synced": 0, "errors": 1, "message": "No MT5 symbols", "mt5": mt5_status()}
+
+    manifest_path = save_symbols_manifest(symbols, timeframes=tfs)
+    synced = 0
+    errors: list[str] = []
+
+    for row in symbols:
+        sym = row["name"]
+        clean = sym.upper().replace("/", "").split(".")[0]
+        for tf in tfs:
+            result = fetch_mt5_candles(symbol=clean, timeframe=tf, bars=bars)
+            if result:
+                synced += 1
+            else:
+                errors.append(f"{sym}:{tf}")
+
+    _set_status(
+        last_sync=datetime.now(tz=timezone.utc).isoformat(),
+        last_sync_count=synced,
+        symbol_manifest=manifest_path,
+    )
+    return {
+        "synced": synced,
+        "symbols": len(symbols),
+        "timeframes": tfs,
+        "manifest": manifest_path,
+        "errors": errors[:20],
+        "error_count": len(errors),
+        "mt5": mt5_status(),
+    }
+
+
 def load_blackbull_candles(
     *,
     symbol: str = "BTCUSD",
@@ -269,11 +375,13 @@ def load_blackbull_candles(
     """Load BlackBull candles via MT5, cached CSV, or import folder."""
     meta: dict[str, Any] = {"mt5": mt5_status()}
 
-    live = fetch_mt5_candles(symbol=symbol, timeframe=timeframe, bars=bars)
-    if live:
-        candles, label, path = live
-        meta["mt5"]["connected"] = True
-        return candles, label, path, meta
+    mt5 = _import_mt5()
+    if mt5 is not None and (_last_status.get("connected") or connect_mt5()):
+        live = fetch_mt5_candles(symbol=symbol, timeframe=timeframe, bars=bars)
+        if live:
+            candles, label, path = live
+            meta["mt5"]["connected"] = True
+            return candles, label, path, meta
 
     cached = load_cached_blackbull(symbol=symbol, timeframe=timeframe, bars=bars)
     if cached:

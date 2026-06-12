@@ -13,7 +13,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from trading.data import load_candles_from_csv
-from trading.blackbull_mt5 import connect_mt5, fetch_mt5_candles, mt5_status
+from trading.blackbull_mt5 import (
+    connect_mt5,
+    fetch_mt5_candles,
+    list_mt5_symbols,
+    load_symbols_manifest,
+    mt5_status,
+    sync_all_mt5_symbols,
+)
 from trading.market_data import BlackbullDataError, import_blackbull_candles, load_market_candles
 from trading.orderflow import compute_orderflow
 from opentrade.journal import TradeJournal
@@ -313,6 +320,55 @@ def market_blackbull_import(payload: BlackbullImportPayload) -> dict[str, Any]:
         "orderflow": orderflow,
         "mt5": mt5_status(),
     }
+
+
+@app.get("/api/mt5/symbols")
+@app.get("/api/market/symbols")
+@app.get("/api/symbols")
+def market_symbols(live: bool = False) -> dict[str, Any]:
+    """All BlackBull/MT5 symbols — used by the Open Trader chart symbol search."""
+    if live:
+        symbols = list_mt5_symbols()
+        return {"source": "mt5", "count": len(symbols), "symbols": symbols, "mt5": mt5_status()}
+    manifest = load_symbols_manifest()
+    if manifest:
+        return {"source": "manifest", **manifest, "mt5": mt5_status()}
+    return {
+        "source": "empty",
+        "count": 0,
+        "symbols": [],
+        "message": "Run scripts/mt5_python_bridge.py --all-symbols on Windows with BlackBull MT5",
+        "mt5": mt5_status(),
+    }
+
+
+@app.post("/api/mt5/sync-all")
+@app.post("/api/market/blackbull/sync-all")
+def market_blackbull_sync_all(
+    bars: int = 800,
+    visible_only: bool = False,
+    timeframes: str = "M1,M5,H1",
+) -> dict[str, Any]:
+    tfs = [t.strip().upper() for t in timeframes.split(",") if t.strip()]
+    return sync_all_mt5_symbols(timeframes=tfs, bars=bars, visible_only=visible_only)
+
+
+@app.get("/api/candles")
+@app.get("/api/bars")
+def legacy_candles(
+    symbol: str = "XRPUSD",
+    timeframe: str = "M1",
+    source: str = "blackbull",
+    bars: int = 800,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Legacy Open Trader chart endpoint — BlackBull/MT5 OHLCV bars."""
+    return market_candles(
+        symbol=symbol,
+        source=source,
+        timeframe=timeframe,
+        bars=limit or bars,
+    )
 
 
 @app.get("/api/strategies")

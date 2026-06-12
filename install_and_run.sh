@@ -62,6 +62,15 @@ if _port_in_use; then
       lsof -ti ":${PORT}" | xargs -r kill -9 2>/dev/null || true
     fi
     sleep 1
+  elif [[ "$PORT" == "8010" ]]; then
+    echo "==> Port 8010 in use (your old Open Trader chart app)."
+    echo "    Starting MT5 bridge API on 8011 instead."
+    echo "    See opentrader/OLD_APP_MT5_BRIDGE.md"
+    PORT=8011
+    if _port_in_use; then
+      echo "Port 8011 also in use. Run: PORT=8012 bash install_and_run.sh"
+      exit 1
+    fi
   else
     echo ""
     echo "Port ${PORT} is already in use."
