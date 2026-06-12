@@ -9,6 +9,9 @@ ENGINE_STATIC_MARKERS = ("Open Trader", "btnBookmapToggle", "runBacktestBtn")
 
 
 def resolve_old_app_root() -> Path | None:
+    """Only serve legacy chart UI when OPENTRADER_USE_OLD_UI=1."""
+    if os.environ.get("OPENTRADER_USE_OLD_UI", "").strip().lower() not in ("1", "true", "yes"):
+        return None
     raw = os.environ.get("OPENTRADER_OLD_APP", "").strip()
     if not raw:
         return None

@@ -23,6 +23,7 @@ def test_restore_from_backup_when_engine_ui_present(tmp_path, monkeypatch):
     )
     (old_root / ".opentrader_ui_backup" / "latest").symlink_to("20260101_120000")
 
+    monkeypatch.setenv("OPENTRADER_USE_OLD_UI", "1")
     monkeypatch.setenv("OPENTRADER_OLD_APP", str(old_root))
     result = ensure_old_ui_restored()
 

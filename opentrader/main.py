@@ -58,15 +58,11 @@ def _load_dotenv() -> None:
 
 
 _load_dotenv()
-UI_RESTORE = ensure_old_ui_restored()
+UI_RESTORE: dict[str, object] = {}
+if os.environ.get("OPENTRADER_USE_OLD_UI", "").strip().lower() in ("1", "true", "yes"):
+    UI_RESTORE = ensure_old_ui_restored()
 OLD_APP_ROOT = resolve_old_app_root()
 OLD_APP_STATIC, OLD_APP_INDEX = resolve_old_app_static()
-# .env may set OPENTRADER_OLD_APP — load again and re-resolve
-_load_dotenv()
-OLD_APP_ROOT = resolve_old_app_root()
-OLD_APP_STATIC, OLD_APP_INDEX = resolve_old_app_static()
-if UI_RESTORE.get("restored"):
-    OLD_APP_STATIC, OLD_APP_INDEX = resolve_old_app_static()
 
 DATA_ROOT = Path(os.environ.get("OPENTRADER_DATA", "opentrader_data"))
 DEFAULT_CSV = Path("trading_data/eurusd_m1.csv")

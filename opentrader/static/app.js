@@ -482,7 +482,7 @@ async function loadSymbols() {
   } catch (_) { /* symbols optional until MT5 manifest exists */ }
 }
 
-async function loadMarket(quiet = false) {
+async function loadMarket(quiet = false, allowYahooFallback = true) {
   marketState.symbol = ($("symbolInput")?.value || "BTCUSD").toUpperCase().replace("/", "");
   marketState.timeframe = $("strategyTimeframe")?.value || "M5";
   $("chartSymbol").textContent = marketState.symbol;
@@ -516,7 +516,16 @@ async function loadMarket(quiet = false) {
     if (data.mt5) updateMt5StatusFromPayload(data.mt5);
     if (!quiet) await startBookmapReplay();
   } catch (e) {
-    $("liveStatus").textContent = `BlackBull: ${e.message} — start MT5 or run scripts/mt5_python_bridge.py`;
+    if (marketState.source === "blackbull" && allowYahooFallback) {
+      $("liveStatus").textContent = "BlackBull unavailable — loading Yahoo…";
+      marketState.source = "yahoo";
+      document.querySelectorAll(".source-btn").forEach((b) => {
+        b.classList.toggle("active", b.dataset.source === "yahoo");
+      });
+      $("syncMt5Btn")?.classList.add("hidden");
+      return loadMarket(quiet, false);
+    }
+    $("liveStatus").textContent = `Load failed: ${e.message}`;
     await updateMt5Status();
     throw e;
   }
@@ -789,16 +798,6 @@ $("newStrategyBtn")?.addEventListener("click", () => {
 });
 
 async function init() {
-  const health = await api("/api/health").catch(() => ({}));
-  if (health.serving === "builtin" && health.old_app) {
-    $("liveStatus").textContent =
-      "Wrong UI: git engine is showing instead of your old chart. "
-      + "Run: bash scripts/restore_old_ui.sh && FORCE=1 bash run.sh";
-  }
-  if (health.ui_restore?.restored) {
-    $("liveStatus").textContent = "Old chart UI restored from backup — refresh the page (F5).";
-  }
-
   await loadStrategies();
   await loadSymbols();
   marketState.symbol = ($("symbolInput")?.value || "BTCUSD").toUpperCase();
