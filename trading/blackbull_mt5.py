@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -63,6 +65,109 @@ def _cache_path(symbol: str, timeframe: str) -> Path:
 
 def _import_path(symbol: str, timeframe: str) -> Path:
     return Path("trading_data") / "blackbull_import" / f"{symbol.lower()}_{timeframe.lower()}.csv"
+
+
+def find_wine_mt5_files_dirs() -> list[Path]:
+    """Find MQL5/Files folders under Wine MT5 (~/.mt5/drive_c)."""
+    dirs: list[Path] = []
+    seen: set[Path] = set()
+    for wine_root in (
+        Path.home() / ".mt5" / "drive_c",
+        Path.home() / ".wine" / "drive_c",
+        Path(os.environ.get("WINEPREFIX", "")).expanduser() / "drive_c"
+        if os.environ.get("WINEPREFIX")
+        else None,
+    ):
+        if wine_root is None or not wine_root.is_dir():
+            continue
+        for files_dir in wine_root.rglob("MQL5"):
+            candidate = files_dir / "Files"
+            if candidate.is_dir():
+                resolved = candidate.resolve()
+                if resolved not in seen:
+                    seen.add(resolved)
+                    dirs.append(resolved)
+    return dirs
+
+
+def find_wine_mt5_terminal() -> Path | None:
+    """Find terminal64.exe under Wine MT5 prefix."""
+    for wine_root in (Path.home() / ".mt5" / "drive_c", Path.home() / ".wine" / "drive_c"):
+        if not wine_root.is_dir():
+            continue
+        for exe in wine_root.rglob("terminal64.exe"):
+            return exe.resolve()
+    return None
+
+
+def _parse_csv_name(name: str) -> tuple[str, str] | None:
+    stem = Path(name).stem.lower()
+    match = re.match(r"^([a-z0-9]+)_([mhdw][0-9]+|mn1)$", stem)
+    if not match:
+        return None
+    return match.group(1).upper(), match.group(2).upper()
+
+
+def sync_wine_mt5_exports(*, dest_root: Path | None = None) -> dict[str, Any]:
+    """Import BlackBull CSV exports from Wine MT5 MQL5/Files → trading_data."""
+    base = dest_root or Path.cwd()
+    dest_import = base / "trading_data" / "blackbull_import"
+    dest_cache = base / "trading_data"
+    dest_import.mkdir(parents=True, exist_ok=True)
+    dest_cache.mkdir(parents=True, exist_ok=True)
+
+    copied: list[str] = []
+    sources: list[str] = []
+
+    for files_dir in find_wine_mt5_files_dirs():
+        sources.append(str(files_dir))
+        search_dirs = [files_dir / "blackbull_import", files_dir]
+        for src_dir in search_dirs:
+            if not src_dir.is_dir():
+                continue
+            for csv in src_dir.glob("*.csv"):
+                try:
+                    if csv.stat().st_size < 20:
+                        continue
+                    dest_import_path = dest_import / csv.name.lower()
+                    if dest_import_path.exists() and dest_import_path.stat().st_mtime >= csv.stat().st_mtime:
+                        continue
+                    shutil.copy2(csv, dest_import_path)
+                    copied.append(str(dest_import_path))
+
+                    parsed = _parse_csv_name(csv.name)
+                    if parsed:
+                        sym, tf = parsed
+                        cache_path = dest_cache / f"{sym.lower()}_{tf.lower()}_blackbull.csv"
+                        shutil.copy2(csv, cache_path)
+                        copied.append(str(cache_path))
+                except OSError as exc:
+                    logger.warning("Wine MT5 import failed for %s: %s", csv, exc)
+
+    if copied:
+        _set_status(
+            last_sync=datetime.now(tz=timezone.utc).isoformat(),
+            last_source="blackbull:wine_files",
+            wine_files_sources=sources,
+        )
+    return {"copied": copied, "count": len(copied), "sources": sources}
+
+
+def _wine_mt5_path_for_init() -> str | None:
+    """Path for MetaTrader5.initialize() — Wine-style if under ~/.mt5."""
+    explicit = os.environ.get("MT5_PATH", "").strip()
+    if explicit:
+        return explicit
+    terminal = find_wine_mt5_terminal()
+    if terminal is None:
+        return None
+    # MetaTrader5 on Wine often expects C:/... style path inside the prefix
+    drive_c = Path.home() / ".mt5" / "drive_c"
+    try:
+        rel = terminal.relative_to(drive_c)
+        return str(rel).replace("\\", "/")
+    except ValueError:
+        return str(terminal)
 
 
 def _extra_data_roots() -> list[Path]:
@@ -215,7 +320,7 @@ def connect_mt5() -> bool:
         return False
 
     _set_status(available=True)
-    path = os.environ.get("MT5_PATH")
+    path = _wine_mt5_path_for_init()
     login = os.environ.get("MT5_LOGIN")
     password = os.environ.get("MT5_PASSWORD")
     server = os.environ.get("MT5_SERVER")
@@ -422,8 +527,14 @@ def load_blackbull_candles(
     timeframe: str = "M5",
     bars: int = 800,
 ) -> tuple[list[Candle], str, str, dict[str, Any]]:
-    """Load BlackBull candles — cache first, then live MT5 (like old Open Trader)."""
+    """Load BlackBull candles — Wine MT5 files, cache, then live MT5."""
     meta: dict[str, Any] = {"mt5": mt5_status()}
+
+    # 0. Pull latest CSV exports from Wine MT5 (Linux + Wine)
+    if os.environ.get("MT5_WINE_SYNC", "1").strip().lower() not in ("0", "false", "no"):
+        wine = sync_wine_mt5_exports()
+        if wine.get("count"):
+            meta["wine_sync"] = wine
 
     # 1. Cached / imported data (works on Linux after bridge sync — no error)
     cached = load_cached_blackbull(symbol=symbol, timeframe=timeframe, bars=bars)

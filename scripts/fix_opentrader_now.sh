@@ -55,6 +55,7 @@ _set_env "OPENTRADER_USE_OLD_UI" "1"
 _set_env "OPENTRADER_OLD_APP" "$CHART_ROOT"
 _set_env "OPENTRADER_DJANGO_PROXY" "0"
 _set_env "MT5_AUTO_SYNC" "0"
+_set_env "MT5_WINE_SYNC" "1"
 sed -i '/^OPENTRADER_USE_NEW_UI=/d' "$ENV_FILE" 2>/dev/null || true
 sed -i '/^OPENTRADER_BACKEND_URL=/d' "$ENV_FILE" 2>/dev/null || true
 
@@ -102,8 +103,8 @@ check "http://127.0.0.1:8010/api/symbols/?source=blackbull&q=btc&limit=300" "200
 check "http://127.0.0.1:8010/api/mt5/status/" "200"
 
 HEALTH="$(curl -sf http://127.0.0.1:8010/api/health 2>/dev/null || echo '{}')"
-if echo "$HEALTH" | grep -q "2025-06-fix-now"; then
-  echo "  OK  engine_build=2025-06-fix-now"
+if echo "$HEALTH" | grep -q "2025-06-live-blackbull"; then
+  echo "  OK  engine_build=2025-06-live-blackbull"
 else
   echo "  WARN  old engine still running — stop other servers on port 8010"
   FAIL=1
@@ -113,6 +114,9 @@ echo ""
 if [[ "$FAIL" -eq 0 ]]; then
   echo "=============================================="
   echo " FIXED — open http://127.0.0.1:8010"
+  echo ""
+  echo " For LIVE BlackBull data (not yahoo/synthetic):"
+  echo "   bash $ENGINE_ROOT/scripts/setup_live_blackbull.sh $ENGINE_DIR"
   echo "=============================================="
 else
   echo "Some checks failed. See: tail -50 $ENGINE_DIR/.opentrader_server.log"
