@@ -32,20 +32,20 @@ from opentrade.store import StrategyStore
 
 from .bookmap_bridge import BookmapBridge
 from .mt5_autosync import mt5_autosync
-from .old_app_static import resolve_old_app_root, resolve_old_app_static
+from .old_app_static import old_app_asset_dirs, resolve_old_app_root, resolve_old_app_static
 
 APP_ROOT = Path(__file__).resolve().parent
-OLD_APP_ROOT = resolve_old_app_root()
-OLD_APP_STATIC, OLD_APP_INDEX = resolve_old_app_static()
 
 
 def _load_dotenv() -> None:
-    """Load .env from old app dir, cwd, or repo root (Python dotenv handles spaces in paths)."""
+    """Load .env before resolving OPENTRADER_OLD_APP (paths may contain spaces)."""
     seen: set[Path] = set()
     for candidate in (
-        OLD_APP_ROOT / ".env" if OLD_APP_ROOT else None,
         Path.cwd() / ".env",
         APP_ROOT.parent / ".env",
+        Path(os.environ.get("OPENTRADER_OLD_APP", "").strip()).expanduser() / ".env"
+        if os.environ.get("OPENTRADER_OLD_APP", "").strip()
+        else None,
     ):
         if candidate is None:
             continue
@@ -57,6 +57,12 @@ def _load_dotenv() -> None:
 
 
 _load_dotenv()
+OLD_APP_ROOT = resolve_old_app_root()
+OLD_APP_STATIC, OLD_APP_INDEX = resolve_old_app_static()
+# .env may set OPENTRADER_OLD_APP — load again and re-resolve
+_load_dotenv()
+OLD_APP_ROOT = resolve_old_app_root()
+OLD_APP_STATIC, OLD_APP_INDEX = resolve_old_app_static()
 
 DATA_ROOT = Path(os.environ.get("OPENTRADER_DATA", "opentrader_data"))
 DEFAULT_CSV = Path("trading_data/eurusd_m1.csv")
@@ -221,6 +227,7 @@ def health() -> dict[str, Any]:
         "unified": True,
         "mt5_autosync": mt5_autosync.status,
         "old_app": str(OLD_APP_ROOT) if OLD_APP_ROOT else None,
+        "old_app_index": str(OLD_APP_INDEX) if OLD_APP_INDEX else None,
         "serving": "old_app" if OLD_APP_INDEX else "builtin",
     }
 
@@ -707,9 +714,13 @@ if OLD_APP_STATIC and OLD_APP_STATIC.is_dir():
 else:
     app.mount("/static", StaticFiles(directory=APP_ROOT / "static"), name="static")
 
-# Extra mounts for common old-app asset paths
-if OLD_APP_ROOT:
-    for sub in ("assets", "js", "css", "public"):
-        subdir = OLD_APP_ROOT / sub
-        if subdir.is_dir() and sub not in ("static",):
-            app.mount(f"/{sub}", StaticFiles(directory=subdir), name=f"old_{sub}")
+# Extra mounts for common old-app asset paths (skip if already used as /static)
+_mounted_asset_dirs: set[Path] = set()
+if OLD_APP_STATIC:
+    _mounted_asset_dirs.add(OLD_APP_STATIC.resolve())
+for subdir in old_app_asset_dirs(OLD_APP_ROOT):
+    resolved = subdir.resolve()
+    if resolved in _mounted_asset_dirs:
+        continue
+    _mounted_asset_dirs.add(resolved)
+    app.mount(f"/{subdir.name}", StaticFiles(directory=subdir), name=f"old_{subdir.name}")
