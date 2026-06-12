@@ -51,7 +51,7 @@ If you see `No module named uvicorn`, you skipped `pip install -r requirements.t
 
 ```bash
 tmux new -s opentrade -c /workspace
-uvicorn opentrade.main:app --host 127.0.0.1 --port 8080
+uvicorn opentrader.main:app --host 127.0.0.1 --port 8010
 ```
 
 Then start optimizer from the UI or CLI.
