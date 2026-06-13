@@ -50,7 +50,7 @@ _sync_dir() {
 bash "$ENGINE_ROOT/scripts/backup_old_ui.sh" "$OLD_APP" || true
 
 # Copy engine modules — never overwrite user's chart UI in opentrader/static
-for dir in trading opentrade scripts; do
+for dir in trading opentrade opentrader/scripts opentrader/chart_patches scripts; do
   if [[ -d "$ENGINE_ROOT/$dir" ]]; then
     echo "→ Sync $dir/ (merge, keeps existing files)"
     _sync_dir "$ENGINE_ROOT/$dir" "$OLD_APP/$dir"
@@ -82,6 +82,7 @@ cp "$ENGINE_ROOT/scripts/recover_old_chart.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/find_old_chart.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/stop_opentrader.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/run_my_old_app.sh" "$OLD_APP/scripts/"
+cp "$ENGINE_ROOT/scripts/patch_bookmap_below_chart.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/fix_opentrader_now.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/setup_live_blackbull.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/opentrader/YOUR_OLD_APP.md" "$OLD_APP/opentrader/" 2>/dev/null || true

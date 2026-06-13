@@ -1,0 +1,89 @@
+/**
+ * OpenTrader — move Bookmap Order Flow below the price chart (not beside it).
+ * Loaded as an override; safe to include on any OpenTrader build.
+ */
+
+/* Row / grid wrappers that put chart + bookmap side-by-side */
+.chart-terminal,
+.chart-area,
+.chart-workspace,
+.chart-layout,
+.chart-row,
+.chart-bookmap-row,
+.main-chart-row,
+.terminal-main,
+.content-row,
+.dashboard-charts,
+.chart-and-bookmap,
+.chart-column,
+.main-content,
+.workspace-main,
+[class*="chartRow"],
+[class*="ChartRow"],
+[class*="chart-row"],
+[class*="ChartArea"] {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  grid-template-columns: none !important;
+  grid-template-rows: none !important;
+}
+
+/* Nested row split (common in older builds) */
+.chart-terminal > .chart-row,
+.chart-terminal > .chart-split,
+.chart-area > .split,
+.main-chart-row > .row {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+}
+
+.chart-main,
+.chart-container,
+.chart-wrapper,
+#chart-container,
+#chart,
+#tv-chart-container,
+#price-chart,
+#priceChart,
+.lightweight-charts,
+.chart-pane,
+main.chart,
+section.chart {
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+  order: 1 !important;
+  min-height: 45vh !important;
+}
+
+.bookmap-panel,
+#bookmapPanel,
+.bookmap-container,
+.bookmap-sidebar,
+.bookmap-column,
+.order-flow-panel,
+.orderflow-panel,
+#order-flow,
+#orderflow,
+#bookmap-order-flow,
+[class*="bookmapPanel"],
+[class*="BookmapPanel"],
+aside.bookmap,
+.bookmap {
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: 0 0 auto !important;
+  order: 2 !important;
+  min-height: 220px !important;
+  border-left: none !important;
+  border-top: 1px solid var(--border, #243044) !important;
+}
+
+#orderflowChart,
+#volumeChart {
+  width: 100% !important;
+  height: 200px !important;
+  min-height: 180px !important;
+}

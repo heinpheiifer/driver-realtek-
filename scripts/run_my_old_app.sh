@@ -143,6 +143,9 @@ if [[ -n "$MANAGE_DIR" && -f "$MANAGE_DIR/manage.py" ]]; then
   _activate_python_env "$MANAGE_DIR"
   _install_django_deps "$MANAGE_DIR"
 
+  echo "==> Bookmap layout: below chart ..."
+  bash "$ENGINE_ROOT/scripts/patch_bookmap_below_chart.sh" "$CHART_ROOT" || true
+
   echo "==> Running migrations..."
   python manage.py migrate --noinput 2>/dev/null || python manage.py migrate || true
 

@@ -35,7 +35,8 @@ python manage.py runserver 127.0.0.1:8010
 This:
 1. Stops the new git engine on port 8010
 2. Starts **your** OpenTrader from `~/OpenTrader` (Django if `manage.py` exists)
-3. Prints the MT5 bridge command for live BlackBull data
+3. Patches the UI so **Bookmap Order Flow sits below the chart** (not on the right)
+4. Prints the MT5 bridge command for live BlackBull data
 
 ## MT5 bridge (live BlackBull — same as before)
 
