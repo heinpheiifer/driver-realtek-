@@ -1,67 +1,13 @@
 /**
- * OpenTrader — Bookmap Order Flow below chart (not floating overlay / right column).
+ * OpenTrader — Bookmap Order Flow below chart (panel only; does not touch chart/toolbar).
  */
 
-/* Stack chart area vertically */
-.ot-chart-stack,
-.chart-terminal,
-.chart-area,
-.chart-workspace,
-.chart-layout,
-.chart-row,
-.chart-bookmap-row,
-.main-chart-row,
-.terminal-main,
-.content-row,
-.dashboard-charts,
-.chart-and-bookmap,
-.chart-column,
-.main-content,
-.workspace-main,
-[class*="chartRow"],
-[class*="ChartRow"],
-[class*="chart-row"],
-[class*="ChartArea"],
-[class*="chartArea"],
-[class*="ChartWrapper"] {
+.ot-chart-stack {
   display: flex !important;
   flex-direction: column !important;
   align-items: stretch !important;
-  grid-template-columns: none !important;
-  grid-template-rows: none !important;
 }
 
-.chart-terminal > .chart-row,
-.chart-terminal > .chart-split,
-.chart-area > .split,
-.main-chart-row > .row {
-  display: flex !important;
-  flex-direction: column !important;
-  width: 100% !important;
-}
-
-/* Chart takes top */
-.chart-main,
-.chart-container,
-.chart-wrapper,
-#chart-container,
-#chart,
-#tv-chart-container,
-#price-chart,
-#priceChart,
-.tv-lightweight-charts,
-.lightweight-charts,
-.chart-pane,
-main.chart,
-section.chart {
-  width: 100% !important;
-  max-width: 100% !important;
-  flex: 1 1 auto !important;
-  order: 1 !important;
-  min-height: 45vh !important;
-}
-
-/* Unfloat overlay bookmap (top-right floater in original UI) */
 [data-ot-bookmap-below="1"],
 .ot-bookmap-below,
 .bookmap-panel,
@@ -74,16 +20,7 @@ section.chart {
 .order-flow-panel,
 .orderflow-panel,
 #order-flow,
-#orderflow,
-#bookmap-order-flow,
-[class*="bookmapPanel"],
-[class*="BookmapPanel"],
-[class*="bookmap-panel"],
-[class*="BookmapPanel"],
-[class*="bookmapOverlay"],
-[class*="bookmap-overlay"],
-aside.bookmap,
-.bookmap {
+#bookmap-order-flow {
   position: static !important;
   top: auto !important;
   right: auto !important;
@@ -99,7 +36,7 @@ aside.bookmap,
   max-height: none !important;
   flex: 0 0 auto !important;
   order: 2 !important;
-  min-height: 220px !important;
+  min-height: 200px !important;
   margin: 0 !important;
   z-index: 1 !important;
   border-left: none !important;
@@ -108,10 +45,8 @@ aside.bookmap,
 }
 
 #orderflowChart,
-#volumeChart,
-[class*="orderflow"] canvas,
-[class*="bookmap"] canvas {
+#volumeChart {
   width: 100% !important;
   height: 200px !important;
-  min-height: 180px !important;
+  min-height: 160px !important;
 }

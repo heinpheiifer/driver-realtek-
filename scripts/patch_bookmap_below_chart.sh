@@ -56,7 +56,9 @@ _patch_ok() {
   prefix="$(_patch_prefix_for "$file")"
   grep -q "${prefix}/bookmap_below_chart.css" "$file" 2>/dev/null && \
     grep -q "${prefix}/bookmap_layout.js" "$file" 2>/dev/null && \
-    grep -q 'id="ot-bookmap-below-inline"' "$file" 2>/dev/null
+    grep -q 'id="ot-bookmap-below-inline"' "$file" 2>/dev/null && \
+    grep -q 'ot-bookmap-below' "$file" 2>/dev/null && \
+    ! grep -q '\[class\*="bookmap"\]' "$file" 2>/dev/null
 }
 
 _inject_html() {
@@ -80,11 +82,10 @@ _inject_html() {
   inject="  <link rel=\"stylesheet\" href=\"${prefix}/bookmap_below_chart.css\" />\n"
   inject+="  <script src=\"${prefix}/bookmap_layout.js\" defer></script>\n"
   inject+="  <style id=\"ot-bookmap-below-inline\">"
-  inject+="[data-ot-bookmap-below=\"1\"],.ot-bookmap-below,[class*=\"bookmap\"],[id*=\"bookmap\"]{"
-  inject+="position:static!important;top:auto!important;right:auto!important;left:auto!important;"
-  inject+="width:100%!important;max-width:none!important;order:2!important;min-height:220px!important;"
-  inject+="border-top:1px solid #243044!important}.ot-chart-stack,.chart-area{display:flex!important;"
-  inject+="flex-direction:column!important}</style>\n"
+  inject+="[data-ot-bookmap-below=\"1\"],.ot-bookmap-below,.bookmap-panel,#bookmapPanel{"
+  inject+="position:static!important;top:auto!important;right:auto!important;width:100%!important;"
+  inject+="order:2!important;min-height:200px!important;border-top:1px solid #243044!important}"
+  inject+=".ot-chart-stack{display:flex!important;flex-direction:column!important}</style>\n"
 
   sed -i "s|</head>|${inject}</head>|" "$file"
   echo "  patched: $file (${prefix})"
