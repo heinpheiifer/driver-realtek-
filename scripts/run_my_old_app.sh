@@ -167,8 +167,13 @@ if [[ -n "$MANAGE_DIR" && -f "$MANAGE_DIR/manage.py" ]]; then
   _activate_python_env "$MANAGE_DIR"
   _install_django_deps "$MANAGE_DIR"
 
-  echo "==> Bookmap layout: below chart ..."
-  bash "$ENGINE_ROOT/scripts/patch_bookmap_below_chart.sh" "$CHART_ROOT" || true
+  if [[ "${OPENTRADER_SKIP_BOOKMAP_PATCH:-0}" != "1" && "${OPENTRADER_BOOKMAP_BELOW:-0}" == "1" ]]; then
+    echo "==> Bookmap layout: below chart (opt-in) ..."
+    bash "$ENGINE_ROOT/scripts/patch_bookmap_below_chart.sh" "$CHART_ROOT" || true
+  else
+    echo "==> Bookmap patch: skipped (chart uses original layout)"
+    echo "    To move Bookmap below chart later: OPENTRADER_BOOKMAP_BELOW=1 bash scripts/run_my_old_app.sh"
+  fi
 
   echo "==> Django: allow localhost + Firefox ..."
   bash "$ENGINE_ROOT/scripts/patch_django_firefox.sh" "$CHART_ROOT" || true

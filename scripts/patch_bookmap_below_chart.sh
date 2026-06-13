@@ -46,7 +46,7 @@ _strip_old_patch() {
     -e 's|[[:space:]]*<link rel="stylesheet" href="[^"]*chart_patch/bookmap_below_chart\.css"[^>]*/>[[:space:]]*||g' \
     -e 's|[[:space:]]*<script src="[^"]*chart_patch/bookmap_layout\.js"[^>]*></script>[[:space:]]*||g' \
     -e 's|[[:space:]]*<script src="[^"]*chart_patch/bookmap_layout\.js"[^>]*/>[[:space:]]*||g' \
-    -e '/<style id="ot-bookmap-below-inline">/,/<\/style>/d' \
+    -e 's|<style id="ot-bookmap-below-inline">[^<]*</style>||g' \
     "$file"
 }
 
