@@ -169,6 +169,9 @@ if [[ -n "$MANAGE_DIR" && -f "$MANAGE_DIR/manage.py" ]]; then
   _activate_python_env "$MANAGE_DIR"
   _install_django_deps "$MANAGE_DIR"
 
+  echo "==> Strip layout patches (fixes Firefox freeze) ..."
+  PURGE=1 bash "$ENGINE_ROOT/scripts/unpatch_bookmap.sh" "$CHART_ROOT" || true
+
   if [[ "${OPENTRADER_SKIP_BOOKMAP_PATCH:-0}" != "1" && "${OPENTRADER_BOOKMAP_BELOW:-0}" == "1" ]]; then
     echo "==> Bookmap layout: below chart (opt-in) ..."
     bash "$ENGINE_ROOT/scripts/patch_bookmap_below_chart.sh" "$CHART_ROOT" || true
@@ -196,7 +199,12 @@ if [[ -n "$MANAGE_DIR" && -f "$MANAGE_DIR/manage.py" ]]; then
   echo ""
   echo "    Open chart: http://127.0.0.1:${CHART_PORT}"
   echo "    IMPORTANT: use port ${CHART_PORT} — NOT :8011 (8011 is MT5 API only, no chart UI)"
-  echo "    Firefox: http://127.0.0.1:${CHART_PORT}  (avoid localhost:8011)"
+  echo "    Firefox: http://127.0.0.1:${CHART_PORT}"
+  echo "    If Firefox still freezes:"
+  echo "      1) Close ALL OpenTrader tabs"
+  echo "      2) Firefox → Settings → Privacy → Clear Data → Cached Web Content"
+  echo "      3) Or try Private Window: http://127.0.0.1:${CHART_PORT}"
+  echo "      4) bash scripts/reset_firefox_opentrader.sh"
   echo "=============================================="
   exec "$PYTHON" manage.py runserver "${CHART_HOST}:${CHART_PORT}"
 fi

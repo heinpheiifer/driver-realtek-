@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path
 
@@ -22,6 +23,7 @@ def test_unpatch_removes_bookmap_injections(tmp_path):
         check=True,
         capture_output=True,
         text=True,
+        env={**os.environ, "PURGE": "0"},
     )
 
     text = index.read_text(encoding="utf-8")
