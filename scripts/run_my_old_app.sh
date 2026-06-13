@@ -49,6 +49,20 @@ _find_run_script() {
   return 1
 }
 
+PYTHON=""
+
+_resolve_python() {
+  if [[ -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python" ]]; then
+    PYTHON="${VIRTUAL_ENV}/bin/python"
+  elif [[ -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python3" ]]; then
+    PYTHON="${VIRTUAL_ENV}/bin/python3"
+  elif command -v python3 >/dev/null 2>&1; then
+    PYTHON="$(command -v python3)"
+  else
+    PYTHON="$(command -v python)"
+  fi
+}
+
 _activate_python_env() {
   local manage_dir="$1"
   local candidates=(
@@ -65,7 +79,8 @@ _activate_python_env() {
     if [[ -f "$venv/bin/activate" ]]; then
       # shellcheck disable=SC1091
       source "$venv/bin/activate"
-      echo "==> Python venv: $venv"
+      _resolve_python
+      echo "==> Python venv: $venv ($PYTHON)"
       return 0
     fi
   done
@@ -78,13 +93,20 @@ _activate_python_env() {
   python3 -m venv "$manage_dir/.venv"
   # shellcheck disable=SC1091
   source "$manage_dir/.venv/bin/activate"
-  pip install -q --upgrade pip
+  _resolve_python
+  "$PYTHON" -m pip install -q --upgrade pip
   echo "==> Created venv: $manage_dir/.venv"
 }
 
 _install_django_deps() {
   local manage_dir="$1"
   local installed=0
+
+  _resolve_python
+  PIP="${VIRTUAL_ENV:-}/bin/pip"
+  if [[ ! -x "$PIP" ]]; then
+    PIP="$(command -v pip3 2>/dev/null || command -v pip)"
+  fi
 
   for req in \
     "$manage_dir/requirements.txt" \
@@ -93,28 +115,29 @@ _install_django_deps() {
     "$GIT_ENGINE/requirements.txt"; do
     if [[ -f "$req" ]]; then
       echo "==> Installing from $req"
-      pip install -r "$req"
+      "$PIP" install -r "$req"
       installed=1
       break
     fi
   done
 
-  if ! python -c "import django" 2>/dev/null; then
+  if ! "$PYTHON" -c "import django" 2>/dev/null; then
     echo "==> Installing Django (minimum for OpenTrader)..."
-    pip install "django>=4.2" djangorestframework django-cors-headers python-dotenv requests
+    "$PIP" install "django>=4.2" djangorestframework django-cors-headers python-dotenv requests
     installed=1
   fi
 
-  if ! python -c "import django" 2>/dev/null; then
+  if ! "$PYTHON" -c "import django" 2>/dev/null; then
     echo "ERROR: Django still not installed after pip install."
+    echo "  Python used: $PYTHON"
     echo "Try manually:"
-    echo "  cd $manage_dir && python3 -m venv .venv && source .venv/bin/activate"
+    echo "  cd $manage_dir && source .venv/bin/activate"
     echo "  pip install -r requirements.txt"
     exit 1
   fi
 
   if [[ "$installed" -eq 1 ]]; then
-    echo "==> Django OK: $(python -c 'import django; print(django.get_version())')"
+    echo "==> Django OK: $("$PYTHON" -c 'import django; print(django.get_version())')"
   fi
 }
 
@@ -146,8 +169,9 @@ if [[ -n "$MANAGE_DIR" && -f "$MANAGE_DIR/manage.py" ]]; then
   echo "==> Bookmap layout: below chart ..."
   bash "$ENGINE_ROOT/scripts/patch_bookmap_below_chart.sh" "$CHART_ROOT" || true
 
+  _resolve_python
   echo "==> Running migrations..."
-  python manage.py migrate --noinput 2>/dev/null || python manage.py migrate || true
+  "$PYTHON" manage.py migrate --noinput 2>/dev/null || "$PYTHON" manage.py migrate || true
 
   LOG="$CHART_ROOT/.opentrader_django.log"
   echo ""
@@ -160,7 +184,7 @@ if [[ -n "$MANAGE_DIR" && -f "$MANAGE_DIR/manage.py" ]]; then
   echo ""
   echo "    Open chart: http://127.0.0.1:${CHART_PORT}"
   echo "=============================================="
-  exec python manage.py runserver "127.0.0.1:${CHART_PORT}"
+  exec "$PYTHON" manage.py runserver "127.0.0.1:${CHART_PORT}"
 fi
 
 # --- Mode C: fallback stack ---

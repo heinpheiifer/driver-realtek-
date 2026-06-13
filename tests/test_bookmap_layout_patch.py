@@ -51,6 +51,33 @@ def test_patch_script_injects_static_paths(tmp_path):
     assert (static / "chart_patch/bookmap_below_chart.css").is_file()
 
 
+def test_patch_script_repairs_stale_static_paths(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    chart_root = tmp_path / "OpenTrader"
+    dist = chart_root / "frontend" / "dist"
+    dist.mkdir(parents=True)
+    index = dist / "index.html"
+    index.write_text(
+        "<html><head>"
+        '<link rel="stylesheet" href="/static/chart_patch/bookmap_below_chart.css" />'
+        '<script src="/static/chart_patch/bookmap_layout.js" defer></script>'
+        "</head><body></body></html>",
+        encoding="utf-8",
+    )
+
+    subprocess.run(
+        ["bash", str(root / "scripts/patch_bookmap_below_chart.sh"), str(chart_root)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    text = index.read_text(encoding="utf-8")
+    assert "./chart_patch/bookmap_below_chart.css" in text
+    assert "/static/chart_patch/bookmap_below_chart.css" not in text
+    assert "ot-bookmap-below-inline" in text
+
+
 def test_patch_assets_exist():
     root = Path(__file__).resolve().parents[1]
     assert (root / "opentrader/chart_patches/bookmap_below_chart.css").is_file()

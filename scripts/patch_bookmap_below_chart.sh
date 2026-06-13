@@ -40,12 +40,35 @@ _patch_prefix_for() {
   esac
 }
 
+_strip_old_patch() {
+  local file="$1"
+  sed -i \
+    -e 's|[[:space:]]*<link rel="stylesheet" href="[^"]*chart_patch/bookmap_below_chart\.css"[^>]*/>[[:space:]]*||g' \
+    -e 's|[[:space:]]*<script src="[^"]*chart_patch/bookmap_layout\.js"[^>]*></script>[[:space:]]*||g' \
+    -e 's|[[:space:]]*<script src="[^"]*chart_patch/bookmap_layout\.js"[^>]*/>[[:space:]]*||g' \
+    -e '/<style id="ot-bookmap-below-inline">/,/<\/style>/d' \
+    "$file"
+}
+
+_patch_ok() {
+  local file="$1"
+  local prefix
+  prefix="$(_patch_prefix_for "$file")"
+  grep -q "${prefix}/bookmap_below_chart.css" "$file" 2>/dev/null && \
+    grep -q "${prefix}/bookmap_layout.js" "$file" 2>/dev/null && \
+    grep -q 'id="ot-bookmap-below-inline"' "$file" 2>/dev/null
+}
+
 _inject_html() {
   local file="$1"
   [[ -f "$file" ]] || return 0
   if grep -q "bookmap_below_chart.css" "$file" 2>/dev/null; then
-    echo "  already patched: $file"
-    return 0
+    if _patch_ok "$file"; then
+      echo "  already patched: $file"
+      return 0
+    fi
+    echo "  re-patching (updating stale paths): $file"
+    _strip_old_patch "$file"
   fi
   if ! grep -qi '</head>' "$file"; then
     return 0
@@ -106,7 +129,13 @@ done < <(
 
 while IFS= read -r tpl; do
   _inject_template "$tpl"
-done < <(find "$CHART_ROOT" -path '*/templates/*' -name '*.html' -print 2>/dev/null | head -20)
+done < <(
+  find "$CHART_ROOT" \
+    -path '*/.venv/*' -prune -o \
+    -path '*/node_modules/*' -prune -o \
+    -path '*/site-packages/*' -prune -o \
+    -path '*/templates/*' -name '*.html' -print 2>/dev/null | head -20
+)
 
 echo ""
 echo "Done. Restart OpenTrader and hard-refresh (Ctrl+Shift+R):"
