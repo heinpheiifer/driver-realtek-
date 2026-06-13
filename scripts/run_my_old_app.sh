@@ -193,7 +193,8 @@ if [[ -n "$MANAGE_DIR" && -f "$MANAGE_DIR/manage.py" ]]; then
   echo "      python scripts\\mt5_python_bridge.py --all-symbols --interval 60"
   echo ""
   echo "    Open chart: http://127.0.0.1:${CHART_PORT}"
-  echo "    (not http://localhost:${CHART_PORT} if Firefox shows connection error)"
+  echo "    IMPORTANT: use port ${CHART_PORT} — NOT :8011 (8011 is MT5 API only, no chart UI)"
+  echo "    Firefox: http://127.0.0.1:${CHART_PORT}  (avoid localhost:8011)"
   echo "=============================================="
   exec "$PYTHON" manage.py runserver "${CHART_HOST}:${CHART_PORT}"
 fi

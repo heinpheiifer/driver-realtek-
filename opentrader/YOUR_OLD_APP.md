@@ -17,6 +17,10 @@ cd ~/opentrader-app && git pull
 bash scripts/run_my_old_app.sh
 ```
 
+**Chart URL (Firefox or any browser):** http://127.0.0.1:8010
+
+Do **not** use port **8011** for the chart — that is the MT5 bridge API only (blank/broken UI).
+
 The script finds `~/OpenTrader/manage.py`, creates a `.venv` there if needed, and installs Django automatically.
 
 If Django install fails manually:
