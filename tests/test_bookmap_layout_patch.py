@@ -2,7 +2,33 @@ import subprocess
 from pathlib import Path
 
 
-def test_patch_script_injects_bookmap_css(tmp_path):
+def test_patch_script_injects_dist_relative_paths(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    chart_root = tmp_path / "OpenTrader"
+    dist = chart_root / "frontend" / "dist"
+    dist.mkdir(parents=True)
+    index = dist / "index.html"
+    index.write_text(
+        "<html><head><title>Open Trader</title></head><body></body></html>",
+        encoding="utf-8",
+    )
+
+    subprocess.run(
+        ["bash", str(root / "scripts/patch_bookmap_below_chart.sh"), str(chart_root)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    text = index.read_text(encoding="utf-8")
+    assert "./chart_patch/bookmap_below_chart.css" in text
+    assert "./chart_patch/bookmap_layout.js" in text
+    assert "ot-bookmap-below-inline" in text
+    assert (dist / "chart_patch/bookmap_below_chart.css").is_file()
+    assert (dist / "chart_patch/bookmap_layout.js").is_file()
+
+
+def test_patch_script_injects_static_paths(tmp_path):
     root = Path(__file__).resolve().parents[1]
     chart_root = tmp_path / "OpenTrader"
     static = chart_root / "static"
@@ -17,14 +43,12 @@ def test_patch_script_injects_bookmap_css(tmp_path):
         ["bash", str(root / "scripts/patch_bookmap_below_chart.sh"), str(chart_root)],
         check=True,
         capture_output=True,
-        text=True,
+        text="",
     )
 
     text = index.read_text(encoding="utf-8")
-    assert "chart_patch/bookmap_below_chart.css" in text
-    assert "chart_patch/bookmap_layout.js" in text
+    assert "/static/chart_patch/bookmap_below_chart.css" in text
     assert (static / "chart_patch/bookmap_below_chart.css").is_file()
-    assert (static / "chart_patch/bookmap_layout.js").is_file()
 
 
 def test_patch_assets_exist():
