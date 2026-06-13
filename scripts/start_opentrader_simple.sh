@@ -7,6 +7,7 @@
 #
 set -euo pipefail
 
+ENGINE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHART_ROOT="${1:-/home/heinz/OpenTrader}"
 PORT="${PORT:-8010}"
 
@@ -17,45 +18,36 @@ fi
 
 cd "$CHART_ROOT"
 
-PYTHON=""
+PY=""
 if [[ -x "$CHART_ROOT/.venv/bin/python3" ]]; then
-  PYTHON="$CHART_ROOT/.venv/bin/python3"
+  PY="$CHART_ROOT/.venv/bin/python3"
 elif [[ -x "$CHART_ROOT/.venv/bin/python" ]]; then
-  PYTHON="$CHART_ROOT/.venv/bin/python"
-else
-  echo "ERROR: No venv at $CHART_ROOT/.venv"
-  echo "  python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt"
-  exit 1
+  PY="$CHART_ROOT/.venv/bin/python"
 fi
 
-PIP=""
-if [[ -x "$CHART_ROOT/.venv/bin/pip3" ]]; then
-  PIP="$CHART_ROOT/.venv/bin/pip3"
-elif [[ -x "$CHART_ROOT/.venv/bin/pip" ]]; then
-  PIP="$CHART_ROOT/.venv/bin/pip"
-fi
-
-if ! "$PYTHON" -c "import django" 2>/dev/null; then
-  echo "==> Installing Django into venv ..."
-  if [[ -n "$PIP" ]]; then
-    "$PIP" install -r requirements.txt 2>/dev/null || \
-      "$PIP" install django djangorestframework django-cors-headers yfinance pandas requests
-  else
-    "$PYTHON" -m pip install django djangorestframework django-cors-headers yfinance pandas requests
+_ensure_django() {
+  if [[ -n "$PY" ]] && "$PY" -c "import django" 2>/dev/null; then
+    return 0
   fi
+  echo "==> Django not importable — rebuilding venv ..."
+  exec bash "$ENGINE_ROOT/scripts/fix_opentrader_venv.sh" "$CHART_ROOT"
+}
+
+if [[ -z "$PY" ]] || [[ ! -d "$CHART_ROOT/.venv" ]]; then
+  echo "==> No venv — creating ..."
+  exec bash "$ENGINE_ROOT/scripts/fix_opentrader_venv.sh" "$CHART_ROOT"
 fi
 
-if ! "$PYTHON" -c "import django" 2>/dev/null; then
-  echo "ERROR: Django not in venv. Run:"
-  echo "  cd $CHART_ROOT && source .venv/bin/activate && pip3 install -r requirements.txt"
-  exit 1
-fi
+_ensure_django
 
-echo "==> Django $("$PYTHON" -c 'import django; print(django.get_version())')"
+echo "==> Django $("$PY" -c 'import django; print(django.get_version())')"
+echo "==> Python: $PY"
+
 echo "==> Checking project ..."
-if ! "$PYTHON" manage.py check 2>&1; then
+if ! "$PY" manage.py check 2>&1; then
   echo ""
-  echo "ERROR: manage.py check failed — fix Django settings above, then retry."
+  echo "ERROR: manage.py check failed."
+  echo "Try: bash scripts/fix_opentrader_venv.sh $CHART_ROOT"
   exit 1
 fi
 
@@ -66,4 +58,4 @@ sleep 1
 echo ""
 echo "==> Starting http://127.0.0.1:${PORT}"
 echo "    Ctrl+C to stop"
-exec "$PYTHON" manage.py runserver "127.0.0.1:${PORT}"
+exec "$PY" manage.py runserver "127.0.0.1:${PORT}"

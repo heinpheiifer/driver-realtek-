@@ -30,4 +30,4 @@ echo "==> 3. Start YOUR Django chart (port 8010 only)"
 export OPENTRADER_SKIP_BOOKMAP_PATCH=1
 export OPENTRADER_BOOKMAP_BELOW=0
 export OPENTRADER_PATCH_DJANGO=0
-exec bash "$ENGINE_ROOT/scripts/start_opentrader_simple.sh" "$CHART_ROOT"
+exec bash "$ENGINE_ROOT/scripts/fix_opentrader_venv.sh" "$CHART_ROOT"

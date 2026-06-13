@@ -104,15 +104,18 @@ _install_django_deps() {
   local installed=0
 
   _resolve_python
+  # Prefer python3 in venv (Debian venvs often lack `python` symlink)
+  if [[ -n "${VIRTUAL_ENV:-}" && -x "${VIRTUAL_ENV}/bin/python3" ]]; then
+    PYTHON="${VIRTUAL_ENV}/bin/python3"
+  fi
+
   PIP=""
-  if [[ -x "${VIRTUAL_ENV:-}/bin/pip3" ]]; then
-    PIP="${VIRTUAL_ENV}/bin/pip3"
-  elif [[ -x "${VIRTUAL_ENV:-}/bin/pip" ]]; then
-    PIP="${VIRTUAL_ENV}/bin/pip"
-  elif [[ -n "${VIRTUAL_ENV:-}" ]]; then
+  if [[ -n "${VIRTUAL_ENV:-}" ]]; then
     PIP="$PYTHON -m pip"
+  elif command -v pip3 >/dev/null 2>&1; then
+    PIP="$(command -v pip3)"
   else
-    PIP="$(command -v pip3 2>/dev/null || command -v pip)"
+    PIP="$(command -v pip)"
   fi
 
   for req in \
@@ -122,11 +125,7 @@ _install_django_deps() {
     "$GIT_ENGINE/requirements.txt"; do
     if [[ -f "$req" ]]; then
       echo "==> Installing from $req"
-      if [[ "$PIP" == *"-m pip"* ]]; then
-        $PIP install -r "$req"
-      else
-        "$PIP" install -r "$req"
-      fi
+      $PIP install -r "$req"
       installed=1
       break
     fi
@@ -134,20 +133,14 @@ _install_django_deps() {
 
   if ! "$PYTHON" -c "import django" 2>/dev/null; then
     echo "==> Installing Django (minimum for OpenTrader)..."
-    if [[ "$PIP" == *"-m pip"* ]]; then
-      $PIP install "django>=4.2" djangorestframework django-cors-headers python-dotenv requests
-    else
-      "$PIP" install "django>=4.2" djangorestframework django-cors-headers python-dotenv requests
-    fi
+    $PIP install "django>=4.2" djangorestframework django-cors-headers python-dotenv requests
     installed=1
   fi
 
   if ! "$PYTHON" -c "import django" 2>/dev/null; then
-    echo "ERROR: Django still not installed after pip install."
-    echo "  Python used: $PYTHON"
-    echo "Try manually:"
-    echo "  cd $manage_dir && source .venv/bin/activate"
-    echo "  pip install -r requirements.txt"
+    echo "ERROR: Django not importable (venv python/pip mismatch)."
+    echo "  Python: $PYTHON"
+    echo "  Fix: bash $ENGINE_ROOT/scripts/fix_opentrader_venv.sh $CHART_ROOT"
     exit 1
   fi
 
