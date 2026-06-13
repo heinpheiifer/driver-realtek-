@@ -82,18 +82,35 @@ def _bar_rows(candles: list) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for c in candles:
         ts = c.timestamp
-        rows.append(
-            {
-                "timestamp": ts,
-                "time": _to_unix(ts),
-                "open": c.open,
-                "high": c.high,
-                "low": c.low,
-                "close": c.close,
-                "volume": c.volume,
-            }
-        )
+        unix = _to_unix(ts)
+        if unix <= 0:
+            continue
+        row = {
+            "timestamp": ts,
+            "time": unix,
+            "open": float(c.open),
+            "high": float(c.high),
+            "low": float(c.low),
+            "close": float(c.close),
+            "volume": float(c.volume),
+            # Aliases used by some OpenTrader chart builds
+            "t": unix,
+            "o": float(c.open),
+            "h": float(c.high),
+            "l": float(c.low),
+            "c": float(c.close),
+            "v": float(c.volume),
+        }
+        rows.append(row)
+    rows.sort(key=lambda r: r["time"])
     return rows
+
+
+def _display_source(requested_source: str, source_label: str) -> str:
+    """Old chart expects source=blackbull when BlackBull is selected."""
+    if requested_source.lower() == "blackbull":
+        return "blackbull"
+    return source_label
 
 
 def _history_response(
@@ -111,24 +128,41 @@ def _history_response(
     fallback_reason: str | None = None,
 ) -> dict[str, Any]:
     rows = _bar_rows(candles)
-    last = candles[-1]
+    if not rows:
+        return {
+            "success": False,
+            "ok": False,
+            "symbol": symbol.upper(),
+            "interval": interval,
+            "timeframe": tf,
+            "range": range_,
+            "source": requested_source,
+            "count": 0,
+            "bars": [],
+            "candles": [],
+            "data": [],
+            "error": "No bars available",
+        }
+    last = rows[-1]
+    source = _display_source(requested_source, source_label)
     return {
+        "success": True,
+        "ok": True,
         "symbol": symbol.upper(),
         "interval": interval,
         "timeframe": tf,
         "range": range_,
-        "source": source_label,
+        "source": source,
         "requested_source": requested_source,
-        "fallback": fallback,
-        "fallback_reason": fallback_reason,
         "count": len(rows),
-        "last_price": last.close,
+        "last_price": last["close"],
         "csv_path": path,
         "used_cache": (meta or {}).get("used_cache") if meta else False,
         "mt5": (meta or {}).get("mt5") if meta else mt5_status() if requested_source == "blackbull" else None,
         "bars": rows,
         "candles": rows,
         "data": rows,
+        "ohlcv": rows,
     }
 
 
@@ -158,6 +192,10 @@ def _try_django_history(
         if resp.ok:
             data = resp.json()
             if isinstance(data, dict) and (data.get("bars") or data.get("candles") or data.get("data")):
+                data.setdefault("success", True)
+                data.setdefault("ok", True)
+                if source.lower() == "blackbull":
+                    data["source"] = "blackbull"
                 return data
     except requests.RequestException as exc:
         logger.warning("Django history fetch failed: %s", exc)

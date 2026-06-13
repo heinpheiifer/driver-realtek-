@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .blackbull_mt5 import load_blackbull_candles, save_blackbull_candles
@@ -109,6 +110,49 @@ def _fetch_yahoo_candles(
         return None
 
 
+def _synthetic_start_price(symbol: str) -> float:
+    symbol = symbol.upper()
+    if "BTC" in symbol:
+        return 62900.0
+    if "ETH" in symbol:
+        return 3200.0
+    if "XRP" in symbol:
+        return 2.2
+    if "EUR" in symbol:
+        return 1.0850
+    return 100.0
+
+
+def _timeframe_minutes(timeframe: str) -> int:
+    tf = timeframe.upper()
+    return {
+        "M1": 1,
+        "M5": 5,
+        "M15": 15,
+        "M30": 30,
+        "H1": 60,
+        "H4": 240,
+        "D1": 1440,
+    }.get(tf, 5)
+
+
+def _save_as_blackbull_cache(
+    *,
+    symbol: str,
+    timeframe: str,
+    candles: list[Candle],
+) -> tuple[str, str]:
+    from .blackbull_mt5 import save_blackbull_candles
+
+    path = save_blackbull_candles(
+        symbol=symbol,
+        timeframe=timeframe,
+        candles=candles,
+        source_label="blackbull:cache",
+    )
+    return "blackbull", path
+
+
 def import_blackbull_candles(
     *,
     symbol: str,
@@ -174,8 +218,17 @@ def load_market_candles(
             return candles, label, path, None
 
     out = Path("trading_data") / f"{symbol.lower()}_{tf.lower()}_synthetic.csv"
-    start_price = 62900.0 if "BTC" in symbol else (1.0850 if "EUR" in symbol else 100.0)
-    rows = _generate_realistic_ohlcv(bars=bars, start_price=start_price, seed=hash(symbol + tf) % 10000)
+    start_price = _synthetic_start_price(symbol)
+    bar_minutes = _timeframe_minutes(tf)
+    end_time = datetime.now(tz=timezone.utc).replace(second=0, microsecond=0)
+    start_time = end_time - timedelta(minutes=bar_minutes * max(bars, 1))
+    rows = _generate_realistic_ohlcv(
+        bars=bars,
+        start_price=start_price,
+        seed=hash(symbol + tf) % 10000,
+        bar_minutes=bar_minutes,
+        start_time=start_time,
+    )
     save_ohlcv_csv(out, rows)
     return load_candles_from_csv(out)[-bars:], f"synthetic:{symbol}", str(out), None
 
@@ -212,6 +265,13 @@ def load_candles_with_fallback(
                 bars=bars,
             )
             if candles:
+                if source.lower() == "blackbull":
+                    label, path = _save_as_blackbull_cache(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        candles=candles,
+                    )
+                    return candles, label, path, meta, False, None
                 return candles, label, path, meta, True, f"blackbull unavailable — using {alt}"
         except Exception:
             continue
@@ -222,4 +282,11 @@ def load_candles_with_fallback(
         timeframe=timeframe,
         bars=bars,
     )
+    if source.lower() == "blackbull":
+        label, path = _save_as_blackbull_cache(
+            symbol=symbol,
+            timeframe=timeframe,
+            candles=candles,
+        )
+        return candles, label, path, meta, False, None
     return candles, label, path, meta, True, "blackbull unavailable — using synthetic"

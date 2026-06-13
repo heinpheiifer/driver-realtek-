@@ -291,7 +291,7 @@ def health() -> dict[str, Any]:
         ),
         "django_backend": backend_url(),
         "django_proxy": django_proxy_enabled(),
-        "engine_build": "2025-06-live-blackbull",
+        "engine_build": "2025-06-xrpusd-chart-fix",
         "mt5_bridge_hint": (
             "Start: bash scripts/start_blackbull_bridge.sh"
             if not backend_url()
