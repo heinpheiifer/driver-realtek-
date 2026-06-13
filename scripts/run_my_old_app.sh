@@ -15,6 +15,7 @@ CHART_ROOT="${1:-/home/heinz/OpenTrader}"
 ENGINE_DIR="${2:-/home/heinz/opentrade-app}"
 GIT_ENGINE="${3:-/home/heinz/opentrader-app}"
 CHART_PORT="${CHART_PORT:-8010}"
+CHART_HOST="${CHART_HOST:-127.0.0.1}"
 DJANGO_PORT="${DJANGO_PORT:-8000}"
 
 echo "=============================================="
@@ -169,6 +170,9 @@ if [[ -n "$MANAGE_DIR" && -f "$MANAGE_DIR/manage.py" ]]; then
   echo "==> Bookmap layout: below chart ..."
   bash "$ENGINE_ROOT/scripts/patch_bookmap_below_chart.sh" "$CHART_ROOT" || true
 
+  echo "==> Django: allow localhost + Firefox ..."
+  bash "$ENGINE_ROOT/scripts/patch_django_firefox.sh" "$CHART_ROOT" || true
+
   _resolve_python
   echo "==> Running migrations..."
   "$PYTHON" manage.py migrate --noinput 2>/dev/null || "$PYTHON" manage.py migrate || true
@@ -176,6 +180,7 @@ if [[ -n "$MANAGE_DIR" && -f "$MANAGE_DIR/manage.py" ]]; then
   LOG="$CHART_ROOT/.opentrader_django.log"
   echo ""
   echo "==> Starting YOUR OpenTrader on http://127.0.0.1:${CHART_PORT}"
+  echo "    Firefox tip: if localhost fails, use 127.0.0.1 (IPv6 localhost mismatch)"
   echo "    Log: $LOG"
   echo ""
   echo "    MT5 bridge (Windows, BlackBull MT5 open):"
@@ -183,8 +188,9 @@ if [[ -n "$MANAGE_DIR" && -f "$MANAGE_DIR/manage.py" ]]; then
   echo "      python scripts\\mt5_python_bridge.py --all-symbols --interval 60"
   echo ""
   echo "    Open chart: http://127.0.0.1:${CHART_PORT}"
+  echo "    (not http://localhost:${CHART_PORT} if Firefox shows connection error)"
   echo "=============================================="
-  exec "$PYTHON" manage.py runserver "127.0.0.1:${CHART_PORT}"
+  exec "$PYTHON" manage.py runserver "${CHART_HOST}:${CHART_PORT}"
 fi
 
 # --- Mode C: fallback stack ---
