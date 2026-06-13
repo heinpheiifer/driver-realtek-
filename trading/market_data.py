@@ -8,6 +8,7 @@ from .blackbull_mt5 import load_blackbull_candles, save_blackbull_candles
 from .data import load_candles_from_csv
 from .fetch_data import _generate_realistic_ohlcv, save_ohlcv_csv
 from .models import Candle
+from .seed_data import ensure_seed_data
 
 logger = logging.getLogger(__name__)
 
@@ -42,17 +43,24 @@ def _candles_to_dict(candles: list[Candle], limit: int = 500) -> list[dict]:
     ]
 
 
-def _yahoo_ticker(symbol: str) -> str:
+def _yahoo_ticker_candidates(symbol: str) -> list[str]:
     symbol = symbol.upper().replace("/", "")
-    if symbol in ("EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "NZDUSD") and "=X" not in symbol:
-        return f"{symbol}=X"
+    if symbol in ("EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "NZDUSD"):
+        return [f"{symbol}=X"]
     if symbol == "BTCUSD":
-        return "BTC-USD"
+        return ["BTC-USD", "BTCUSD=X"]
     if symbol == "ETHUSD":
-        return "ETH-USD"
+        return ["ETH-USD", "ETHUSD=X"]
+    if symbol == "XRPUSD":
+        return ["XRP-USD", "XRPUSD=X", "XRP22628-USD"]
     if symbol.endswith("USD") and len(symbol) >= 6:
-        return f"{symbol[:-3]}-USD"
-    return symbol
+        base = symbol[:-3]
+        return [f"{base}-USD", f"{symbol}=X"]
+    return [symbol]
+
+
+def _yahoo_ticker(symbol: str) -> str:
+    return _yahoo_ticker_candidates(symbol)[0]
 
 
 def _flatten_yahoo_columns(data):
@@ -76,38 +84,51 @@ def _fetch_yahoo_candles(
     timeframe: str,
     bars: int,
 ) -> tuple[list[Candle], str, str] | None:
-    try:
-        import yfinance as yf
+    import yfinance as yf
 
-        ticker = _yahoo_ticker(symbol)
-        tf = timeframe.upper()
-        period, interval = TIMEFRAME_YAHOO.get(tf, ("5d", "5m"))
-        data = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
-        if data is None or data.empty:
-            return None
+    tf = timeframe.upper()
+    period, interval = TIMEFRAME_YAHOO.get(tf, ("5d", "5m"))
 
-        data = _flatten_yahoo_columns(data)
-        candles: list[Candle] = []
-        for ts, row in data.iterrows():
-            candles.append(
-                Candle(
-                    timestamp=str(ts)[:19],
-                    open=_scalar(row["Open"]),
-                    high=_scalar(row["High"]),
-                    low=_scalar(row["Low"]),
-                    close=_scalar(row["Close"]),
-                    volume=_scalar(row["Volume"]) if "Volume" in row else 0.0,
-                )
+    for ticker in _yahoo_ticker_candidates(symbol):
+        try:
+            data = yf.download(
+                ticker,
+                period=period,
+                interval=interval,
+                progress=False,
+                auto_adjust=True,
+                threads=False,
             )
-        if not candles:
-            return None
+            if data is None or data.empty:
+                hist = yf.Ticker(ticker).history(period=period, interval=interval, auto_adjust=True)
+                data = hist if hist is not None and not hist.empty else None
+            if data is None or data.empty:
+                continue
 
-        out = Path("trading_data") / f"{symbol.lower()}_{tf.lower()}_yahoo.csv"
-        save_ohlcv_csv(out, _candles_to_dict(candles, len(candles)))
-        return candles[-bars:], f"yahoo:{ticker}", str(out)
-    except Exception as exc:
-        logger.warning("Yahoo fetch failed for %s: %s", symbol, exc)
-        return None
+            data = _flatten_yahoo_columns(data)
+            candles: list[Candle] = []
+            for ts, row in data.iterrows():
+                candles.append(
+                    Candle(
+                        timestamp=str(ts)[:19],
+                        open=_scalar(row["Open"]),
+                        high=_scalar(row["High"]),
+                        low=_scalar(row["Low"]),
+                        close=_scalar(row["Close"]),
+                        volume=_scalar(row["Volume"]) if "Volume" in row else 0.0,
+                    )
+                )
+            if not candles:
+                continue
+
+            sym = symbol.upper().replace("/", "")
+            out = Path("trading_data") / f"{sym.lower()}_{tf.lower()}_yahoo.csv"
+            save_ohlcv_csv(out, _candles_to_dict(candles, len(candles)))
+            return candles[-bars:], f"yahoo:{ticker}", str(out)
+        except Exception as exc:
+            logger.warning("Yahoo fetch failed for %s (%s): %s", symbol, ticker, exc)
+            continue
+    return None
 
 
 def _synthetic_start_price(symbol: str) -> float:
@@ -241,7 +262,9 @@ def load_candles_with_fallback(
     bars: int = 800,
     csv_path: str | None = None,
 ) -> tuple[list[Candle], str, str, dict | None, bool, str | None]:
-    """Load candles; never raises. Falls back yahoo → synthetic when blackbull empty."""
+    """Load candles; never raises. Falls back seeds → yahoo → synthetic."""
+    ensure_seed_data()
+
     try:
         candles, label, path, meta = load_market_candles(
             symbol=symbol,
@@ -253,10 +276,23 @@ def load_candles_with_fallback(
         if candles:
             return candles, label, path, meta, False, None
     except BlackbullDataError:
-        if source.lower() != "blackbull":
+        if source.lower() not in ("blackbull", "yahoo"):
             raise
 
-    for alt in ("yahoo", "synthetic"):
+    # blackbull empty, or yahoo empty — try alternate sources
+    alt_sources: list[str] = []
+    if source.lower() == "blackbull":
+        alt_sources = ["yahoo", "blackbull", "synthetic"]
+    elif source.lower() == "yahoo":
+        alt_sources = ["blackbull", "synthetic"]
+    else:
+        alt_sources = ["synthetic"]
+
+    seen: set[str] = {source.lower()}
+    for alt in alt_sources:
+        if alt in seen:
+            continue
+        seen.add(alt)
         try:
             candles, label, path, meta = load_market_candles(
                 symbol=symbol,
@@ -265,14 +301,14 @@ def load_candles_with_fallback(
                 bars=bars,
             )
             if candles:
-                if source.lower() == "blackbull":
+                if source.lower() in ("blackbull", "yahoo"):
                     label, path = _save_as_blackbull_cache(
                         symbol=symbol,
                         timeframe=timeframe,
                         candles=candles,
                     )
                     return candles, label, path, meta, False, None
-                return candles, label, path, meta, True, f"blackbull unavailable — using {alt}"
+                return candles, label, path, meta, True, f"{source} unavailable — using {alt}"
         except Exception:
             continue
 
@@ -282,11 +318,9 @@ def load_candles_with_fallback(
         timeframe=timeframe,
         bars=bars,
     )
-    if source.lower() == "blackbull":
-        label, path = _save_as_blackbull_cache(
-            symbol=symbol,
-            timeframe=timeframe,
-            candles=candles,
-        )
-        return candles, label, path, meta, False, None
-    return candles, label, path, meta, True, "blackbull unavailable — using synthetic"
+    label, path = _save_as_blackbull_cache(
+        symbol=symbol,
+        timeframe=timeframe,
+        candles=candles,
+    )
+    return candles, label, path, meta, False, None

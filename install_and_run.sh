@@ -44,6 +44,12 @@ fi
 
 mkdir -p trading_data/blackbull_import
 
+# Offline chart data (XRPUSD etc.) — works without MT5 or Yahoo
+if [[ -d seeds/chart ]]; then
+  echo "==> Installing seed market data ..."
+  python3 -c "from trading.seed_data import ensure_seed_data; ensure_seed_data()"
+fi
+
 PORT="${PORT:-8010}"
 HOST="${HOST:-127.0.0.1}"
 

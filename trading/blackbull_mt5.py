@@ -10,6 +10,7 @@ from typing import Any
 
 from .fetch_data import save_ohlcv_csv
 from .models import Candle
+from .seed_data import ensure_seed_data, find_seed_file
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,9 @@ def _resolve_cache_file(symbol: str, timeframe: str) -> Path | None:
     for path in (_cache_path(symbol, tf), _import_path(symbol, tf)):
         if path.is_file():
             return path
+    seed = find_seed_file(symbol, tf)
+    if seed is not None:
+        return seed
     return None
 
 

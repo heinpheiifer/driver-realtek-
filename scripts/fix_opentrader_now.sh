@@ -103,8 +103,8 @@ check "http://127.0.0.1:8010/api/symbols/?source=blackbull&q=btc&limit=300" "200
 check "http://127.0.0.1:8010/api/mt5/status/" "200"
 
 HEALTH="$(curl -sf http://127.0.0.1:8010/api/health 2>/dev/null || echo '{}')"
-if echo "$HEALTH" | grep -q "2025-06-live-blackbull"; then
-  echo "  OK  engine_build=2025-06-live-blackbull"
+if echo "$HEALTH" | grep -q "2025-06-offline-seeds"; then
+  echo "  OK  engine_build=2025-06-offline-seeds"
 else
   echo "  WARN  old engine still running — stop other servers on port 8010"
   FAIL=1

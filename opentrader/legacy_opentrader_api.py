@@ -107,9 +107,10 @@ def _bar_rows(candles: list) -> list[dict[str, Any]]:
 
 
 def _display_source(requested_source: str, source_label: str) -> str:
-    """Old chart expects source=blackbull when BlackBull is selected."""
-    if requested_source.lower() == "blackbull":
-        return "blackbull"
+    """Old chart expects source to match what the user selected."""
+    req = requested_source.lower()
+    if req in ("blackbull", "yahoo"):
+        return req
     return source_label
 
 

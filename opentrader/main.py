@@ -24,6 +24,7 @@ from trading.blackbull_mt5 import (
     sync_all_mt5_symbols,
 )
 from trading.market_data import import_blackbull_candles, load_candles_with_fallback, load_market_candles
+from trading.seed_data import ensure_seed_data
 from trading.orderflow import compute_orderflow
 from opentrade.journal import TradeJournal
 from opentrade.live_engine import LivePaperEngine
@@ -139,7 +140,8 @@ if backend_url():
 
 @app.on_event("startup")
 def _startup_mt5_autosync() -> None:
-    """Auto-connect MT5 and sync all BlackBull symbols — same as old Open Trader."""
+    """Install offline seeds + sync Wine MT5 files + optional live MT5."""
+    ensure_seed_data()
     mt5_autosync.start()
 
 
@@ -291,7 +293,8 @@ def health() -> dict[str, Any]:
         ),
         "django_backend": backend_url(),
         "django_proxy": django_proxy_enabled(),
-        "engine_build": "2025-06-xrpusd-chart-fix",
+        "engine_build": "2025-06-offline-seeds",
+        "seed_data": ensure_seed_data(),
         "mt5_bridge_hint": (
             "Start: bash scripts/start_blackbull_bridge.sh"
             if not backend_url()

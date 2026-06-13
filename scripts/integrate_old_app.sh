@@ -84,6 +84,10 @@ cp "$ENGINE_ROOT/scripts/stop_opentrader.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/fix_opentrader_now.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/setup_live_blackbull.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/BlackBullLivePush.mq5" "$OLD_APP/scripts/"
+mkdir -p "$OLD_APP/seeds/chart"
+if [[ -d "$ENGINE_ROOT/seeds/chart" ]]; then
+  cp "$ENGINE_ROOT/seeds/chart/"*.csv "$OLD_APP/seeds/chart/" 2>/dev/null || true
+fi
 chmod +x "$OLD_APP/scripts/"*.sh
 
 mkdir -p "$OLD_APP/trading_data/blackbull_import"
