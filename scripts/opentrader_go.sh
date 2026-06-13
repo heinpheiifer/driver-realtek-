@@ -12,8 +12,9 @@ CHART_ROOT="${1:-/home/heinz/OpenTrader}"
 PORT="${PORT:-8010}"
 LOG="$CHART_ROOT/.opentrader_start.log"
 PY=""
+mkdir -p "$CHART_ROOT" 2>/dev/null || true
 
-exec > >(tee -a "$LOG") 2>&1
+exec > >(tee -a "$LOG" 2>/dev/null || cat) 2>&1
 
 echo "=============================================="
 echo " OpenTrader GO — $(date -Iseconds)"
