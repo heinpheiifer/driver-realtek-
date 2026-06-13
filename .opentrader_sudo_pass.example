@@ -1,0 +1,3 @@
+# Copy to .opentrader_sudo_pass (one line = your Linux sudo password)
+# chmod 600 .opentrader_sudo_pass
+# NEVER commit the real file — it is in .gitignore
