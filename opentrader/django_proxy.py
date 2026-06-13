@@ -1,7 +1,7 @@
-"""Optional proxy to original OpenTrader Django backend (has MT5).
+"""Proxy market-data API to original OpenTrader Django backend (has live MT5).
 
-Disabled by default — set OPENTRADER_DJANGO_PROXY=1 to enable.
-Without that flag, all chart API is served locally (yahoo/synthetic fallback).
+Enabled when OPENTRADER_DJANGO_PROXY=1 OR OPENTRADER_BACKEND_URL is set.
+This is how your OLD app worked: chart on :8010 → Django on :8000 → MT5 bridge.
 """
 from __future__ import annotations
 
@@ -14,14 +14,23 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 PROXY_PREFIXES = (
+    "/api/history",
     "/api/candles",
     "/api/bars",
+    "/api/symbols",
+    "/api/mt5",
+    "/api/market",
     "/api/data",
 )
 
 
 def django_proxy_enabled() -> bool:
-    return os.environ.get("OPENTRADER_DJANGO_PROXY", "").strip().lower() in ("1", "true", "yes")
+    raw = os.environ.get("OPENTRADER_DJANGO_PROXY", "").strip().lower()
+    if raw in ("0", "false", "no"):
+        return False
+    if raw in ("1", "true", "yes"):
+        return True
+    return bool(os.environ.get("OPENTRADER_BACKEND_URL", "").strip())
 
 
 def backend_url() -> str | None:
@@ -57,7 +66,7 @@ class DjangoBackendProxy(BaseHTTPMiddleware):
                 url=target,
                 headers=headers,
                 data=body if body else None,
-                timeout=8,
+                timeout=15,
                 allow_redirects=False,
             )
             if resp.status_code >= 400:

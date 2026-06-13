@@ -32,7 +32,8 @@ _set_env() {
 
 if [[ -f "$CHART_ROOT/manage.py" ]] || [[ -f "$CHART_ROOT/backend/manage.py" ]]; then
   _set_env "OPENTRADER_BACKEND_URL" "http://127.0.0.1:${DJANGO_PORT}"
-  echo "==> Market API proxied to Django :${DJANGO_PORT}"
+  _set_env "OPENTRADER_DJANGO_PROXY" "1"
+  echo "==> Market API proxied to Django :${DJANGO_PORT} (original setup)"
 else
   sed -i '/^OPENTRADER_BACKEND_URL=/d' "$ENV_FILE" 2>/dev/null || true
   echo "==> No Django — will try MT5 bridge for BlackBull data"

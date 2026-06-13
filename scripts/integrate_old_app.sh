@@ -81,13 +81,15 @@ cp "$ENGINE_ROOT/scripts/start_opentrader_stack.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/recover_old_chart.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/find_old_chart.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/stop_opentrader.sh" "$OLD_APP/scripts/"
+cp "$ENGINE_ROOT/scripts/run_my_old_app.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/fix_opentrader_now.sh" "$OLD_APP/scripts/"
 cp "$ENGINE_ROOT/scripts/setup_live_blackbull.sh" "$OLD_APP/scripts/"
-cp "$ENGINE_ROOT/scripts/BlackBullLivePush.mq5" "$OLD_APP/scripts/"
+cp "$ENGINE_ROOT/opentrader/YOUR_OLD_APP.md" "$OLD_APP/opentrader/" 2>/dev/null || true
 mkdir -p "$OLD_APP/seeds/chart"
 if [[ -d "$ENGINE_ROOT/seeds/chart" ]]; then
   cp "$ENGINE_ROOT/seeds/chart/"*.csv "$OLD_APP/seeds/chart/" 2>/dev/null || true
 fi
+cp "$ENGINE_ROOT/scripts/BlackBullLivePush.mq5" "$OLD_APP/scripts/" 2>/dev/null || true
 chmod +x "$OLD_APP/scripts/"*.sh
 
 mkdir -p "$OLD_APP/trading_data/blackbull_import"
@@ -115,9 +117,9 @@ if ! grep -q "^MT5_WINE_SYNC=" "$ENV_FILE" 2>/dev/null; then
   echo "MT5_WINE_SYNC=1" >> "$ENV_FILE"
 fi
 if ! grep -q "^OPENTRADER_DJANGO_PROXY=" "$ENV_FILE" 2>/dev/null; then
-  echo "OPENTRADER_DJANGO_PROXY=0" >> "$ENV_FILE"
+  echo "OPENTRADER_DJANGO_PROXY=1" >> "$ENV_FILE"
 fi
-sed -i '/^OPENTRADER_BACKEND_URL=/d' "$ENV_FILE" 2>/dev/null || true
+# Do not remove OPENTRADER_BACKEND_URL — old app needs Django proxy for live MT5
 
 cat > "$OLD_APP/run.sh" << 'LAUNCHER'
 #!/usr/bin/env bash
