@@ -19,11 +19,12 @@ fi
 cd "$CHART_ROOT"
 
 PY=""
-if [[ -x "$CHART_ROOT/.venv/bin/python3" ]]; then
-  PY="$CHART_ROOT/.venv/bin/python3"
-elif [[ -x "$CHART_ROOT/.venv/bin/python" ]]; then
-  PY="$CHART_ROOT/.venv/bin/python"
-fi
+for candidate in "$CHART_ROOT/.venv/bin/python3" "$CHART_ROOT/.venv/bin/python"; do
+  if [[ -x "$candidate" ]]; then
+    PY="$candidate"
+    break
+  fi
+done
 
 _ensure_django() {
   if [[ -n "$PY" ]] && "$PY" -c "import django" 2>/dev/null; then
@@ -34,7 +35,7 @@ _ensure_django() {
 }
 
 if [[ -z "$PY" ]] || [[ ! -d "$CHART_ROOT/.venv" ]]; then
-  echo "==> No venv — creating ..."
+  echo "==> No usable venv — creating ..."
   exec bash "$ENGINE_ROOT/scripts/fix_opentrader_venv.sh" "$CHART_ROOT"
 fi
 
