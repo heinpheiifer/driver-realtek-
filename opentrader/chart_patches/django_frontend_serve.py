@@ -29,7 +29,7 @@ def serve_index(_request):
         raise Http404(
             "frontend/dist/index.html missing — run: cd frontend && npm install && npm run build"
         )
-    return FileResponse(index, content_type="text/html")
+    return FileResponse(index.open("rb"), content_type="text/html")
 
 
 def serve_asset(request, path: str):
@@ -38,9 +38,9 @@ def serve_asset(request, path: str):
     return static_serve(request, path, document_root=str(_ASSETS))
 
 
-def serve_root_asset(request, filename: str):
+def serve_root_asset(_request, filename: str):
     """Files referenced from dist root (favicon, manifest, etc.)."""
     found = _dist_file(filename)
     if found is None:
         return HttpResponseNotFound(filename)
-    return FileResponse(found)
+    return FileResponse(found.open("rb"))
