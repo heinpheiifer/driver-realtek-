@@ -104,8 +104,14 @@ _install_django_deps() {
   local installed=0
 
   _resolve_python
-  PIP="${VIRTUAL_ENV:-}/bin/pip"
-  if [[ ! -x "$PIP" ]]; then
+  PIP=""
+  if [[ -x "${VIRTUAL_ENV:-}/bin/pip3" ]]; then
+    PIP="${VIRTUAL_ENV}/bin/pip3"
+  elif [[ -x "${VIRTUAL_ENV:-}/bin/pip" ]]; then
+    PIP="${VIRTUAL_ENV}/bin/pip"
+  elif [[ -n "${VIRTUAL_ENV:-}" ]]; then
+    PIP="$PYTHON -m pip"
+  else
     PIP="$(command -v pip3 2>/dev/null || command -v pip)"
   fi
 
@@ -116,7 +122,11 @@ _install_django_deps() {
     "$GIT_ENGINE/requirements.txt"; do
     if [[ -f "$req" ]]; then
       echo "==> Installing from $req"
-      "$PIP" install -r "$req"
+      if [[ "$PIP" == *"-m pip"* ]]; then
+        $PIP install -r "$req"
+      else
+        "$PIP" install -r "$req"
+      fi
       installed=1
       break
     fi
@@ -124,7 +134,11 @@ _install_django_deps() {
 
   if ! "$PYTHON" -c "import django" 2>/dev/null; then
     echo "==> Installing Django (minimum for OpenTrader)..."
-    "$PIP" install "django>=4.2" djangorestframework django-cors-headers python-dotenv requests
+    if [[ "$PIP" == *"-m pip"* ]]; then
+      $PIP install "django>=4.2" djangorestframework django-cors-headers python-dotenv requests
+    else
+      "$PIP" install "django>=4.2" djangorestframework django-cors-headers python-dotenv requests
+    fi
     installed=1
   fi
 
@@ -172,6 +186,11 @@ if [[ -n "$MANAGE_DIR" && -f "$MANAGE_DIR/manage.py" ]]; then
   echo "==> Strip layout patches (fixes Firefox freeze) ..."
   PURGE=1 bash "$ENGINE_ROOT/scripts/unpatch_bookmap.sh" "$CHART_ROOT" || true
 
+  if [[ "${OPENTRADER_PATCH_DJANGO:-0}" == "1" ]]; then
+    echo "==> Django: allow localhost + Firefox ..."
+    bash "$ENGINE_ROOT/scripts/patch_django_firefox.sh" "$CHART_ROOT" || true
+  fi
+
   if [[ "${OPENTRADER_SKIP_BOOKMAP_PATCH:-0}" != "1" && "${OPENTRADER_BOOKMAP_BELOW:-0}" == "1" ]]; then
     echo "==> Bookmap layout: below chart (opt-in) ..."
     bash "$ENGINE_ROOT/scripts/patch_bookmap_below_chart.sh" "$CHART_ROOT" || true
@@ -180,10 +199,16 @@ if [[ -n "$MANAGE_DIR" && -f "$MANAGE_DIR/manage.py" ]]; then
     echo "    To move Bookmap below chart later: OPENTRADER_BOOKMAP_BELOW=1 bash scripts/run_my_old_app.sh"
   fi
 
-  echo "==> Django: allow localhost + Firefox ..."
-  bash "$ENGINE_ROOT/scripts/patch_django_firefox.sh" "$CHART_ROOT" || true
-
   _resolve_python
+  echo "==> Django check ..."
+  if ! "$PYTHON" manage.py check 2>&1; then
+    echo ""
+    echo "ERROR: Django project failed 'manage.py check'."
+    echo "Try the minimal starter (no patches):"
+    echo "  bash scripts/start_opentrader_simple.sh $CHART_ROOT"
+    exit 1
+  fi
+
   echo "==> Running migrations..."
   "$PYTHON" manage.py migrate --noinput 2>/dev/null || "$PYTHON" manage.py migrate || true
 
