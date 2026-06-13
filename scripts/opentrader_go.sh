@@ -32,6 +32,7 @@ cd "$CHART_ROOT"
 
 # Remove layout patches that freeze Firefox
 bash "$ENGINE_ROOT/scripts/unpatch_bookmap.sh" "$CHART_ROOT" 2>/dev/null || true
+bash "$ENGINE_ROOT/scripts/patch_django_frontend.sh" "$CHART_ROOT" 2>/dev/null || true
 
 _stop_ports() {
   pkill -f "manage.py runserver" 2>/dev/null || true

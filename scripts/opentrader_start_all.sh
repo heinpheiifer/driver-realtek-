@@ -38,6 +38,7 @@ _sudo apt-get install -y python3 python3-pip python3-venv curl
 
 bash "$ENGINE_ROOT/scripts/restore_django_settings.sh" "$CHART_ROOT" 2>/dev/null || true
 bash "$ENGINE_ROOT/scripts/unpatch_bookmap.sh" "$CHART_ROOT" 2>/dev/null || true
+bash "$ENGINE_ROOT/scripts/patch_django_frontend.sh" "$CHART_ROOT" 2>/dev/null || true
 
 fuser -k 8010/tcp 8011/tcp 2>/dev/null || true
 pkill -f "manage.py runserver" 2>/dev/null || true
