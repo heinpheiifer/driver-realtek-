@@ -142,9 +142,11 @@ _install_django_deps() {
   fi
 }
 
-echo "==> Stopping anything on ports ${CHART_PORT} and ${DJANGO_PORT} ..."
+echo "==> Stopping anything on ports ${CHART_PORT}, 8011 and ${DJANGO_PORT} ..."
 _stop_port "$CHART_PORT"
+_stop_port "8011"
 _stop_port "$DJANGO_PORT"
+pkill -f "uvicorn opentrader.main" 2>/dev/null || true
 
 MANAGE_DIR="$(_find_manage || true)"
 RUN_SCRIPT="$(_find_run_script || true)"

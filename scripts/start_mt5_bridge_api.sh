@@ -8,8 +8,10 @@ cd "$ROOT"
 PORT="${PORT:-8011}"
 if ss -ltn "sport = :8010" 2>/dev/null | grep -q LISTEN; then
   echo "==> Old Open Trader chart detected on :8010"
-  echo "    Starting MT5 bridge API on :8011"
+  echo "    Starting MT5 bridge API on :8011 (browser / → redirects to :8010)"
   PORT=8011
+  export OPENTRADER_CHART_PORT=8010
+  export OPENTRADER_API_ONLY=1
 fi
 
 source .venv/bin/activate 2>/dev/null || bash install_and_run.sh &

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import socket
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +11,7 @@ from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -796,8 +797,33 @@ def default_csv_info() -> dict[str, Any]:
     return {"path": str(DEFAULT_CSV), "exists": exists}
 
 
-@app.get("/")
-def index() -> FileResponse:
+def _port_open(host: str, port: int, timeout: float = 0.4) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _chart_redirect_url() -> str | None:
+    """When MT5 API runs on :8011, send browser users to the chart app on :8010."""
+    api_port = os.environ.get("PORT", "8010").strip()
+    chart_port = os.environ.get("OPENTRADER_CHART_PORT", "8010").strip()
+    if api_port != "8011" or chart_port == api_port:
+        return None
+    mode = os.environ.get("OPENTRADER_API_ONLY", "auto").strip().lower()
+    if mode in ("0", "false", "no"):
+        return None
+    if mode in ("1", "true", "yes") or _port_open("127.0.0.1", int(chart_port)):
+        return f"http://127.0.0.1:{chart_port}/"
+    return None
+
+
+@app.get("/", response_model=None)
+def index() -> FileResponse | RedirectResponse:
+    redirect = _chart_redirect_url()
+    if redirect:
+        return RedirectResponse(redirect, status_code=302)
     if OLD_APP_INDEX and OLD_APP_INDEX.is_file():
         return FileResponse(OLD_APP_INDEX)
     if use_old_ui() and OLD_APP_ROOT:
