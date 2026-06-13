@@ -10,12 +10,13 @@ Your **original working app** is NOT the git repo we've been patching. It lives 
 The new git engine was layered on top and broke live BlackBull/MT5.  
 Your old app had **Django + MT5 bridge → all BlackBull symbols**.
 
-## Run YOUR old app (one command)
-
-```bash
-cd ~/opentrader-app && git pull
-bash scripts/run_my_old_app.sh
-```
+# ONE command to start ~/OpenTrader (handles broken venv automatically):
+#
+#   bash ~/opentrader-app/scripts/opentrader_go.sh
+#
+# Or after git pull:
+#
+#   cd ~/opentrader-app && git pull && bash scripts/opentrader_go.sh
 
 **Chart URL (Firefox or any browser):** http://127.0.0.1:8010
 
