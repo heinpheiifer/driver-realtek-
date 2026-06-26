@@ -11,6 +11,7 @@ from enum import Enum
 import logging
 
 from core.strategy_base import StrategyBase, Signal, TradeSignal, Position
+from utils.symbol_point import symbol_point as _symbol_point
 from indicators.trend_utils import TrendAnalyzer, TrendDirection, TrendBreak
 from indicators.common import (
     calculate_rsi, calculate_ema, calculate_atr,
@@ -221,8 +222,8 @@ class TrendBreakTrauma(StrategyBase):
         self.optimal_hours = session.get("optimal_hours", [8, 9, 10, 14, 15, 16])
 
         # Strategy settings
-        self.symbols = config.get("symbols", ["XAUUSD"])
-        self.timeframe = config.get("timeframe", "H1")
+        self.symbols = config.get("symbols", ["ETHUSD"])
+        self.timeframe = config.get("timeframe", "M15")
         self.enabled = config.get("enabled", True)
         self.magic_number = config.get("magic_number", 789456)
 
@@ -478,7 +479,7 @@ class TrendBreakTrauma(StrategyBase):
         confirmation: BreakoutConfirmation
     ) -> TradeSignal:
         """Create a buy trade signal."""
-        point = 0.1 if "XAU" in symbol else 0.0001
+        point = _symbol_point(symbol)
 
         if self.use_atr_sl_tp:
             atr = calculate_atr(data, 14)
@@ -509,7 +510,7 @@ class TrendBreakTrauma(StrategyBase):
         confirmation: BreakoutConfirmation
     ) -> TradeSignal:
         """Create a sell trade signal."""
-        point = 0.1 if "XAU" in symbol else 0.0001
+        point = _symbol_point(symbol)
 
         if self.use_atr_sl_tp:
             atr = calculate_atr(data, 14)
@@ -624,7 +625,7 @@ class TrendBreakTrauma(StrategyBase):
             return None
 
         current_price = data.iloc[-1]["close"]
-        point = 0.1 if "XAU" in position.symbol else 0.0001
+        point = _symbol_point(position.symbol)
         trail_distance = self.trailing_pips * point * 10
 
         if position.type == Signal.BUY:
