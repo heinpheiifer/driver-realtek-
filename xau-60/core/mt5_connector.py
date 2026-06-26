@@ -9,26 +9,15 @@ Enhanced with:
 - Order retry logic
 - Comprehensive error handling
 """
-import platform
 import pandas as pd
 import threading
 import time
 from enum import Enum
 
-# Use mock MT5 on non-Windows platforms
-if platform.system() == "Windows":
-    import MetaTrader5 as mt5
-else:
-    # Mock MT5 for development on macOS/Linux
-    import sys
-    import os
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "mt5_mock",
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), "utils", "mt5_mock.py")
-    )
-    mt5 = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mt5)
+from utils.mt5_backend import load_mt5_module
+
+# Native MT5 on Windows, remote bridge on Linux when MT5_BRIDGE_URL is set, else mock
+mt5 = load_mt5_module()
 
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Tuple, Union

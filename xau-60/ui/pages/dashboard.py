@@ -112,7 +112,7 @@ def render_dashboard():
 
 def render_account_summary():
     """Render the account summary bar."""
-    import platform
+    from utils.mt5_backend import get_backend_mode, is_real_mt5_available, backend_label
 
     manager = get_account_manager()
     active_account = manager.get_active_account()
@@ -150,11 +150,27 @@ def render_account_summary():
             st.markdown(
                 f"**Account:** {active_account.name} ({active_account.login}@{active_account.server}) — **{type_label}**"
             )
-            if platform.system() != "Windows":
+            if get_backend_mode() == "bridge":
+                try:
+                    from utils.mt5_bridge_client import bridge_reachable
+                    if bridge_reachable():
+                        st.success(
+                            f"**Live data via MT5 bridge** — {backend_label()}. "
+                            "Real BlackBull balance and trades are loaded from your Windows MT5."
+                        )
+                    else:
+                        st.error(
+                            "MT5 bridge URL is set but the bridge is unreachable. "
+                            "On Windows: open MT5 and run `scripts/start-bridge.ps1`. "
+                            "Check firewall and `MT5_BRIDGE_URL` in `.env`."
+                        )
+                except Exception:
+                    st.info(f"MT5 bridge mode: {backend_label()}")
+            elif not is_real_mt5_available():
                 st.warning(
-                    "**Linux cannot read your real BlackBull balance.** "
-                    "This app needs **Windows + MetaTrader 5 running** to show your live balance and place trades. "
-                    "On Linux you only get a UI preview (simulated or empty data)."
+                    "**UI preview mode (mock data).** To show your real BlackBull balance on Linux, "
+                    "run the MT5 bridge on a Windows PC with MetaTrader 5, then set "
+                    "`MT5_BRIDGE_URL=http://WINDOWS_IP:8021` in `.env`. See `SETUP_XAU60.md`."
                 )
             elif connection_status != ConnectionStatus.CONNECTED:
                 st.error(
@@ -249,10 +265,15 @@ def render_account_summary():
             st.metric("Margin Level", "—")
 
         if active_account and connection_status == ConnectionStatus.CONNECTED:
-            st.caption(
-                "Connected but balance not loaded — on Windows ensure MT5 is open; "
-                "on Linux real balances are not available."
-            )
+            if is_real_mt5_available():
+                st.caption(
+                    "Connected but balance not loaded — ensure MT5 is open on the bridge/Windows host "
+                    "and the account server name matches exactly."
+                )
+            else:
+                st.caption(
+                    "Connected to mock MT5 — set MT5_BRIDGE_URL in .env for your real BlackBull balance."
+                )
 
 
 def render_chart_panel():

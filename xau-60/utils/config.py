@@ -59,6 +59,14 @@ class MT5Config:
 
 
 @dataclass
+class MT5BridgeConfig:
+    """Remote MT5 bridge (Linux → Windows) configuration."""
+    url: str = field(default_factory=lambda: get_env("MT5_BRIDGE_URL", ""))
+    token: str = field(default_factory=lambda: get_env("MT5_BRIDGE_TOKEN", ""))
+    timeout: float = field(default_factory=lambda: get_env("MT5_BRIDGE_TIMEOUT", 30.0, float))
+
+
+@dataclass
 class TelegramConfig:
     """Telegram alert configuration."""
     enabled: bool = field(default_factory=lambda: get_env("TELEGRAM_ENABLED", False, bool))
@@ -112,6 +120,7 @@ class UIConfig:
 class Config:
     """Main configuration class."""
     mt5: MT5Config = field(default_factory=MT5Config)
+    mt5_bridge: MT5BridgeConfig = field(default_factory=MT5BridgeConfig)
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
     discord: DiscordConfig = field(default_factory=DiscordConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
@@ -128,6 +137,11 @@ class Config:
                 "server": self.mt5.server,
                 "path": self.mt5.path,
                 "timeout": self.mt5.timeout,
+            },
+            "mt5_bridge": {
+                "url": self.mt5_bridge.url,
+                "token": self.mt5_bridge.token,
+                "timeout": self.mt5_bridge.timeout,
             },
             "alerts": {
                 "telegram": {

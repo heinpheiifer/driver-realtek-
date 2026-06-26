@@ -96,15 +96,47 @@ Enable/disable in the **Strategies** page in the dashboard.
 
 ## Linux Mint note
 
-The Python `MetaTrader5` package is **Windows-only**. On Mint:
+The Python `MetaTrader5` package is **Windows-only**. On Mint you have two options:
 
-- Dashboard, backtests, and strategy editing work (mock data).
-- **Live/paper orders require Windows** with MT5 running, or Wine (not officially supported).
+### Option A — MT5 bridge (recommended for Linux dashboard)
 
-Recommended: run the bot on a **Windows PC/VPS** where MT5 is installed; use Mint to open the dashboard remotely:
+Run the UI on Mint but connect to **real BlackBull balance** via a Windows PC on your LAN:
+
+1. **On Windows** (where MT5 + BlackBull are installed):
+   ```powershell
+   cd xau-60
+   .\scripts\start-bridge.ps1
+   ```
+   Keep MetaTrader 5 open. Note your Windows LAN IP (e.g. `192.168.1.50`).
+
+2. **On Linux Mint**, edit `xau-60/.env`:
+   ```bash
+   MT5_BRIDGE_URL=http://192.168.1.50:8021
+   MT5_BRIDGE_TOKEN=choose-a-secret-token   # same token on Windows if set
+   ```
+
+3. Test and start:
+   ```bash
+   python scripts/check-bridge.py
+   python scripts/check-balance.py
+   ./scripts/start.sh
+   ```
+
+4. Allow **port 8021** through Windows Firewall for your LAN.
+
+The dashboard will show **Live data via MT5 bridge** and your real balance.
+
+### Option B — UI preview only (no bridge)
+
+- Dashboard, backtests, and strategy editing work with **mock data**.
+- No real balance or live orders until you use the bridge or run on Windows.
+
+### Option C — Run everything on Windows
+
+Run the bot on a **Windows PC/VPS** where MT5 is installed; open the dashboard from Mint:
 
 ```bash
-# On Windows machine, bind LAN in start script, then from Mint:
+# On Windows machine, then from Mint:
 http://WINDOWS_LOCAL_IP:8020
 ```
 
@@ -144,7 +176,8 @@ sudo systemctl enable --now xau60
 | MT5 connect failed | MT5 must be open; check login/server in `.env` |
 | No XAUUSD data | Add symbol to Market Watch; check broker symbol name |
 | No trades | Check session hours, strategy enabled, demo account has margin |
-| Linux “mock MT5” | Expected — use Windows for real MT5 API |
+| Linux “mock MT5” | Set `MT5_BRIDGE_URL` in `.env` and run `start-bridge.ps1` on Windows |
+| Bridge unreachable | Windows firewall port 8021; MT5 open; correct IP in `.env` |
 
 ---
 
