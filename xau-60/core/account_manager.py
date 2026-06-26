@@ -304,9 +304,51 @@ class AccountManager:
             self._active_account_id = data.get("active_account_id")
 
             logger.info(f"Loaded {len(self._accounts)} accounts from encrypted storage")
+            self._ensure_active_account()
 
         except Exception as e:
             logger.error(f"Failed to load accounts: {e}")
+
+    def _ensure_active_account(self) -> None:
+        """Ensure a valid active account is selected, preferring live over demo."""
+        if not self._accounts:
+            self._active_account_id = None
+            return
+
+        if self._active_account_id and self._active_account_id in self._accounts:
+            return
+
+        live_accounts = [
+            acc for acc in self._accounts.values()
+            if acc.account_type == AccountType.LIVE
+        ]
+        if live_accounts:
+            self._active_account_id = live_accounts[0].id
+            self._save_accounts()
+            logger.info(f"Active account set to live: {live_accounts[0].name}")
+            return
+
+        first = next(iter(self._accounts.values()))
+        self._active_account_id = first.id
+        self._save_accounts()
+        logger.info(f"Active account set to: {first.name}")
+
+    def ensure_startup_connection(self) -> bool:
+        """
+        Connect the active account on app startup if one is configured.
+
+        Returns:
+            True if connected or no account to connect
+        """
+        self._ensure_active_account()
+        if not self._active_account_id:
+            return True
+
+        status = self.get_connection_status(self._active_account_id)
+        if status == ConnectionStatus.CONNECTED:
+            return True
+
+        return self.connect(self._active_account_id)
 
     def _save_accounts(self) -> None:
         """Save accounts to encrypted file."""
@@ -379,6 +421,9 @@ class AccountManager:
 
             self._accounts[account_id] = account
             self._connection_status[account_id] = ConnectionStatus.DISCONNECTED
+
+            # New account becomes active (prefer user's latest selection).
+            self._active_account_id = account_id
 
             self._save_accounts()
 

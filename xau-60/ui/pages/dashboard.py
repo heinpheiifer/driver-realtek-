@@ -141,7 +141,17 @@ def render_account_summary():
     with account_col:
         active_account = manager.get_active_account()
         if active_account:
-            st.markdown(f"**Account:** {active_account.name} ({active_account.login}@{active_account.server})")
+            from core.account_manager import AccountType
+            import platform
+            type_label = "LIVE" if active_account.account_type == AccountType.LIVE else "DEMO"
+            st.markdown(
+                f"**Account:** {active_account.name} ({active_account.login}@{active_account.server}) — **{type_label}**"
+            )
+            if platform.system() != "Windows":
+                st.info(
+                    "Linux preview mode: charts use mock data. Run this app on **Windows** "
+                    "with MT5 open for your real live BlackBull balance and orders."
+                )
 
     # Metrics row
     if account_info:

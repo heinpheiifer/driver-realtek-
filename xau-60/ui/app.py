@@ -423,8 +423,37 @@ def get_connection_status():
         return "disconnected", "Not Initialized"
 
 
+def _on_sidebar_account_change():
+    """Switch MT5 account when sidebar selection changes."""
+    try:
+        from core.account_manager import get_account_manager
+        manager = get_account_manager()
+        accounts = manager.list_accounts()
+        if not accounts:
+            return
+        selected = st.session_state.get("sidebar_account_select")
+        if not selected:
+            return
+        account_names = [f"{a.name} ({a.login})" for a in accounts]
+        if selected not in account_names:
+            return
+        idx = account_names.index(selected)
+        active = manager.get_active_account()
+        if not active or accounts[idx].id != active.id:
+            manager.switch_account(accounts[idx].id)
+    except Exception:
+        pass
+
+
 def main():
     """Main application entry point."""
+    # Connect active account on startup (prefers saved LIVE account).
+    try:
+        from core.account_manager import get_account_manager
+        get_account_manager().ensure_startup_connection()
+    except Exception:
+        pass
+
     # Get connection status
     conn_status, conn_text = get_connection_status()
 
@@ -489,15 +518,9 @@ def main():
                     account_names,
                     index=active_idx,
                     key="sidebar_account_select",
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
+                    on_change=_on_sidebar_account_change,
                 )
-
-                # Switch account if changed
-                selected_idx = account_names.index(selected)
-                if accounts[selected_idx].id != (active.id if active else None):
-                    if st.button("Switch", key="sidebar_switch_btn", use_container_width=True):
-                        manager.switch_account(accounts[selected_idx].id)
-                        st.rerun()
         except Exception:
             pass
 

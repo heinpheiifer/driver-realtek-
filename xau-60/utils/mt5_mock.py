@@ -349,6 +349,10 @@ def login(login: int, password: str = "", server: str = "", timeout: int = 60000
 
     _state.account.login = login
     _state.account.server = server if server else "MockBroker-Demo"
+    server_lower = (_state.account.server or "").lower()
+    is_live = "live" in server_lower or "demo" not in server_lower
+    _state.account.name = f"Live {login}" if is_live else f"Demo {login}"
+    _state.account.company = "Mock Broker (Linux preview)"
     _state.connected = True
     return True
 

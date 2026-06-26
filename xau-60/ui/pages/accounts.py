@@ -64,6 +64,21 @@ def render_accounts_list(manager: AccountManager):
         """, unsafe_allow_html=True)
         return
 
+    col_a, col_b, col_c = st.columns([2, 2, 1])
+    with col_c:
+        if st.button("Use Live Account", key="prefer_live_account", use_container_width=True):
+            live_accounts = [
+                a for a in accounts if a.account_type == AccountType.LIVE
+            ]
+            if live_accounts:
+                manager.switch_account(live_accounts[0].id)
+                st.success(f"Active: {live_accounts[0].name}")
+                st.rerun()
+            else:
+                st.warning("No LIVE account saved. Add one with Account Type = Live.")
+
+    st.markdown("---")
+
     # Account cards
     for account in accounts:
         is_active = active_account and account.id == active_account.id
@@ -201,6 +216,8 @@ def render_add_account(manager: AccountManager):
                 account_type=acc_type,
                 path=pending["path"] or None,
             )
+
+            manager.switch_account(account.id, connect=False)
 
             notice = f"Account added: {account.name}"
             connect_error = None
