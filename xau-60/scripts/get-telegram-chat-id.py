@@ -69,9 +69,21 @@ def main() -> int:
         token = merge_alert_settings(settings_yaml).get("telegram", {}).get("token", "")
 
     token = str(token or "").strip()
-    if not token or token == "your_telegram_bot_token" or ":" not in token:
+    _invalid = (
+        not token
+        or token == "your_telegram_bot_token"
+        or "paste" in token.lower()
+        or "your_token" in token.lower()
+        or ":" not in token
+        or len(token) < 20
+    )
+    if _invalid:
         print("No valid bot token found.")
-        print("Set TELEGRAM_BOT_TOKEN in .env or pass --token YOUR_TOKEN")
+        print()
+        print("You must paste your REAL token from @BotFather, for example:")
+        print('  .venv/bin/python scripts/get-telegram-chat-id.py --token "7123456789:AAHabc123..."')
+        print()
+        print("Get it: Telegram → @BotFather → /mybots → @Hein123bot → API Token")
         return 1
 
     print("Looking for messages sent to your bot...")
