@@ -266,33 +266,49 @@ class MT5Connector:
             )
             return {f: getattr(req, f) for f in fields if hasattr(req, f)}
 
+    def _normalize_volume(self, symbol: str, volume: float) -> float:
+        """Round volume to symbol min/step."""
+        info = self.get_symbol_info(symbol, use_cache=False)
+        if not info:
+            return volume
+        vol = max(volume, info.min_lot)
+        if info.lot_step > 0:
+            steps = round(vol / info.lot_step)
+            vol = max(info.min_lot, steps * info.lot_step)
+        return round(vol, 8)
+
     def _order_send_deal(self, request: dict, symbol: str):
         """Send a market deal, using order_check + filling-mode fallbacks (retcode 10030)."""
         last_result = None
         attempts: List[dict] = []
 
+        # Explicit ints — RPyC/mt5linux sometimes mishandles enum constants
         for filling in self._filling_modes_for_symbol(symbol):
-            attempts.append({**request, "type_filling": filling})
+            attempts.append({**request, "type_filling": int(filling)})
         attempts.append(dict(request))
 
+        done_code = int(getattr(mt5, "TRADE_RETCODE_DONE", 10009))
+
         for req in attempts:
-            send_req = req
+            send_req = dict(req)
             if hasattr(mt5, "order_check"):
                 try:
-                    check = mt5.order_check(req)
+                    check = mt5.order_check(send_req)
                     if check is not None:
                         check_code = int(getattr(check, "retcode", -1))
                         if check_code == 0:
                             checked = self._request_from_check(check)
                             if checked:
                                 send_req = checked
+                                if "type_filling" in send_req:
+                                    send_req["type_filling"] = int(send_req["type_filling"])
                         elif check_code == 10030:
                             last_result = check
                             logger.info(
-                                f"order_check 10030 for {symbol} filling={req.get('type_filling')}, trying next"
+                                f"order_check 10030 for {symbol} filling={send_req.get('type_filling')}, trying next"
                             )
                             continue
-                        elif check_code != getattr(mt5, "TRADE_RETCODE_DONE", 10009):
+                        elif check_code != done_code:
                             last_result = check
                             continue
                 except Exception as exc:
@@ -302,7 +318,7 @@ class MT5Connector:
             if result is None:
                 continue
             last_result = result
-            if int(getattr(result, "retcode", -1)) == int(getattr(mt5, "TRADE_RETCODE_DONE", 10009)):
+            if int(getattr(result, "retcode", -1)) == done_code:
                 return result
             if int(getattr(result, "retcode", 0)) != 10030:
                 return result
@@ -892,6 +908,10 @@ class MT5Connector:
         Returns:
             OrderResult with execution details
         """
+        volume = self._normalize_volume(symbol, volume)
+        if any(tag in symbol.upper() for tag in ("ETH", "BTC", "LTC", "XRP", "SOL")):
+            deviation = max(deviation, 100)
+
         for attempt in range(self._max_retries + 1):
             try:
                 tick = mt5.symbol_info_tick(symbol)

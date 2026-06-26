@@ -92,6 +92,11 @@ def main() -> int:
         return 1
 
     symbol = resolve_symbol(connector, args.symbol)
+    sinfo = connector.get_symbol_info(symbol)
+    if sinfo and args.lots < sinfo.min_lot:
+        print(f"Note: min lot for {symbol} is {sinfo.min_lot} — using {sinfo.min_lot}")
+        args.lots = sinfo.min_lot
+
     tick = connector.get_tick(symbol)
     if not tick:
         print(f"Cannot get price for {symbol}. Check symbol name in MT5 Market Watch.")
@@ -165,8 +170,10 @@ def main() -> int:
                 print("  Try a smaller symbol/lot or increase leverage / deposit.")
         elif code == 10030:
             print(
-                "Code 10030 = unsupported filling mode for this symbol. "
-                "Pull latest code (auto-retries RETURN/IOC/FOK) and retry."
+                "Code 10030 = unsupported filling mode for this symbol.\n"
+                "  1) Run: ./scripts/update-from-github.sh   (git pull failed earlier?)\n"
+                "  2) Run: .venv/bin/python scripts/debug-symbol.py ETHUSD\n"
+                "  3) In MT5: Tools → Options → Expert Advisors → Allow Algo Trading"
             )
         else:
             print("Check: Algo Trading ON in MT5, symbol in Market Watch, min lot size.")
