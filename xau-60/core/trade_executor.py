@@ -717,6 +717,16 @@ class TradeExecutor:
             except Exception:
                 pass
 
+    def manage_positions(self, strategies: Dict[str, Any]) -> None:
+        """
+        Manage open positions each tick: break-even, trailing stops, strategy exits.
+        """
+        self._check_breakeven()
+        self._check_trailing_stops()
+        self._update_excursions()
+        if strategies:
+            self.manage_positions_with_strategies(strategies)
+
     def manage_positions_with_strategies(self, strategies: Dict[str, Any]) -> None:
         """
         Manage positions based on strategy exit signals.
