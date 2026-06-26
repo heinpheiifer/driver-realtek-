@@ -26,6 +26,24 @@ from typing import Dict, Any, List, Optional
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 try:
+    from utils.symbols import chart_symbol_options, default_trading_symbol
+except ImportError:
+    def default_trading_symbol() -> str:
+        return "ETHUSD"
+
+    def chart_symbol_options(current: str | None = None) -> list[str]:
+        return ["ETHUSD", "BTCUSD", "XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "US500", "US30"]
+
+
+def _chart_symbols() -> list[str]:
+    return chart_symbol_options()
+
+
+def _default_symbol_index(symbols: list[str]) -> int:
+    preferred = default_trading_symbol()
+    return symbols.index(preferred) if preferred in symbols else 0
+
+try:
     from core.backtest_engine import BacktestEngine, BacktestResult
     from core.strategy_loader import StrategyLoader
 except ImportError:
@@ -228,7 +246,7 @@ def render_comparison_backtest():
     with col_sym:
         symbol = st.selectbox(
             "Symbol",
-            options=["XAUUSD", "EURUSD", "GBPUSD"],
+            options=_CHART_SYMBOLS,
             key="compare_symbol"
         )
 
