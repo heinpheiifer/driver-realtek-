@@ -25,6 +25,9 @@ HOST="${MT5_WINE_HOST:-0.0.0.0}"
 PORT="${MT5_WINE_PORT:-18812}"
 WINE_PYTHON="${MT5_WINE_PYTHON:-wine python}"
 
+# Expand $HOME in .env paths
+WINE_PYTHON="${WINE_PYTHON//\$HOME/$HOME}"
+
 echo "==> XAU-60 Wine MT5 bridge (mt5linux RPyC)"
 echo "    Host: $HOST  Port: $PORT"
 echo ""

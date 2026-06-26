@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
 """Check Wine MT5 / mt5linux RPyC connection (run from xau-60 folder)."""
+import os
+
+# Keep initialize probe fast if MT5 terminal is not open in Wine
+os.environ["MT5_WINE_TIMEOUT"] = "15"
+
 import sys
 from pathlib import Path
 
@@ -45,8 +50,9 @@ def main() -> int:
         if not initialize():
             code, msg = last_error()
             print(f"MT5 initialize() failed: [{code}] {msg}")
-            print("Ensure MT5 is open in Wine.")
-            return 1
+            print("Ensure MetaTrader 5 is open in Wine and logged into BlackBull.")
+            print("(RPyC bridge is OK — only the MT5 terminal connection failed.)")
+            return 2
         info = account_info()
         shutdown()
         if info:

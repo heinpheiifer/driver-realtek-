@@ -98,7 +98,14 @@ Enable/disable in the **Strategies** page in the dashboard.
 
 If **MetaTrader 5 runs in Wine on this machine** (recommended for single-laptop setups):
 
-### 1. Wine-side Python (one-time)
+```bash
+cd xau-60
+./scripts/setup-wine-mt5.sh    # one-time: installs deps + Wine Python + .env
+```
+
+Then every session:
+
+### 1. Wine-side Python (one-time, if setup did not install it)
 
 Install [Python for Windows](https://www.python.org/downloads/windows/) inside Wine, then:
 
