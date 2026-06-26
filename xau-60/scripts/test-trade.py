@@ -90,7 +90,9 @@ def main() -> int:
     info = connector.get_account_info()
     print(f"Account:  {active.login} @ {active.server} [{active.account_type.value.upper()}]")
     if info:
-        print(f"Balance:  {info.balance:,.2f} {info.currency}")
+        print(f"Balance:      {info.balance:,.2f} {info.currency}")
+        print(f"Free margin:  {info.free_margin:,.2f}")
+        print(f"Leverage:     1:{info.leverage}")
     print(f"Symbol:   {symbol}")
     print(f"Order:    {args.side.upper()} {args.lots} lot(s) @ ~{price}")
 
@@ -114,7 +116,15 @@ def main() -> int:
 
     if not result.success:
         print(f"\nOrder FAILED: {result.error_message}")
-        print("Check: Algo Trading ON in MT5, symbol in Market Watch, min lot size.")
+        if result.retcode == 10019:
+            print(
+                "Code 10019 = not enough FREE MARGIN (not minimum lot size). "
+                "Gold needs more margin than forex — check free margin vs leverage."
+            )
+            if info:
+                print(f"  Balance {info.balance:,.2f} {info.currency}, free margin {info.free_margin:,.2f}")
+        else:
+            print("Check: Algo Trading ON in MT5, symbol in Market Watch, min lot size.")
         return 1
 
     print(f"\nOrder OK — ticket {result.ticket} @ {result.price}")

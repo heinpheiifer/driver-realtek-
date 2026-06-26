@@ -48,10 +48,46 @@ def main():
 
     info = manager.get_account_info(active.id, refresh=True)
     if info:
-        print(f"\nBalance:  {info.balance:,.2f} {info.currency}")
-        print(f"Equity:   {info.equity:,.2f}")
-        print(f"Profit:   {info.profit:+,.2f}")
-        print(f"Server:   {info.server}")
+        print(f"\nBalance:      {info.balance:,.2f} {info.currency}")
+        print(f"Equity:       {info.equity:,.2f}")
+        print(f"Used margin:  {info.margin:,.2f}")
+        print(f"Free margin:  {info.free_margin:,.2f}")
+        print(f"Leverage:     1:{info.leverage}")
+        print(f"Profit:       {info.profit:+,.2f}")
+        print(f"Server:       {info.server}")
+        print(f"Trade allowed:{info.trade_allowed}")
+
+        connector = manager.get_connector(active.id)
+        if connector:
+            for sym in ("XAUUSD", "XAUUSD.r", "XAUUSDm", "GOLD"):
+                sinfo = connector.get_symbol_info(sym)
+                if sinfo:
+                    print(f"\nSymbol {sinfo.name}: min lot {sinfo.min_lot}, step {sinfo.lot_step}")
+                    tick = connector.get_tick(sinfo.name)
+                    if tick:
+                        try:
+                            from utils.mt5_backend import load_mt5_module
+                            mt5 = load_mt5_module()
+                            if hasattr(mt5, "order_calc_margin"):
+                                need = mt5.order_calc_margin(
+                                    mt5.ORDER_TYPE_BUY,
+                                    sinfo.name,
+                                    sinfo.min_lot,
+                                    tick.ask,
+                                )
+                                if need is not None and need >= 0:
+                                    print(
+                                        f"Margin for {sinfo.min_lot} lot BUY: ~{need:,.2f} "
+                                        f"(free margin: {info.free_margin:,.2f})"
+                                    )
+                                    if need > info.free_margin:
+                                        print(
+                                            "→ Not enough free margin for minimum gold lot. "
+                                            "Deposit more, raise leverage, or test EURUSD first."
+                                        )
+                        except Exception:
+                            pass
+                    break
         return 0
 
     print("\nCould not read balance.")
