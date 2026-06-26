@@ -22,6 +22,26 @@ def resolve_symbol(connector, preferred: str) -> str:
     return found or preferred.upper()
 
 
+def _is_gold_symbol(symbol: str) -> bool:
+    upper = symbol.upper()
+    return "XAU" in upper or upper == "GOLD"
+
+
+def _estimate_margin(connector, symbol: str, lots: float, price: float) -> float | None:
+    try:
+        from utils.mt5_backend import load_mt5_module
+
+        mt5 = load_mt5_module()
+        if not hasattr(mt5, "order_calc_margin"):
+            return None
+        need = mt5.order_calc_margin(mt5.ORDER_TYPE_BUY, symbol, lots, price)
+        if need is None or need < 0:
+            return None
+        return float(need)
+    except Exception:
+        return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Send one small test market order")
     default_sym = default_trading_symbol()
@@ -39,9 +59,15 @@ def main() -> int:
         action="store_true",
         help="Required for LIVE accounts — confirms you accept real money risk",
     )
+    parser.add_argument(
+        "--allow-gold",
+        action="store_true",
+        help="Allow XAUUSD/gold even when free margin is too low at low leverage",
+    )
     args = parser.parse_args()
 
-    print(f"Backend: {backend_label()} ({get_backend_mode()})\n")
+    print(f"Backend: {backend_label()} ({get_backend_mode()})")
+    print(f"Requested symbol: {args.symbol} (app default: {default_sym})\n")
 
     if get_backend_mode() == "wine":
         from utils.mt5_wine_client import wine_reachable
@@ -83,6 +109,23 @@ def main() -> int:
     print(f"Symbol:   {symbol}")
     print(f"Order:    {args.side.upper()} {args.lots} lot(s) @ ~{price}")
 
+    if info and _is_gold_symbol(symbol) and int(info.leverage) <= 10 and not args.allow_gold:
+        need = _estimate_margin(connector, symbol, args.lots, price)
+        if need is not None and need > info.free_margin:
+            print(
+                f"\nBLOCKED: {symbol} needs ~{need:,.2f} {info.currency} margin at 1:{info.leverage}, "
+                f"but free margin is only {info.free_margin:,.2f}."
+            )
+            print(
+                "\nGold is too expensive for your account at this leverage. Use ETH instead:\n"
+                "  .venv/bin/python scripts/test-trade.py --yes --close-after --symbol ETHUSD"
+            )
+            print(
+                "\nSet DEFAULT_TRADING_SYMBOL=ETHUSD in .env (not XAUUSD). "
+                "Use --allow-gold only if you deposit more or raise leverage."
+            )
+            return 1
+
     if args.dry_run:
         print("\nDRY RUN — no order sent.")
         return 0
@@ -108,11 +151,18 @@ def main() -> int:
             code = 10030
         if code == 10019:
             print(
-                "Code 10019 = not enough FREE MARGIN (not minimum lot size). "
-                "Gold needs more margin than forex — check free margin vs leverage."
+                "Code 10019 = not enough FREE MARGIN (not minimum lot size)."
             )
             if info:
                 print(f"  Balance {info.balance:,.2f} {info.currency}, free margin {info.free_margin:,.2f}")
+            if _is_gold_symbol(symbol):
+                print(
+                    "\nYou tried GOLD (XAUUSD). At 1:5 leverage ~800+ NZD margin is needed for 0.01 lot."
+                    "\nUse ETH instead:\n"
+                    "  .venv/bin/python scripts/test-trade.py --yes --close-after --symbol ETHUSD"
+                )
+            else:
+                print("  Try a smaller symbol/lot or increase leverage / deposit.")
         elif code == 10030:
             print(
                 "Code 10030 = unsupported filling mode for this symbol. "

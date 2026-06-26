@@ -43,4 +43,8 @@ def resolve_broker_symbol(connector: "MT5Connector", preferred: str) -> Optional
 def default_trading_symbol() -> str:
     from utils.config import get_env
 
-    return get_env("DEFAULT_TRADING_SYMBOL", "ETHUSD") or "ETHUSD"
+    sym = (get_env("DEFAULT_TRADING_SYMBOL", "ETHUSD") or "ETHUSD").upper().strip()
+    # ETHUSD fits low-leverage accounts; avoid accidental gold default from old .env
+    if sym in ("XAUUSD", "GOLD", "XAUUSD.R"):
+        return "ETHUSD"
+    return sym
