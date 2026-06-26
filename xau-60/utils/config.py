@@ -131,6 +131,14 @@ class UIConfig:
     """UI configuration."""
     refresh_rate: int = field(default_factory=lambda: get_env("UI_REFRESH_RATE", 5, int))
     theme: str = field(default_factory=lambda: get_env("UI_THEME", "light"))
+    timezone: str = field(default_factory=lambda: get_env("APP_TIMEZONE", "Pacific/Auckland"))
+
+
+@dataclass
+class TimezoneConfig:
+    """Timezone settings — trading sessions stay UTC; display uses local TZ."""
+    display: str = field(default_factory=lambda: get_env("APP_TIMEZONE", "Pacific/Auckland"))
+    trading: str = "UTC"
 
 
 @dataclass
@@ -145,6 +153,7 @@ class Config:
     trading: TradingConfig = field(default_factory=TradingConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     ui: UIConfig = field(default_factory=UIConfig)
+    timezone: TimezoneConfig = field(default_factory=TimezoneConfig)
 
     def to_dict(self) -> dict:
         """Convert config to dictionary."""
@@ -202,6 +211,11 @@ class Config:
             "ui": {
                 "refresh_rate": self.ui.refresh_rate,
                 "theme": self.ui.theme,
+                "timezone": self.ui.timezone,
+            },
+            "timezone": {
+                "display": self.timezone.display,
+                "trading": self.timezone.trading,
             },
         }
 

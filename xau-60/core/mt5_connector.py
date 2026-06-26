@@ -21,12 +21,17 @@ from utils.config import get_env
 # Native MT5 on Windows, remote bridge on Linux when MT5_BRIDGE_URL is set, else mock
 mt5 = load_mt5_module()
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any, Tuple, Union
 from dataclasses import dataclass, field
 from loguru import logger
 
 from .strategy_base import Signal, Position
+
+
+def _epoch_to_utc(ts: float) -> datetime:
+    """Convert MT5 Unix timestamp to UTC datetime."""
+    return datetime.fromtimestamp(ts, tz=timezone.utc)
 
 
 class OrderType(Enum):
@@ -658,7 +663,7 @@ class MT5Connector:
                 "ask": tick.ask,
                 "last": tick.last,
                 "volume": tick.volume,
-                "time": datetime.fromtimestamp(tick.time),
+                "time": _epoch_to_utc(tick.time),
                 "spread": spread_points,
             }
         except Exception as e:
@@ -704,7 +709,7 @@ class MT5Connector:
                 return None
 
             df = pd.DataFrame(rates)
-            df["time"] = pd.to_datetime(df["time"], unit="s")
+            df["time"] = pd.to_datetime(df["time"], unit="s", utc=True)
             df = df.rename(columns={
                 "tick_volume": "volume",
                 "real_volume": "real_volume",
@@ -748,7 +753,7 @@ class MT5Connector:
                 return None
 
             df = pd.DataFrame(rates)
-            df["time"] = pd.to_datetime(df["time"], unit="s")
+            df["time"] = pd.to_datetime(df["time"], unit="s", utc=True)
             df = df.rename(columns={"tick_volume": "volume"})
 
             return df[["time", "open", "high", "low", "close", "volume"]]
@@ -1516,7 +1521,7 @@ class MT5Connector:
                     profit=pos.profit,
                     magic_number=pos.magic,
                     comment=pos.comment,
-                    open_time=datetime.fromtimestamp(pos.time),
+                    open_time=_epoch_to_utc(pos.time),
                 ))
 
             return result
@@ -1562,8 +1567,8 @@ class MT5Connector:
                     "price": order.price_open,
                     "sl": order.sl,
                     "tp": order.tp,
-                    "time": datetime.fromtimestamp(order.time_setup),
-                    "expiration": datetime.fromtimestamp(order.time_expiration)
+                    "time": _epoch_to_utc(order.time_setup),
+                    "expiration": _epoch_to_utc(order.time_expiration)
                         if order.time_expiration else None,
                     "magic": order.magic,
                     "comment": order.comment,
@@ -1638,7 +1643,7 @@ class MT5Connector:
                 result.append({
                     "ticket": deal.ticket,
                     "order": deal.order,
-                    "time": datetime.fromtimestamp(deal.time),
+                    "time": _epoch_to_utc(deal.time),
                     "symbol": deal.symbol,
                     "type": "BUY" if deal.type == mt5.DEAL_TYPE_BUY else "SELL",
                     "volume": deal.volume,

@@ -15,12 +15,16 @@ risk:
   lot_size: 0.1
   max_risk_percent: 2.0
 session:
+  # All hours below are UTC (forex standard). NZ times auto-adjust for DST.
+  # Asian 00-06 UTC ≈ 12:00-18:00 NZDT / 13:00-19:00 NZDT (summer)
   asian:
     end_hour: 6
     start_hour: 0
+  # London 07-09 UTC ≈ 20:00-22:00 NZ (evening)
   london_killzone:
     end_hour: 9
     start_hour: 7
+  # NY 13-15 UTC ≈ 02:00-04:00 NZ next morning
   ny_killzone:
     end_hour: 15
     start_hour: 13

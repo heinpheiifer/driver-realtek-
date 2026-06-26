@@ -404,17 +404,17 @@ class CRTStrategy(StrategyBase):
         return None
 
     def _get_utc_time(self, timestamp) -> datetime:
-        """Convert timestamp to UTC datetime."""
+        """Convert bar timestamp to UTC datetime."""
         if isinstance(timestamp, pd.Timestamp):
             dt = timestamp.to_pydatetime()
         elif isinstance(timestamp, datetime):
             dt = timestamp
         else:
-            dt = datetime.now()
+            dt = datetime.now(self.utc)
 
-        if dt.tzinfo is None:
-            dt = self.utc.localize(dt)
-        return dt
+        if dt.tzinfo is not None:
+            return dt.astimezone(self.utc)
+        return self.utc.localize(dt)
 
     def _reset_daily_tracking(self, current_time: datetime) -> None:
         """Reset daily trade tracking if new day."""

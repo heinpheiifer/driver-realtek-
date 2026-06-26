@@ -83,6 +83,7 @@ def render_dashboard():
     """, unsafe_allow_html=True)
 
     # Account Summary Bar
+    render_trading_clock()
     render_account_summary()
 
     st.markdown("---")
@@ -116,6 +117,45 @@ def render_dashboard():
     if st.session_state.get("auto_refresh", False):
         time.sleep(st.session_state.get("refresh_interval", 5))
         st.rerun()
+
+
+def render_trading_clock():
+    """Show NZ local time, UTC, market session, and CRT killzone status."""
+    from utils.timezone_utils import trading_clock_summary, utc_hour_range_label
+
+    clock = trading_clock_summary()
+    kz = clock["crt_killzone"]
+    kz_label = "🟢 ACTIVE" if clock["crt_killzone_active"] else "○ inactive"
+
+    st.markdown(
+        f"""
+<div style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); padding: 1rem 1.25rem;
+border-radius: 8px; color: #f8fafc; margin-bottom: 1rem;">
+  <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center;">
+    <div>
+      <div style="font-size: 0.75rem; opacity: 0.8;">Your time ({clock['local_tz']})</div>
+      <div style="font-size: 1.5rem; font-weight: 700;">{clock['local_time']}</div>
+      <div style="font-size: 0.8rem; opacity: 0.85;">{clock['local_date']}</div>
+    </div>
+    <div>
+      <div style="font-size: 0.75rem; opacity: 0.8;">Market time</div>
+      <div style="font-size: 1.1rem; font-weight: 600;">{clock['utc_time']}</div>
+      <div style="font-size: 0.85rem;">Session: <b>{clock['session']}</b></div>
+    </div>
+    <div>
+      <div style="font-size: 0.75rem; opacity: 0.8;">CRT TBS killzone</div>
+      <div style="font-size: 0.95rem;">{kz_label}</div>
+      <div style="font-size: 0.75rem; opacity: 0.85;">{kz or 'Outside London/NY windows'}</div>
+    </div>
+  </div>
+  <div style="font-size: 0.72rem; opacity: 0.75; margin-top: 0.75rem;">
+    Strategies use <b>UTC</b> for sessions (forex standard).
+    London KZ: {utc_hour_range_label(7, 9)} · NY KZ: {utc_hour_range_label(13, 15)}
+  </div>
+</div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_account_summary():

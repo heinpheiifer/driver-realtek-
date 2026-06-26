@@ -127,6 +127,13 @@ class TradingBot:
 
         logger.info("Initializing Trading Bot...")
 
+        from utils.timezone_utils import display_timezone_name, format_dual_time, trading_clock_summary
+        clock = trading_clock_summary()
+        logger.info(
+            f"Timezone: trading=UTC, display={display_timezone_name()} | "
+            f"Now: {format_dual_time()} | Session: {clock['session']}"
+        )
+
         # MT5: use saved UI account when .env login is not set (Wine / multi-account)
         mt5_config = self.config.get("mt5", {})
         login = mt5_config.get("login") or 0

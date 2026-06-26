@@ -56,5 +56,13 @@ logging:
 # UI Settings
 # -----------
 ui:
-  refresh_rate: 5  # Dashboard refresh rate in seconds
-  theme: light  # light or dark
+  refresh_rate: 5
+  theme: light
+
+# Timezone
+# --------
+# display: your local clock (dashboard) — default New Zealand
+# trading: always UTC (forex session standard — do not change)
+timezone:
+  display: Pacific/Auckland
+  trading: UTC

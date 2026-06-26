@@ -33,6 +33,12 @@ def render_settings():
     # Merge .env alert credentials into display (UI yaml may be stale)
     settings["alerts"] = merge_alert_settings(settings)
 
+    from utils.timezone_utils import display_timezone_name
+    settings.setdefault("timezone", {})
+    if not settings["timezone"].get("display"):
+        settings["timezone"]["display"] = display_timezone_name()
+    settings["timezone"].setdefault("trading", "UTC")
+
     # Settings tabs
     tab1, tab2, tab3, tab4 = st.tabs(["MT5 Connection", "Risk Management", "Alerts", "General"])
 
@@ -313,6 +319,37 @@ def render_alert_settings(settings: dict):
 
 def render_general_settings(settings: dict):
     """Render general settings."""
+    st.markdown("### Timezone")
+    st.caption(
+        "Trading sessions (London, New York, Asian) always use **UTC** — that is correct for forex. "
+        "Your local timezone is for the dashboard clock only."
+    )
+
+    settings.setdefault("timezone", {})
+    tz_cfg = settings.get("timezone", {})
+    from utils.timezone_utils import DEFAULT_DISPLAY_TZ, display_timezone_name
+
+    tz_options = [
+        "Pacific/Auckland",
+        "Australia/Sydney",
+        "Asia/Singapore",
+        "Europe/London",
+        "America/New_York",
+        "UTC",
+    ]
+    current_tz = tz_cfg.get("display") or display_timezone_name() or DEFAULT_DISPLAY_TZ
+    if current_tz not in tz_options:
+        tz_options = [current_tz] + tz_options
+
+    settings["timezone"]["display"] = st.selectbox(
+        "Display timezone (dashboard clock)",
+        options=tz_options,
+        index=tz_options.index(current_tz) if current_tz in tz_options else 0,
+        key="settings_display_timezone",
+    )
+    settings["timezone"]["trading"] = "UTC"
+
+    st.markdown("---")
     st.markdown("### Trading Settings")
 
     trading = settings.get("trading", {})
@@ -454,5 +491,10 @@ def save_settings(settings_path: Path, settings: dict):
 
         if settings.get("alerts"):
             save_alert_env(settings["alerts"])
+
+        tz_display = settings.get("timezone", {}).get("display")
+        if tz_display:
+            from utils.env_file import update_env_file
+            update_env_file("APP_TIMEZONE", str(tz_display), reload=True)
     except Exception as e:
         st.error(f"Failed to save settings: {e}")
