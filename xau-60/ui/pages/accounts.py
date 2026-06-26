@@ -152,7 +152,7 @@ def render_accounts_list(manager: AccountManager):
                 # Set Active / Remove
                 if not is_active:
                     if st.button("Set Active", key=f"activate_{account.id}", use_container_width=True):
-                        manager.switch_account(account.id, connect=False)
+                        manager.switch_account(account.id)
                         st.rerun()
 
                 if st.button("🗑️ Remove", key=f"remove_{account.id}", use_container_width=True):

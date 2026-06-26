@@ -112,18 +112,23 @@ def render_dashboard():
 
 def render_account_summary():
     """Render the account summary bar."""
+    import platform
+
     manager = get_account_manager()
-    connector = manager.get_connector()
+    active_account = manager.get_active_account()
 
-    # Get account info
+    if active_account and manager.get_connection_status(active_account.id) != ConnectionStatus.CONNECTED:
+        manager.connect(active_account.id)
+
+    connection_status = (
+        manager.get_connection_status(active_account.id)
+        if active_account
+        else ConnectionStatus.DISCONNECTED
+    )
+
     account_info = None
-    connection_status = manager.get_connection_status()
-
-    if connector and connector.is_connected():
-        try:
-            account_info = connector.get_account_info()
-        except Exception:
-            pass
+    if active_account:
+        account_info = manager.get_account_info(active_account.id, refresh=True)
 
     # Connection status indicator
     status_col, account_col = st.columns([1, 5])
@@ -139,19 +144,32 @@ def render_account_summary():
             st.markdown("**Status:** <span style='color: #ef4444;'>● Disconnected</span>", unsafe_allow_html=True)
 
     with account_col:
-        active_account = manager.get_active_account()
         if active_account:
             from core.account_manager import AccountType
-            import platform
             type_label = "LIVE" if active_account.account_type == AccountType.LIVE else "DEMO"
             st.markdown(
                 f"**Account:** {active_account.name} ({active_account.login}@{active_account.server}) — **{type_label}**"
             )
             if platform.system() != "Windows":
-                st.info(
-                    "Linux preview mode: charts use mock data. Run this app on **Windows** "
-                    "with MT5 open for your real live BlackBull balance and orders."
+                st.warning(
+                    "**Linux cannot read your real BlackBull balance.** "
+                    "This app needs **Windows + MetaTrader 5 running** to show your live balance and place trades. "
+                    "On Linux you only get a UI preview (simulated or empty data)."
                 )
+            elif connection_status != ConnectionStatus.CONNECTED:
+                st.error(
+                    "Not connected to MT5. Open MetaTrader 5, log into this account, then click **Refresh Balance** below."
+                )
+        else:
+            st.warning("No active account. Go to **Accounts** → **Set Active** on your BlackBull live account.")
+
+    refresh_col, _ = st.columns([1, 4])
+    with refresh_col:
+        if st.button("🔄 Refresh Balance", key="dashboard_refresh_balance", use_container_width=True):
+            if active_account:
+                manager.connect(active_account.id)
+                manager.get_account_info(active_account.id, refresh=True)
+            st.rerun()
 
     # Metrics row
     if account_info:
@@ -199,6 +217,7 @@ def render_account_summary():
 
         # Daily P&L calculation - get from today's history
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        connector = manager.get_connector(active_account.id if active_account else None)
         if connector:
             try:
                 history = connector.get_history(start_date=today)
@@ -215,20 +234,25 @@ def render_account_summary():
             except Exception:
                 pass
     else:
-        # Mock data for disconnected state
         col1, col2, col3, col4, col5, col6 = st.columns(6)
         with col1:
-            st.metric("Balance", "-- --")
+            st.metric("Balance", "—")
         with col2:
-            st.metric("Equity", "-- --")
+            st.metric("Equity", "—")
         with col3:
-            st.metric("Margin", "-- --")
+            st.metric("Margin", "—")
         with col4:
-            st.metric("Free Margin", "-- --")
+            st.metric("Free Margin", "—")
         with col5:
-            st.metric("Open P&L", "-- --")
+            st.metric("Open P&L", "—")
         with col6:
-            st.metric("Margin Level", "-- --")
+            st.metric("Margin Level", "—")
+
+        if active_account and connection_status == ConnectionStatus.CONNECTED:
+            st.caption(
+                "Connected but balance not loaded — on Windows ensure MT5 is open; "
+                "on Linux real balances are not available."
+            )
 
 
 def render_chart_panel():
