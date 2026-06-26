@@ -14,7 +14,8 @@ import threading
 import time
 from enum import Enum
 
-from utils.mt5_backend import load_mt5_module
+from utils.mt5_backend import get_backend_mode, load_mt5_module
+from utils.mt5_paths import resolve_mt5_terminal_path
 
 # Native MT5 on Windows, remote bridge on Linux when MT5_BRIDGE_URL is set, else mock
 mt5 = load_mt5_module()
@@ -178,6 +179,16 @@ class MT5Connector:
         self._execution_log: List[ExecutionLog] = []
         self._lock = threading.RLock()
         self._symbols_cache: Dict[str, SymbolInfo] = {}
+        self._last_connection_error: str = ""
+
+    def get_last_connection_error(self) -> str:
+        """Human-readable reason the last connect() attempt failed."""
+        return self._last_connection_error
+
+    def _set_connection_error(self, message: str) -> None:
+        self._last_connection_error = message
+        if message:
+            logger.error(message)
 
     def connect(
         self,
@@ -201,32 +212,67 @@ class MT5Connector:
             True if connected successfully
         """
         with self._lock:
+            self._last_connection_error = ""
             try:
-                # Initialize MT5
-                init_params = {"timeout": timeout}
-                if path:
-                    init_params["path"] = path
+                mode = get_backend_mode()
 
-                if not mt5.initialize(**init_params):
-                    error = mt5.last_error()
-                    logger.error(f"MT5 initialization failed: {error}")
+                if mode == "wine":
+                    from utils.mt5_wine_client import wine_reachable
+                    if not wine_reachable():
+                        self._set_connection_error(
+                            "Wine MT5 bridge is not running. "
+                            "Open MT5 in Wine, then run: ./scripts/start-wine-mt5linux.sh"
+                        )
+                        return False
+
+                terminal_path = resolve_mt5_terminal_path(path)
+                init_params: Dict[str, Any] = {"timeout": timeout}
+                if terminal_path:
+                    init_params["path"] = terminal_path
+                elif mode == "wine":
+                    self._set_connection_error(
+                        "Could not find MT5 terminal in Wine. "
+                        "Set MT5_WINE_PATH in .env to your terminal64.exe path, "
+                        "or install MT5 under ~/.wine/drive_c/Program Files/"
+                    )
                     return False
 
-                # Login if credentials provided
+                if not mt5.initialize(**init_params):
+                    code, msg = mt5.last_error()
+                    self._set_connection_error(
+                        f"MT5 initialize failed [{code}]: {msg}. "
+                        "Is MetaTrader 5 open in Wine?"
+                    )
+                    return False
+
                 if login and password and server:
                     if not mt5.login(login, password=password, server=server):
-                        error = mt5.last_error()
-                        logger.error(f"MT5 login failed: {error}")
-                        mt5.shutdown()
-                        return False
+                        code, msg = mt5.last_error()
+                        # MT5 may already be logged in via the Wine GUI
+                        info = mt5.account_info()
+                        if info and int(getattr(info, "login", 0)) == int(login):
+                            logger.info(
+                                f"Using account already logged in via MT5 terminal: {login}"
+                            )
+                        else:
+                            self._set_connection_error(
+                                f"MT5 login failed [{code}]: {msg}. "
+                                f"Check password and that server name matches MT5 exactly "
+                                f"(saved: {server})."
+                            )
+                            mt5.shutdown()
+                            return False
 
                 self._connected = True
                 self._update_account_info()
-                logger.info(f"Connected to MT5: {self._account_info.server if self._account_info else 'Unknown'}")
+                logger.info(
+                    f"Connected to MT5: "
+                    f"{self._account_info.server if self._account_info else 'Unknown'}"
+                )
                 return True
 
             except Exception as e:
-                logger.error(f"Connection error: {e}")
+                self._set_connection_error(f"Connection error: {e}")
                 return False
 
     def disconnect(self) -> None:

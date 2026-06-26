@@ -264,6 +264,7 @@ class AccountManager:
         # Connection state
         self._connectors: Dict[str, Any] = {}  # MT5Connector instances per account
         self._connection_status: Dict[str, ConnectionStatus] = {}
+        self._connection_errors: Dict[str, str] = {}
         self._account_info_cache: Dict[str, AccountInfo] = {}
         self._last_ping: Dict[str, datetime] = {}
 
@@ -616,6 +617,7 @@ class AccountManager:
             if success:
                 with self._lock:
                     self._connection_status[account_id] = ConnectionStatus.CONNECTED
+                    self._connection_errors[account_id] = ""
                     self._last_ping[account_id] = datetime.now()
                     account.last_connected = datetime.now().isoformat()
                     self._save_accounts()
@@ -628,22 +630,36 @@ class AccountManager:
                 logger.info(f"Connected to account: {account.name} ({account.login})")
                 return True
             else:
+                err = connector.get_last_connection_error() or "Connection failed"
                 with self._lock:
                     self._connection_status[account_id] = ConnectionStatus.ERROR
+                    self._connection_errors[account_id] = err
 
                 self._notify_status_change(account_id, ConnectionStatus.ERROR)
 
-                logger.error(f"Failed to connect to account: {account.name}")
+                logger.error(f"Failed to connect to account: {account.name} — {err}")
                 return False
 
         except Exception as e:
+            err = str(e)
             with self._lock:
                 self._connection_status[account_id] = ConnectionStatus.ERROR
+                self._connection_errors[account_id] = err
 
             self._notify_status_change(account_id, ConnectionStatus.ERROR)
 
             logger.error(f"Connection error for {account_id}: {e}")
             return False
+
+    def get_connection_error(self, account_id: Optional[str] = None) -> str:
+        """Return the last connection error message for an account."""
+        account_id = account_id or self._active_account_id
+        if not account_id:
+            return ""
+        connector = self._connectors.get(account_id)
+        if connector and connector.get_last_connection_error():
+            return connector.get_last_connection_error()
+        return self._connection_errors.get(account_id, "")
 
     def disconnect(self, account_id: Optional[str] = None) -> bool:
         """

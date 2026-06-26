@@ -49,6 +49,17 @@ def render_accounts():
         render_connection_monitor(manager)
 
 
+def _connection_failure_message(manager: AccountManager, account_id: str) -> str:
+    """Build a helpful connection error for the UI."""
+    err = manager.get_connection_error(account_id)
+    if err:
+        return err
+    return (
+        "Connection failed. Open MT5 in Wine, run ./scripts/start-wine-mt5linux.sh, "
+        "then click Connect again."
+    )
+
+
 def render_accounts_list(manager: AccountManager):
     """Render the list of saved accounts."""
     accounts = manager.list_accounts()
@@ -146,7 +157,7 @@ def render_accounts_list(manager: AccountManager):
                                 st.success("Connected!")
                                 st.rerun()
                             else:
-                                st.error("Connection failed")
+                                st.error(_connection_failure_message(manager, account.id))
 
             with col4:
                 # Set Active / Remove
@@ -164,6 +175,10 @@ def render_accounts_list(manager: AccountManager):
                     else:
                         st.session_state[f"confirm_remove_{account.id}"] = True
                         st.warning("Click again to confirm removal")
+
+            last_err = manager.get_connection_error(account.id)
+            if status != ConnectionStatus.CONNECTED and last_err:
+                st.error(last_err)
 
             # Show account info if connected
             if status == ConnectionStatus.CONNECTED:
@@ -226,9 +241,7 @@ def render_add_account(manager: AccountManager):
                 if manager.connect(account.id):
                     notice += " — Connected!"
                 else:
-                    connect_error = (
-                        "Connection failed. Check your credentials and ensure MT5 is running."
-                    )
+                    connect_error = _connection_failure_message(manager, account.id)
 
             st.session_state["account_add_notice"] = {
                 "message": notice,
@@ -252,7 +265,7 @@ def render_add_account(manager: AccountManager):
                     st.success("Connected successfully!")
                     st.rerun()
                 else:
-                    st.error("Connection failed. Check your credentials.")
+                    st.error(_connection_failure_message(manager, notice["account_id"]))
 
     with st.form("add_account_form"):
         col1, col2 = st.columns(2)
@@ -387,7 +400,8 @@ def render_connection_monitor(manager: AccountManager):
             "Active": "✓" if is_active else "",
             "Balance": balance,
             "Equity": equity,
-            "Last Ping": ping_str
+            "Last Ping": ping_str,
+            "Last Error": manager.get_connection_error(account_id) or "",
         })
 
     import pandas as pd
