@@ -480,20 +480,17 @@ class CRTStrategy(StrategyBase):
         """Calculate Asian session High/Low/Mid from data."""
         try:
             asian_date = current_time.date()
-            asian_start = datetime.combine(asian_date, self.asian_start)
-            asian_end = datetime.combine(asian_date, self.asian_end)
+            asian_start = pd.Timestamp(
+                datetime.combine(asian_date, self.asian_start), tz="UTC"
+            )
+            asian_end = pd.Timestamp(
+                datetime.combine(asian_date, self.asian_end), tz="UTC"
+            )
 
-            if current_time.tzinfo:
-                asian_start = self.utc.localize(asian_start)
-                asian_end = self.utc.localize(asian_end)
+            time_dt = pd.to_datetime(data["time"], utc=True)
 
-            data = data.copy()
-            data["time_dt"] = pd.to_datetime(data["time"])
-
-            asian_data = data[
-                (data["time_dt"] >= asian_start) &
-                (data["time_dt"] < asian_end)
-            ]
+            mask = (time_dt >= asian_start) & (time_dt < asian_end)
+            asian_data = data.loc[mask]
 
             if len(asian_data) < 1:
                 # Fall back to recent data
