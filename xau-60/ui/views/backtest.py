@@ -80,7 +80,10 @@ def render_single_backtest():
 
             symbol = st.selectbox(
                 "Symbol",
-                options=["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "BTCUSD", "US500"],
+                options=_CHART_SYMBOLS,
+                index=_CHART_SYMBOLS.index(default_trading_symbol())
+                if default_trading_symbol() in _CHART_SYMBOLS
+                else 0,
                 key="single_symbol_select"
             )
 

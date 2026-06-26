@@ -48,3 +48,26 @@ def default_trading_symbol() -> str:
     if sym in ("XAUUSD", "GOLD", "XAUUSD.R"):
         return "ETHUSD"
     return sym
+
+
+def chart_symbol_options(current: str | None = None) -> list[str]:
+    """Symbols shown in dashboard / backtest chart pickers."""
+    preferred = default_trading_symbol()
+    base = [
+        "ETHUSD",
+        "BTCUSD",
+        "XAUUSD",
+        "EURUSD",
+        "GBPUSD",
+        "USDJPY",
+        "AUDUSD",
+        "US500",
+        "US30",
+    ]
+    if preferred not in base:
+        ordered = [preferred] + base
+    else:
+        ordered = [preferred] + [s for s in base if s != preferred]
+    if current and current.upper() not in {s.upper() for s in ordered}:
+        ordered = [current.upper()] + ordered
+    return ordered

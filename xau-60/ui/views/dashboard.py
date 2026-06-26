@@ -29,16 +29,19 @@ try:
     )
     from core.mt5_connector import MT5Connector, Signal, OrderResult
     from core.strategy_base import Position
-    from utils.symbols import default_trading_symbol
+    from utils.symbols import default_trading_symbol, chart_symbol_options
     _DEFAULT_SYMBOL = default_trading_symbol()
 except ImportError as e:
     st.error(f"Import error: {e}")
     _DEFAULT_SYMBOL = "ETHUSD"
 
+    def chart_symbol_options(current=None):
+        return ["ETHUSD", "BTCUSD", "XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "US500", "US30"]
+
 # Session state keys
 STATE_KEYS = {
     "selected_symbol": _DEFAULT_SYMBOL,
-    "selected_timeframe": "M15",
+    "selected_timeframe": "M5",
     "chart_bars": 200,
     "auto_refresh": False,
     "refresh_interval": 5,
@@ -53,6 +56,9 @@ def init_session_state():
     for key, default in STATE_KEYS.items():
         if key not in st.session_state:
             st.session_state[key] = default
+    # Migrate old sessions that predate ETHUSD in the chart list
+    if st.session_state.get("selected_symbol", "XAUUSD") == "XAUUSD" and _DEFAULT_SYMBOL == "ETHUSD":
+        st.session_state["selected_symbol"] = _DEFAULT_SYMBOL
 
 
 def get_connector() -> Optional[MT5Connector]:
@@ -310,10 +316,11 @@ def render_chart_panel():
     col_symbol, col_tf, col_bars, col_refresh = st.columns([2, 1, 1, 2])
 
     with col_symbol:
-        symbols = ["ETHUSD", "BTCUSD", "XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "US500", "US30"]
+        symbols = chart_symbol_options(st.session_state.get("selected_symbol"))
         current = st.session_state.get("selected_symbol", _DEFAULT_SYMBOL)
         if current not in symbols:
-            symbols = [current] + symbols
+            current = _DEFAULT_SYMBOL
+            st.session_state["selected_symbol"] = current
         st.session_state["selected_symbol"] = st.selectbox(
             "Symbol",
             symbols,
@@ -361,7 +368,11 @@ def render_chart_panel():
     df = None
     if connector and connector.is_connected():
         try:
-            df = connector.get_ohlcv(symbol, timeframe, count=bars)
+            from utils.symbols import resolve_broker_symbol
+            chart_symbol = resolve_broker_symbol(connector, symbol) or symbol
+            if chart_symbol != symbol:
+                st.caption(f"MT5 symbol: **{chart_symbol}**")
+            df = connector.get_ohlcv(chart_symbol, timeframe, count=bars)
         except Exception as e:
             st.warning(f"Failed to get chart data: {e}")
 
