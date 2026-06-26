@@ -202,8 +202,10 @@ def render_alert_settings(settings: dict):
     # Telegram settings
     st.markdown("#### Telegram")
     st.caption(
-        "Create a bot with @BotFather, copy the token, message your bot, "
-        "then get your Chat ID from @userinfobot. **Save All Settings** after editing."
+        "Create a bot with @BotFather, copy the **token**, message your bot with `/start`, "
+        "then run `./scripts/get-telegram-chat-id.py` to find your numeric Chat ID "
+        "(or use @userinfobot — copy the **Id** number, not a bot name). "
+        "**Save All Settings** after editing."
     )
 
     telegram = alerts.get("telegram", {})
@@ -227,7 +229,7 @@ def render_alert_settings(settings: dict):
             settings["alerts"]["telegram"]["chat_id"] = st.text_input(
                 "Chat ID",
                 value=telegram.get("chat_id", ""),
-                help="Your Telegram chat ID",
+                help="Numeric only, e.g. 123456789 — run scripts/get-telegram-chat-id.py",
                 key="settings_telegram_chat_id"
             )
 
