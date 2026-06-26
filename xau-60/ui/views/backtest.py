@@ -529,7 +529,7 @@ def display_backtest_results(results: Dict[str, Any]):
     dates = pd.date_range(
         start=results["start_date"],
         periods=len(results["equity_curve"]),
-        freq='H'
+        freq="h"
     )
 
     # Equity line
@@ -788,12 +788,12 @@ def display_comparison_results(data: Dict[str, Any]):
     dates_a = pd.date_range(
         start=results_a["start_date"],
         periods=len(results_a["equity_curve"]),
-        freq='H'
+        freq="h"
     )
     dates_b = pd.date_range(
         start=results_b["start_date"],
         periods=len(results_b["equity_curve"]),
-        freq='H'
+        freq="h"
     )
 
     fig.add_trace(go.Scatter(
