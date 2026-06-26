@@ -47,6 +47,7 @@ class TradingBot:
         self.running = False
 
         self.mt5: Optional[MT5Connector] = None
+        self._owns_mt5_connector = False
         self.strategy_loader: Optional[StrategyLoader] = None
         self.risk_manager: Optional[RiskManager] = None
         self.trade_executor: Optional[TradeExecutor] = None
@@ -118,19 +119,35 @@ class TradingBot:
 
         logger.info("Initializing Trading Bot...")
 
-        # Initialize MT5
-        self.mt5 = MT5Connector()
+        # MT5: use saved UI account when .env login is not set (Wine / multi-account)
         mt5_config = self.config.get("mt5", {})
+        login = mt5_config.get("login") or 0
 
-        if not self.mt5.connect(
-            login=mt5_config.get("login"),
-            password=mt5_config.get("password"),
-            server=mt5_config.get("server"),
-            path=mt5_config.get("path") or None,
-            timeout=mt5_config.get("timeout", 60000)
-        ):
-            logger.error("Failed to connect to MT5")
-            return False
+        from core.account_manager import get_account_manager
+
+        manager = get_account_manager()
+        active = manager.get_active_account()
+
+        if active and int(login) == 0:
+            logger.info(f"Using active account from UI: {active.login}@{active.server}")
+            if not manager.connect(active.id, force=True):
+                err = manager.get_connection_error(active.id)
+                logger.error(f"Failed to connect active account: {err}")
+                return False
+            self.mt5 = manager.get_connector(active.id)
+            self._owns_mt5_connector = False
+        else:
+            self.mt5 = MT5Connector()
+            self._owns_mt5_connector = True
+            if not self.mt5.connect(
+                login=mt5_config.get("login"),
+                password=mt5_config.get("password"),
+                server=mt5_config.get("server"),
+                path=mt5_config.get("path") or None,
+                timeout=mt5_config.get("timeout", 60000),
+            ):
+                logger.error("Failed to connect to MT5")
+                return False
 
         # Initialize Risk Manager
         risk_config = self.config.get("risk", {})
@@ -221,7 +238,7 @@ class TradingBot:
         """Cleanup and shutdown."""
         logger.info("Shutting down trading bot...")
 
-        if self.mt5:
+        if self._owns_mt5_connector and self.mt5:
             self.mt5.disconnect()
 
         logger.info("Trading bot stopped.")
@@ -246,23 +263,41 @@ class TradingBot:
 
         # Test MT5 connection
         print("\n[1] Testing MT5 connection...")
-        self.mt5 = MT5Connector()
-        if self.mt5.connect(
-            login=mt5_config.get("login"),
-            password=mt5_config.get("password"),
-            server=mt5_config.get("server"),
-            path=mt5_config.get("path") or None
-        ):
-            account = self.mt5.get_account_info()
-            if account:
-                print(f"    ✓ Connected to {account.server}")
-                print(f"    ✓ Account: {account.login}")
-                print(f"    ✓ Balance: {account.balance} {account.currency}")
-            self.mt5.disconnect()
+        mt5_config = self.config.get("mt5", {})
+        login = mt5_config.get("login") or 0
+
+        from core.account_manager import get_account_manager
+
+        manager = get_account_manager()
+        active = manager.get_active_account()
+
+        if active and int(login) == 0:
+            if manager.connect(active.id, force=True):
+                self.mt5 = manager.get_connector(active.id)
+                self._owns_mt5_connector = False
+            else:
+                print(f"    ✗ Failed to connect active account: {manager.get_connection_error(active.id)}")
+                return False
         else:
-            print("    ✗ Failed to connect to MT5")
-            print("    → Check your credentials in .env file")
-            return False
+            self.mt5 = MT5Connector()
+            self._owns_mt5_connector = True
+            if not self.mt5.connect(
+                login=mt5_config.get("login"),
+                password=mt5_config.get("password"),
+                server=mt5_config.get("server"),
+                path=mt5_config.get("path") or None,
+            ):
+                print("    ✗ Failed to connect to MT5")
+                print("    → Check your credentials in .env file or add account in UI")
+                return False
+
+        account = self.mt5.get_account_info()
+        if account:
+            print(f"    ✓ Connected to {account.server}")
+            print(f"    ✓ Account: {account.login}")
+            print(f"    ✓ Balance: {account.balance} {account.currency}")
+        if self._owns_mt5_connector:
+            self.mt5.disconnect()
 
         # Test strategy loading
         print("\n[2] Loading strategies...")
@@ -275,12 +310,19 @@ class TradingBot:
 
         # Test data retrieval
         print("\n[3] Testing market data...")
-        self.mt5.connect(
-            login=mt5_config.get("login"),
-            password=mt5_config.get("password"),
-            server=mt5_config.get("server"),
-            path=mt5_config.get("path") or None
-        )
+        if active and int(login) == 0:
+            manager.connect(active.id, force=True)
+            self.mt5 = manager.get_connector(active.id)
+            self._owns_mt5_connector = False
+        elif self._owns_mt5_connector or not self.mt5:
+            self.mt5 = MT5Connector()
+            self._owns_mt5_connector = True
+            self.mt5.connect(
+                login=mt5_config.get("login"),
+                password=mt5_config.get("password"),
+                server=mt5_config.get("server"),
+                path=mt5_config.get("path") or None,
+            )
         for name, strategy in strategies.items():
             for symbol in strategy.symbols:
                 data = self.mt5.get_ohlcv(symbol, strategy.timeframe, 10)
@@ -288,7 +330,8 @@ class TradingBot:
                     print(f"    ✓ {symbol} {strategy.timeframe}: {len(data)} bars")
                 else:
                     print(f"    ✗ {symbol}: Failed to get data")
-        self.mt5.disconnect()
+        if self._owns_mt5_connector and self.mt5:
+            self.mt5.disconnect()
 
         # Check alerts config
         print("\n[4] Alert configuration:")
