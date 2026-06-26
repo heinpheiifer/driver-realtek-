@@ -33,6 +33,11 @@ if [[ -f "$PIDFILE" ]]; then
   rm -f "$PIDFILE"
 fi
 
+TMUX_SESSION="${XAU60_WINE_TMUX_SESSION:-xau60-wine-bridge}"
+if command -v tmux >/dev/null 2>&1 && tmux has-session -t "$TMUX_SESSION" 2>/dev/null; then
+  tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
+fi
+
 if command -v fuser >/dev/null 2>&1; then
   fuser -k "${PORT}/tcp" 2>/dev/null || true
 fi
@@ -52,3 +57,4 @@ if port_open; then
 fi
 
 echo "Bridge stopped."
+exit 0

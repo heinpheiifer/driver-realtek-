@@ -45,6 +45,12 @@ ensure_env "MT5_WINE_PORT" "18812"
 ensure_env "MT5_WINE_TIMEOUT" "300"
 ensure_env "MT5_WINE_USE_TERMINAL_SESSION" "true"
 
+# tmux keeps Wine bridge running in background (required — Wine Python breaks with nohup)
+if ! command -v tmux >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then
+  echo "==> Installing tmux (needed for Wine MT5 bridge)..."
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y tmux 2>/dev/null || true
+fi
+
 # --- Install embeddable Windows Python in Wine if missing ---
 install_wine_python_embedded() {
   local prefix="${WINEPREFIX:-$HOME/.wine}"
@@ -159,7 +165,10 @@ else
   echo "  3. Re-run this script"
 fi
 
-chmod +x scripts/start-wine-mt5linux.sh scripts/stop-wine-mt5linux.sh scripts/check-wine-mt5.py scripts/setup-wine-mt5.sh 2>/dev/null || true
+chmod +x scripts/start-wine-mt5linux.sh scripts/stop-wine-mt5linux.sh \
+  scripts/check-wine-mt5.py scripts/setup-wine-mt5.sh \
+  scripts/ensure-wine-bridge.sh scripts/debug-wine-mt5.sh \
+  scripts/start-wine-and-bridge.sh 2>/dev/null || true
 
 echo ""
 echo "==> Setup summary"
@@ -168,11 +177,16 @@ echo "    Linux mt5linux: installed"
 echo "    Wine:           $([ "$WINE_OK" = true ] && echo OK || echo MISSING)"
 echo "    Wine Python:    $([ "$WINE_PY_OK" = true ] && echo OK || echo MISSING — install Python in Wine)"
 echo ""
-echo "Next steps (every trading session):"
-echo "  1. Open MetaTrader 5 in Wine (BlackBull logged in)"
-echo "  2. Terminal A: ./scripts/start-wine-mt5linux.sh"
-echo "  3. Terminal B: ./scripts/start.sh"
-echo "  4. Test:       .venv/bin/python scripts/check-wine-mt5.py"
+echo ""
+echo "One-command setup + debug:"
+echo "  ./scripts/setup-wine-mt5.sh"
+echo "  ./scripts/debug-wine-mt5.sh"
+echo ""
+echo "Daily start (after MT5 open in Wine):"
+echo "  ./scripts/start.sh          # auto-starts bridge via tmux + dashboard"
+echo "  # OR manually:"
+echo "  ./scripts/start-wine-mt5linux.sh   # terminal 1 — keep open"
+echo "  ./scripts/start.sh                 # terminal 2"
 echo ""
 
 # --- Quick test ---

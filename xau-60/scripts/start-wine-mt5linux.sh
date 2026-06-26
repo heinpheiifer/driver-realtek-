@@ -7,8 +7,8 @@
 #
 # Usage:
 #   ./scripts/start-wine-mt5linux.sh
-#   ./scripts/start-wine-mt5linux.sh --restart   # kill stale bridge first
-#   MT5_WINE_PYTHON="wine /path/to/python.exe" ./scripts/start-wine-mt5linux.sh
+#   ./scripts/start-wine-mt5linux.sh --restart
+#   ./scripts/start-wine-mt5linux.sh --daemon   # needs tmux; use ensure-wine-bridge.sh instead
 
 set -euo pipefail
 
@@ -104,11 +104,19 @@ if [[ "$DAEMON" == true ]]; then
   LOG="$ROOT/logs/wine-bridge.log"
   PIDFILE="$ROOT/logs/wine-bridge.pid"
   mkdir -p "$ROOT/logs"
-  echo "Logging to $LOG"
-  nohup "${WINE_PY_CMD[@]}" -m mt5linux --host "$BIND_HOST" -p "$PORT" >>"$LOG" 2>&1 &
-  echo $! > "$PIDFILE"
-  echo "Wine bridge started in background (pid $(cat "$PIDFILE"))."
-  exit 0
+  if command -v tmux >/dev/null 2>&1; then
+    SESSION="${XAU60_WINE_TMUX_SESSION:-xau60-wine-bridge}"
+    tmux kill-session -t "$SESSION" 2>/dev/null || true
+    tmux new-session -d -s "$SESSION" -c "$ROOT" \
+      "./scripts/start-wine-mt5linux.sh"
+    echo "Wine bridge started in tmux session: $SESSION"
+    echo "Attach: tmux attach -t $SESSION"
+    exit 0
+  fi
+  echo "ERROR: --daemon requires tmux (Wine Python cannot run with nohup)."
+  echo "  sudo apt install tmux"
+  echo "  Or run: ./scripts/start-wine-mt5linux.sh   (foreground, separate terminal)"
+  exit 1
 fi
 
 exec "${WINE_PY_CMD[@]}" -m mt5linux --host "$BIND_HOST" -p "$PORT"
