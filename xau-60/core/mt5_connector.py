@@ -206,6 +206,61 @@ class MT5Connector:
             )
         return text
 
+    def _filling_modes_for_symbol(self, symbol: str) -> List[int]:
+        """Return ORDER_FILLING modes to try, based on broker symbol specification."""
+        try:
+            mt5.symbol_select(symbol, True)
+            info = mt5.symbol_info(symbol)
+        except Exception:
+            info = None
+
+        sym_ioc = getattr(mt5, "SYMBOL_FILLING_IOC", 2)
+        sym_fok = getattr(mt5, "SYMBOL_FILLING_FOK", 1)
+        sym_ret = getattr(mt5, "SYMBOL_FILLING_RETURN", 4)
+
+        bit_to_order = [
+            (sym_ioc, getattr(mt5, "ORDER_FILLING_IOC", 1)),
+            (sym_fok, getattr(mt5, "ORDER_FILLING_FOK", 0)),
+            (sym_ret, getattr(mt5, "ORDER_FILLING_RETURN", 2)),
+        ]
+
+        filling_flags = getattr(info, "filling_mode", 0) if info else 0
+        modes = [order_f for bit, order_f in bit_to_order if filling_flags & bit]
+
+        if not modes:
+            # BlackBull crypto/CFD symbols often require RETURN
+            modes = [
+                getattr(mt5, "ORDER_FILLING_RETURN", 2),
+                getattr(mt5, "ORDER_FILLING_IOC", 1),
+                getattr(mt5, "ORDER_FILLING_FOK", 0),
+            ]
+
+        seen: set[int] = set()
+        ordered: List[int] = []
+        for mode in modes:
+            if mode not in seen:
+                seen.add(mode)
+                ordered.append(mode)
+        return ordered
+
+    def _order_send_deal(self, request: dict, symbol: str):
+        """Send a market deal, retrying supported filling modes (fixes retcode 10030)."""
+        last_result = None
+        for filling in self._filling_modes_for_symbol(symbol):
+            req = {**request, "type_filling": filling}
+            result = mt5.order_send(req)
+            if result is None:
+                continue
+            last_result = result
+            if result.retcode == mt5.TRADE_RETCODE_DONE:
+                return result
+            if int(getattr(result, "retcode", 0)) != 10030:
+                return result
+            logger.debug(
+                f"Filling mode {filling} not supported for {symbol}, trying next"
+            )
+        return last_result
+
     def _auto_detect_wine_path(self) -> Optional[str]:
         """Find MT5 in Wine and persist MT5_WINE_PATH when missing."""
         from utils.mt5_paths import find_wine_mt5_terminal, persist_mt5_wine_path
@@ -830,10 +885,9 @@ class MT5Connector:
                     "magic": magic,
                     "comment": comment,
                     "type_time": mt5.ORDER_TIME_GTC,
-                    "type_filling": mt5.ORDER_FILLING_IOC,
                 }
 
-                result = mt5.order_send(request)
+                result = self._order_send_deal(request, symbol)
 
                 if result is None:
                     error = mt5.last_error()
@@ -961,7 +1015,7 @@ class MT5Connector:
                 "magic": magic,
                 "comment": comment,
                 "type_time": mt5.ORDER_TIME_GTC if not expiration else mt5.ORDER_TIME_SPECIFIED,
-                "type_filling": mt5.ORDER_FILLING_RETURN,
+                "type_filling": self._filling_modes_for_symbol(symbol)[0],
             }
 
             if expiration:
@@ -1042,10 +1096,9 @@ class MT5Connector:
                 "magic": position.magic,
                 "comment": f"Close {ticket}",
                 "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": mt5.ORDER_FILLING_IOC,
             }
 
-            result = mt5.order_send(request)
+            result = self._order_send_deal(request, symbol)
 
             if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
                 logger.error(f"Failed to close position {ticket}")
@@ -1127,10 +1180,9 @@ class MT5Connector:
                 "magic": position.magic,
                 "comment": f"Partial close {ticket}",
                 "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": mt5.ORDER_FILLING_IOC,
             }
 
-            result = mt5.order_send(request)
+            result = self._order_send_deal(request, symbol)
 
             if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
                 logger.error(f"Failed to partial close position {ticket}")

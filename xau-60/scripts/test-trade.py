@@ -110,6 +110,11 @@ def main() -> int:
             )
             if info:
                 print(f"  Balance {info.balance:,.2f} {info.currency}, free margin {info.free_margin:,.2f}")
+        elif result.retcode == 10030:
+            print(
+                "Code 10030 = unsupported filling mode for this symbol. "
+                "Pull latest code (auto-retries RETURN/IOC/FOK) and retry."
+            )
         else:
             print("Check: Algo Trading ON in MT5, symbol in Market Watch, min lot size.")
         return 1
