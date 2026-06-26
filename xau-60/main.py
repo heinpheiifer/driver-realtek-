@@ -19,6 +19,8 @@ from core.mt5_connector import MT5Connector
 from core.strategy_loader import StrategyLoader
 from core.risk_manager import RiskManager, RiskLimits
 from core.trade_executor import TradeExecutor
+from alerts.service import AlertService
+from utils.alert_config import merge_alert_settings
 from utils.logger import setup_logger
 from utils.config import config as env_config, load_config
 
@@ -51,6 +53,7 @@ class TradingBot:
         self.strategy_loader: Optional[StrategyLoader] = None
         self.risk_manager: Optional[RiskManager] = None
         self.trade_executor: Optional[TradeExecutor] = None
+        self.alert_service: Optional[AlertService] = None
 
         self._setup_signal_handlers()
 
@@ -80,6 +83,8 @@ class TradingBot:
 
                 # Merge YAML config (env vars take precedence)
                 self._merge_config(yaml_config)
+            else:
+                self.config["alerts"] = merge_alert_settings({})
 
             logger.info("Configuration loaded successfully")
             return True
@@ -102,6 +107,9 @@ class TradingBot:
             self.config["mt5"]["server"] = mt5_yaml["server"]
         if not self.config["mt5"]["path"] and mt5_yaml.get("path"):
             self.config["mt5"]["path"] = mt5_yaml["path"]
+
+        # Merge alert settings (.env + settings.yaml)
+        self.config["alerts"] = merge_alert_settings(yaml_config)
 
     def initialize(self) -> bool:
         """Initialize all components."""
@@ -172,6 +180,11 @@ class TradingBot:
             default_magic=trading_config.get("default_magic_number", 123456)
         )
 
+        # Alert notifications (Telegram / Discord)
+        self.alert_service = AlertService.from_config(self.config)
+        if self.alert_service.is_active:
+            self.alert_service.register_with_executor(self.trade_executor)
+
         # Load Strategies
         self.strategy_loader = StrategyLoader()
         self.strategy_loader.load_all_strategies()
@@ -181,6 +194,9 @@ class TradingBot:
 
         for name, strategy in strategies.items():
             logger.info(f"  - {strategy}")
+
+        if self.alert_service and self.alert_service.is_active:
+            self.alert_service.send_startup(list(strategies.keys()))
 
         return True
 
@@ -237,6 +253,9 @@ class TradingBot:
     def shutdown(self):
         """Cleanup and shutdown."""
         logger.info("Shutting down trading bot...")
+
+        if self.alert_service and self.alert_service.is_active:
+            self.alert_service.send_shutdown()
 
         if self._owns_mt5_connector and self.mt5:
             self.mt5.disconnect()

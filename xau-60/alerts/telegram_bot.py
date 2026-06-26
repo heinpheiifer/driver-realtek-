@@ -97,9 +97,22 @@ class TelegramAlert:
             return False
 
     def send_message_sync(self, message: str) -> bool:
-        """Synchronous wrapper for send_message."""
+        """Synchronous wrapper for send_message (safe inside Streamlit)."""
         try:
-            return asyncio.run(self.send_message(message))
+            asyncio.get_running_loop()
+        except RuntimeError:
+            try:
+                return asyncio.run(self.send_message(message))
+            except Exception as e:
+                logger.error(f"Failed to send Telegram message: {e}")
+                return False
+
+        # Streamlit / nested event loop — run in a worker thread
+        import concurrent.futures
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, self.send_message(message)).result(timeout=30)
         except Exception as e:
             logger.error(f"Failed to send Telegram message: {e}")
             return False

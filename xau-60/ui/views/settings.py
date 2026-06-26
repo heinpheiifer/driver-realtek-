@@ -8,6 +8,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from utils.alert_config import merge_alert_settings, save_alert_env
+
 
 def render_settings():
     """Render the settings page."""
@@ -27,6 +29,9 @@ def render_settings():
     except Exception:
         settings = {}
         st.warning("Could not load settings. Using defaults.")
+
+    # Merge .env alert credentials into display (UI yaml may be stale)
+    settings["alerts"] = merge_alert_settings(settings)
 
     # Settings tabs
     tab1, tab2, tab3, tab4 = st.tabs(["MT5 Connection", "Risk Management", "Alerts", "General"])
@@ -196,6 +201,10 @@ def render_alert_settings(settings: dict):
 
     # Telegram settings
     st.markdown("#### Telegram")
+    st.caption(
+        "Create a bot with @BotFather, copy the token, message your bot, "
+        "then get your Chat ID from @userinfobot. **Save All Settings** after editing."
+    )
 
     telegram = alerts.get("telegram", {})
     settings["alerts"]["telegram"]["enabled"] = st.toggle(
@@ -225,7 +234,27 @@ def render_alert_settings(settings: dict):
         col_test, col_space = st.columns([1, 4])
         with col_test:
             if st.button("Send Test", use_container_width=True, key="settings_telegram_test"):
-                st.info("Test message sent!")
+                token = settings["alerts"]["telegram"].get("token", "")
+                chat_id = settings["alerts"]["telegram"].get("chat_id", "")
+                if not token or not chat_id:
+                    st.error("Enter Bot Token and Chat ID first, then Save.")
+                else:
+                    from alerts.service import AlertService
+
+                    svc = AlertService.from_config({
+                        "alerts": {
+                            "telegram": {
+                                "enabled": True,
+                                "token": token,
+                                "chat_id": str(chat_id),
+                            }
+                        }
+                    })
+                    ok, err = svc.send_test()
+                    if ok:
+                        st.success("Test message sent — check Telegram!")
+                    else:
+                        st.error(err)
 
     st.markdown("---")
 
@@ -389,10 +418,13 @@ def test_mt5_connection(mt5_config: dict):
 
 
 def save_settings(settings_path: Path, settings: dict):
-    """Save settings to file."""
+    """Save settings to file and sync alert credentials to .env."""
     try:
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         with open(settings_path, "w") as f:
             yaml.dump(settings, f, default_flow_style=False)
+
+        if settings.get("alerts"):
+            save_alert_env(settings["alerts"])
     except Exception as e:
         st.error(f"Failed to save settings: {e}")
