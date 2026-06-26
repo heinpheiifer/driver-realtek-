@@ -207,33 +207,37 @@ class MT5Connector:
         return text
 
     def _filling_modes_for_symbol(self, symbol: str) -> List[int]:
-        """Return ORDER_FILLING modes to try, based on broker symbol specification."""
+        """Return ORDER_FILLING modes to try (ORDER_* values, not SYMBOL_* bitmask)."""
         try:
             mt5.symbol_select(symbol, True)
             info = mt5.symbol_info(symbol)
         except Exception:
             info = None
 
-        sym_ioc = getattr(mt5, "SYMBOL_FILLING_IOC", 2)
+        order_return = getattr(mt5, "ORDER_FILLING_RETURN", 2)
+        order_fok = getattr(mt5, "ORDER_FILLING_FOK", 0)
+        order_ioc = getattr(mt5, "ORDER_FILLING_IOC", 1)
+
+        # Crypto/CFD symbols on BlackBull often need RETURN first
+        upper = symbol.upper()
+        if any(tag in upper for tag in ("ETH", "BTC", "LTC", "XRP", "SOL")):
+            return [order_return, order_fok, order_ioc]
+
         sym_fok = getattr(mt5, "SYMBOL_FILLING_FOK", 1)
+        sym_ioc = getattr(mt5, "SYMBOL_FILLING_IOC", 2)
         sym_ret = getattr(mt5, "SYMBOL_FILLING_RETURN", 4)
 
         bit_to_order = [
-            (sym_ioc, getattr(mt5, "ORDER_FILLING_IOC", 1)),
-            (sym_fok, getattr(mt5, "ORDER_FILLING_FOK", 0)),
-            (sym_ret, getattr(mt5, "ORDER_FILLING_RETURN", 2)),
+            (sym_ioc, order_ioc),
+            (sym_fok, order_fok),
+            (sym_ret, order_return),
         ]
 
-        filling_flags = getattr(info, "filling_mode", 0) if info else 0
+        filling_flags = int(getattr(info, "filling_mode", 0) or 0) if info else 0
         modes = [order_f for bit, order_f in bit_to_order if filling_flags & bit]
 
         if not modes:
-            # BlackBull crypto/CFD symbols often require RETURN
-            modes = [
-                getattr(mt5, "ORDER_FILLING_RETURN", 2),
-                getattr(mt5, "ORDER_FILLING_IOC", 1),
-                getattr(mt5, "ORDER_FILLING_FOK", 0),
-            ]
+            modes = [order_return, order_fok, order_ioc]
 
         seen: set[int] = set()
         ordered: List[int] = []
@@ -243,22 +247,69 @@ class MT5Connector:
                 ordered.append(mode)
         return ordered
 
+    def _request_from_check(self, check_result: Any) -> Optional[dict]:
+        """Build an order_send dict from order_check result."""
+        req = getattr(check_result, "request", None)
+        if req is None:
+            return None
+        if isinstance(req, dict):
+            return req
+        if hasattr(req, "_asdict"):
+            return req._asdict()
+        try:
+            return dict(req)
+        except Exception:
+            fields = (
+                "action", "magic", "order", "symbol", "volume", "price", "stoplimit",
+                "sl", "tp", "deviation", "type", "type_filling", "type_time",
+                "expiration", "comment", "position", "position_by",
+            )
+            return {f: getattr(req, f) for f in fields if hasattr(req, f)}
+
     def _order_send_deal(self, request: dict, symbol: str):
-        """Send a market deal, retrying supported filling modes (fixes retcode 10030)."""
+        """Send a market deal, using order_check + filling-mode fallbacks (retcode 10030)."""
         last_result = None
+        attempts: List[dict] = []
+
         for filling in self._filling_modes_for_symbol(symbol):
-            req = {**request, "type_filling": filling}
-            result = mt5.order_send(req)
+            attempts.append({**request, "type_filling": filling})
+        attempts.append(dict(request))
+
+        for req in attempts:
+            send_req = req
+            if hasattr(mt5, "order_check"):
+                try:
+                    check = mt5.order_check(req)
+                    if check is not None:
+                        check_code = int(getattr(check, "retcode", -1))
+                        if check_code == 0:
+                            checked = self._request_from_check(check)
+                            if checked:
+                                send_req = checked
+                        elif check_code == 10030:
+                            last_result = check
+                            logger.info(
+                                f"order_check 10030 for {symbol} filling={req.get('type_filling')}, trying next"
+                            )
+                            continue
+                        elif check_code != getattr(mt5, "TRADE_RETCODE_DONE", 10009):
+                            last_result = check
+                            continue
+                except Exception as exc:
+                    logger.debug(f"order_check error for {symbol}: {exc}")
+
+            result = mt5.order_send(send_req)
             if result is None:
                 continue
             last_result = result
-            if result.retcode == mt5.TRADE_RETCODE_DONE:
+            if int(getattr(result, "retcode", -1)) == int(getattr(mt5, "TRADE_RETCODE_DONE", 10009)):
                 return result
             if int(getattr(result, "retcode", 0)) != 10030:
                 return result
-            logger.debug(
-                f"Filling mode {filling} not supported for {symbol}, trying next"
+            logger.info(
+                f"order_send 10030 for {symbol} filling={send_req.get('type_filling')}, trying next"
             )
+
         return last_result
 
     def _auto_detect_wine_path(self) -> Optional[str]:

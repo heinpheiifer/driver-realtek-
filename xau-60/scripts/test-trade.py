@@ -103,14 +103,17 @@ def main() -> int:
 
     if not result.success:
         print(f"\nOrder FAILED: {result.error_message}")
-        if result.retcode == 10019:
+        code = int(getattr(result, "retcode", 0) or 0)
+        if not code and "10030" in result.error_message:
+            code = 10030
+        if code == 10019:
             print(
                 "Code 10019 = not enough FREE MARGIN (not minimum lot size). "
                 "Gold needs more margin than forex — check free margin vs leverage."
             )
             if info:
                 print(f"  Balance {info.balance:,.2f} {info.currency}, free margin {info.free_margin:,.2f}")
-        elif result.retcode == 10030:
+        elif code == 10030:
             print(
                 "Code 10030 = unsupported filling mode for this symbol. "
                 "Pull latest code (auto-retries RETURN/IOC/FOK) and retry."

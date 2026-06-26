@@ -218,6 +218,10 @@ def order_send(request: dict):
     return _ensure_client().order_send(request)
 
 
+def order_check(request: dict):
+    return _ensure_client().order_check(request)
+
+
 def positions_get(symbol: str = None, ticket: int = None):
     if ticket is not None:
         return _ensure_client().positions_get(ticket=ticket)
