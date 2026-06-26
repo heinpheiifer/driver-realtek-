@@ -184,6 +184,59 @@ def render_add_account(manager: AccountManager):
     </div>
     """, unsafe_allow_html=True)
 
+    # Handle pending submission outside the form (Streamlit forbids buttons in forms).
+    pending = st.session_state.pop("pending_add_account", None)
+    if pending:
+        try:
+            acc_type = (
+                AccountType.DEMO
+                if pending["account_type"] == "Demo"
+                else AccountType.LIVE
+            )
+            account = manager.add_account(
+                name=pending["name"],
+                login=int(pending["login"]),
+                password=pending["password"],
+                server=pending["server"],
+                account_type=acc_type,
+                path=pending["path"] or None,
+            )
+
+            notice = f"Account added: {account.name}"
+            connect_error = None
+
+            if pending.get("connect_after_add"):
+                if manager.connect(account.id):
+                    notice += " — Connected!"
+                else:
+                    connect_error = (
+                        "Connection failed. Check your credentials and ensure MT5 is running."
+                    )
+
+            st.session_state["account_add_notice"] = {
+                "message": notice,
+                "error": connect_error,
+                "account_id": account.id,
+            }
+            st.rerun()
+        except ValueError as e:
+            st.error(str(e))
+        except Exception as e:
+            st.error(f"Failed to add account: {e}")
+
+    notice = st.session_state.pop("account_add_notice", None)
+    if notice:
+        st.success(notice["message"])
+        if notice.get("error"):
+            st.error(notice["error"])
+        if st.button("Connect Now", key="connect_new_account"):
+            with st.spinner("Connecting..."):
+                if manager.connect(notice["account_id"]):
+                    st.success("Connected successfully!")
+                    st.rerun()
+                else:
+                    st.error("Connection failed. Check your credentials.")
+
     with st.form("add_account_form"):
         col1, col2 = st.columns(2)
 
@@ -222,7 +275,7 @@ def render_add_account(manager: AccountManager):
 
             path = st.text_input(
                 "MT5 Path (Optional)",
-                placeholder="C:\\Program Files\\MT5\\terminal64.exe",
+                placeholder="C:\\Program Files\\MetaTrader 5\\terminal64.exe",
                 help="Path to MT5 terminal (leave empty for default)"
             )
 
@@ -238,51 +291,16 @@ def render_add_account(manager: AccountManager):
             if not name or not login or not password or not server:
                 st.error("Please fill in all required fields")
             else:
-                try:
-                    acc_type = AccountType.DEMO if account_type == "Demo" else AccountType.LIVE
-
-                    account = manager.add_account(
-                        name=name,
-                        login=int(login),
-                        password=password,
-                        server=server,
-                        account_type=acc_type,
-                        path=path if path else None
-                    )
-
-                    notice = f"Account added: {account.name}"
-                    connect_error = None
-
-                    if connect_after_add:
-                        if manager.connect(account.id):
-                            notice += " — Connected!"
-                        else:
-                            connect_error = "Connection failed. Check your credentials and ensure MT5 is running."
-
-                    st.session_state["account_add_notice"] = {
-                        "message": notice,
-                        "error": connect_error,
-                        "account_id": account.id,
-                    }
-                    st.rerun()
-
-                except ValueError as e:
-                    st.error(str(e))
-                except Exception as e:
-                    st.error(f"Failed to add account: {e}")
-
-    notice = st.session_state.pop("account_add_notice", None)
-    if notice:
-        st.success(notice["message"])
-        if notice.get("error"):
-            st.error(notice["error"])
-        if st.button("Connect Now", key="connect_new_account"):
-            with st.spinner("Connecting..."):
-                if manager.connect(notice["account_id"]):
-                    st.success("Connected successfully!")
-                    st.rerun()
-                else:
-                    st.error("Connection failed. Check your credentials.")
+                st.session_state["pending_add_account"] = {
+                    "name": name,
+                    "login": int(login),
+                    "password": password,
+                    "server": server,
+                    "account_type": account_type,
+                    "path": path.strip(),
+                    "connect_after_add": connect_after_add,
+                }
+                st.rerun()
 
 
 def render_connection_monitor(manager: AccountManager):
