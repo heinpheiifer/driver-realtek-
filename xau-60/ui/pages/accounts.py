@@ -226,6 +226,12 @@ def render_add_account(manager: AccountManager):
                 help="Path to MT5 terminal (leave empty for default)"
             )
 
+        connect_after_add = st.checkbox(
+            "Connect after adding",
+            value=False,
+            help="Try to connect to MT5 immediately after saving the account"
+        )
+
         submitted = st.form_submit_button("Add Account", type="primary", use_container_width=True)
 
         if submitted:
@@ -244,22 +250,39 @@ def render_add_account(manager: AccountManager):
                         path=path if path else None
                     )
 
-                    st.success(f"Account added: {account.name}")
+                    notice = f"Account added: {account.name}"
+                    connect_error = None
 
-                    # Ask if user wants to connect
-                    if st.button("Connect Now", key="connect_new_account"):
-                        with st.spinner("Connecting..."):
-                            if manager.connect(account.id):
-                                st.success("Connected successfully!")
-                            else:
-                                st.error("Connection failed. Check your credentials.")
+                    if connect_after_add:
+                        if manager.connect(account.id):
+                            notice += " — Connected!"
+                        else:
+                            connect_error = "Connection failed. Check your credentials and ensure MT5 is running."
 
+                    st.session_state["account_add_notice"] = {
+                        "message": notice,
+                        "error": connect_error,
+                        "account_id": account.id,
+                    }
                     st.rerun()
 
                 except ValueError as e:
                     st.error(str(e))
                 except Exception as e:
                     st.error(f"Failed to add account: {e}")
+
+    notice = st.session_state.pop("account_add_notice", None)
+    if notice:
+        st.success(notice["message"])
+        if notice.get("error"):
+            st.error(notice["error"])
+        if st.button("Connect Now", key="connect_new_account"):
+            with st.spinner("Connecting..."):
+                if manager.connect(notice["account_id"]):
+                    st.success("Connected successfully!")
+                    st.rerun()
+                else:
+                    st.error("Connection failed. Check your credentials.")
 
 
 def render_connection_monitor(manager: AccountManager):
