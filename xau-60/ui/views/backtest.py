@@ -54,6 +54,41 @@ except ImportError:
     BacktestEngine = None
     StrategyLoader = None
 
+try:
+    from strategies import STRATEGY_REGISTRY, list_strategies
+except ImportError:
+    STRATEGY_REGISTRY = {}
+
+    def list_strategies() -> List[str]:
+        return []
+
+
+_STRATEGY_LABELS = {
+    "SMC Scalper": "SMC Scalper (SMC)",
+    "CRT TBS": "CRT TBS (CRT + Killzones)",
+    "Trend Break Trauma": "Trend Break Trauma (TBT)",
+}
+
+
+def _strategy_config_dir() -> Path:
+    return Path(__file__).parent.parent.parent / "config" / "strategies"
+
+
+def _config_path_for_strategy(name: str, config_dir: Path) -> Optional[str]:
+    """Resolve YAML path for a registered strategy name."""
+    for stem in (
+        name.lower().replace(" ", "_"),
+        name.lower().replace(" ", "-"),
+    ):
+        path = config_dir / f"{stem}.yaml"
+        if path.exists():
+            return str(path)
+    return None
+
+
+def _strategy_label(name: str) -> str:
+    return _STRATEGY_LABELS.get(name, name)
+
 
 def render_backtest():
     """Render the backtesting page."""
@@ -79,6 +114,11 @@ def render_backtest():
     with tab_compare:
         render_comparison_backtest()
 
+    load_errors = st.session_state.get("backtest_strategy_load_errors")
+    if load_errors:
+        for err in load_errors:
+            st.warning(f"Strategy config issue: {err}")
+
 
 def render_single_backtest():
     """Render single strategy backtest interface."""
@@ -88,22 +128,25 @@ def render_single_backtest():
     with col_config:
         st.markdown("### Configuration")
 
-        # Load available strategies
+        # Load available strategies (registry + YAML — SMC always included)
         strategies = load_strategies()
+        strategy_names = list(strategies.keys())
 
         col1, col2 = st.columns(2)
 
         with col1:
             selected_strategy = st.selectbox(
                 "Strategy",
-                options=list(strategies.keys()) if strategies else ["No strategies found"],
+                options=strategy_names if strategy_names else ["No strategies found"],
+                format_func=_strategy_label,
                 key="single_strategy_select"
             )
 
+            chart_symbols = _chart_symbols()
             symbol = st.selectbox(
                 "Symbol",
-                options=_chart_symbols(),
-                index=_default_symbol_index(_chart_symbols()),
+                options=chart_symbols,
+                index=_default_symbol_index(chart_symbols),
                 key="single_symbol_select"
             )
 
@@ -151,22 +194,24 @@ def render_single_backtest():
 
         if strategies and selected_strategy in strategies:
             config_path = strategies[selected_strategy]
-            try:
-                with open(config_path, "r") as f:
-                    config = yaml.safe_load(f)
+            if not config_path:
+                st.info("Strategy registered — no YAML config file found yet")
+            else:
+                try:
+                    with open(config_path, "r") as f:
+                        config = yaml.safe_load(f) or {}
 
-                params = config.get("parameters", {})
-                if params:
-                    for key, value in params.items():
-                        st.text(f"{key}: {value}")
-                else:
-                    st.info("No parameters defined")
+                    params = config.get("parameters", {})
+                    if params:
+                        for key, value in params.items():
+                            st.text(f"{key}: {value}")
+                    else:
+                        st.info("No parameters defined")
 
-                # Show strategy description
-                if config.get("description"):
-                    st.caption(config.get("description"))
-            except Exception as e:
-                st.warning(f"Could not load config: {e}")
+                    if config.get("description"):
+                        st.caption(config.get("description"))
+                except Exception as e:
+                    st.warning(f"Could not load config: {e}")
         else:
             st.info("Select a strategy to view parameters")
 
@@ -222,6 +267,7 @@ def render_comparison_backtest():
     st.markdown("### Compare Two Strategies")
 
     strategies = load_strategies()
+    strategy_names = list(strategies.keys())
 
     col1, col2 = st.columns(2)
 
@@ -229,7 +275,8 @@ def render_comparison_backtest():
         st.markdown("#### Strategy A")
         strategy_a = st.selectbox(
             "Select Strategy A",
-            options=list(strategies.keys()) if strategies else ["No strategies"],
+            options=strategy_names if strategy_names else ["No strategies"],
+            format_func=_strategy_label,
             key="compare_strategy_a"
         )
 
@@ -237,7 +284,8 @@ def render_comparison_backtest():
         st.markdown("#### Strategy B")
         strategy_b = st.selectbox(
             "Select Strategy B",
-            options=list(strategies.keys()) if strategies else ["No strategies"],
+            options=strategy_names if strategy_names else ["No strategies"],
+            format_func=_strategy_label,
             key="compare_strategy_b"
         )
 
@@ -322,23 +370,52 @@ def render_comparison_backtest():
 
 
 def load_strategies() -> Dict[str, str]:
-    """Load available strategy configurations."""
-    strategies = {}
-    config_dir = Path(__file__).parent.parent.parent / "config" / "strategies"
+    """
+    Load strategies for backtesting.
 
-    if not config_dir.exists():
-        return strategies
+    Uses the strategy registry first so SMC Scalper and other coded strategies
+    always appear, then merges any extra YAML configs.
+    """
+    config_dir = _strategy_config_dir()
+    strategies: Dict[str, str] = {}
+    load_errors: List[str] = []
 
-    for config_file in config_dir.glob("*.yaml"):
+    # Registered strategies (SMC Scalper, CRT TBS, Trend Break Trauma, …)
+    for name in sorted(list_strategies()):
+        path = _config_path_for_strategy(name, config_dir)
+        strategies[name] = path or ""
+
+    # Fallback: discover via StrategyLoader if registry import failed
+    if not strategies and StrategyLoader is not None:
         try:
-            with open(config_file, "r") as f:
-                config = yaml.safe_load(f)
-                name = config.get("name", config_file.stem)
-                strategies[name] = str(config_file)
-        except Exception:
-            pass
+            loader = StrategyLoader(config_dir=str(config_dir))
+            for name in sorted(loader.discover_strategies()):
+                path = _config_path_for_strategy(name, config_dir)
+                strategies[name] = path or ""
+        except Exception as e:
+            load_errors.append(f"Strategy discovery: {e}")
 
-    return strategies
+    # YAML configs not already covered (custom / builder strategies)
+    if config_dir.exists():
+        for config_file in sorted(config_dir.glob("*.yaml")):
+            try:
+                with open(config_file, "r") as f:
+                    config = yaml.safe_load(f) or {}
+                name = config.get("name", config_file.stem.replace("_", " ").title())
+                if name not in strategies:
+                    strategies[name] = str(config_file)
+            except Exception as e:
+                load_errors.append(f"{config_file.name}: {e}")
+                fallback = config_file.stem.replace("_", " ").title()
+                if fallback not in strategies:
+                    strategies[fallback] = str(config_file)
+
+    if load_errors:
+        st.session_state["backtest_strategy_load_errors"] = load_errors
+    else:
+        st.session_state.pop("backtest_strategy_load_errors", None)
+
+    return dict(sorted(strategies.items()))
 
 
 def run_backtest(
