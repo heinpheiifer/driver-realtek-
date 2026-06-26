@@ -18,6 +18,7 @@ import pytz
 import logging
 
 from core.strategy_base import StrategyBase, Signal, TradeSignal, Position
+from utils.symbol_point import symbol_point as _symbol_point
 from indicators.common import calculate_atr, calculate_ema, calculate_rsi
 
 
@@ -336,7 +337,7 @@ class CRTStrategy(StrategyBase):
         confirmation.range_valid = True
 
         # Check range size filter
-        point = 0.1 if "XAU" in symbol else 0.0001
+        point = _symbol_point(symbol)
         range_pips = asian_range.range_size / (point * 10)
         if range_pips < self.min_range_pips or range_pips > self.max_range_pips:
             return None
@@ -555,7 +556,7 @@ class CRTStrategy(StrategyBase):
         prev_low = prev_bar["low"]
         prev_high = prev_bar["high"]
 
-        point = 0.1 if "XAU" in symbol else 0.0001
+        point = _symbol_point(symbol)
 
         # Bullish Setup: Sweep below Asian Low, close back inside
         swept_low = current_low < asian_range.low or prev_low < asian_range.low
@@ -730,7 +731,7 @@ class CRTStrategy(StrategyBase):
             current_price = data.iloc[-1]["close"]
             ema_value = ema.iloc[-1]
 
-            point = 0.1 if "XAU" in symbol else 0.0001
+            point = _symbol_point(symbol)
             deviation_pips = abs(current_price - ema_value) / (point * 10)
 
             return deviation_pips < 50  # Not more than 50 pips from EMA
@@ -750,7 +751,7 @@ class CRTStrategy(StrategyBase):
         current_bar = data.iloc[-1]
         entry_price = current_bar["close"]
 
-        point = 0.1 if "XAU" in symbol else 0.0001
+        point = _symbol_point(symbol)
         sl_distance = self.sl_pips_beyond_sweep * point * 10
 
         if manipulation.direction == Signal.BUY:

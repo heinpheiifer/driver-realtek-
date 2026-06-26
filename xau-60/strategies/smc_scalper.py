@@ -11,6 +11,7 @@ from enum import Enum
 import logging
 
 from core.strategy_base import StrategyBase, Signal, TradeSignal, Position
+from utils.symbol_point import symbol_point as _symbol_point
 from indicators.smc_utils import SMCAnalyzer, StructureType, FairValueGap, OrderBlock
 from indicators.common import calculate_atr, calculate_ema, calculate_adx, calculate_rsi
 
@@ -204,7 +205,7 @@ class SMCScalper(StrategyBase):
         self.magic_number = config.get("magic_number", 789123)
 
         # Initialize SMC analyzer
-        point = 0.1 if "XAU" in self.symbols[0] else 0.0001
+        point = _symbol_point(self.symbols[0])
         self.smc = SMCAnalyzer(
             swing_lookback=5,
             fvg_min_pips=self.fvg_min_pips,
@@ -281,7 +282,7 @@ class SMCScalper(StrategyBase):
         confirmation.order_block_valid = ob is not None
 
         current_price = data.iloc[-1]["close"]
-        point = 0.1 if "XAU" in symbol else 0.0001
+        point = _symbol_point(symbol)
 
         # Check if price is in FVG zone
         if fvg.lower_price <= current_price <= fvg.upper_price:
@@ -365,7 +366,7 @@ class SMCScalper(StrategyBase):
         confirmation.order_block_valid = ob is not None
 
         current_price = data.iloc[-1]["close"]
-        point = 0.1 if "XAU" in symbol else 0.0001
+        point = _symbol_point(symbol)
 
         # Check if price is in FVG zone
         if fvg.lower_price <= current_price <= fvg.upper_price:
@@ -432,7 +433,7 @@ class SMCScalper(StrategyBase):
         is_buy: bool
     ) -> float:
         """Calculate stop loss based on ATR or fixed pips."""
-        point = 0.1 if "XAU" in str(data.iloc[-1].get("symbol", "XAUUSD")) else 0.0001
+        point = _symbol_point(str(data.iloc[-1].get("symbol", self.symbols[0])))
 
         if self.use_atr_sl and len(data) >= self.atr_period:
             atr = calculate_atr(data, self.atr_period)
@@ -489,7 +490,7 @@ class SMCScalper(StrategyBase):
         atr = calculate_atr(data, self.atr_period)
         atr_value = atr.iloc[-1]
 
-        point = 0.1 if "XAU" in symbol else 0.0001
+        point = _symbol_point(symbol)
         atr_pips = atr_value / (point * 10)
 
         return self.atr_min_pips <= atr_pips <= self.atr_max_pips
@@ -524,7 +525,7 @@ class SMCScalper(StrategyBase):
         # Try to get spread from data
         if "spread" in data.columns:
             spread = data.iloc[-1]["spread"]
-            point = 0.1 if "XAU" in symbol else 0.0001
+            point = _symbol_point(symbol)
             spread_pips = spread / (point * 10)
             return spread_pips <= self.max_spread_pips
 
@@ -558,7 +559,7 @@ class SMCScalper(StrategyBase):
             return None
 
         current_price = data.iloc[-1]["close"]
-        point = 0.1 if "XAU" in position.symbol else 0.0001
+        point = _symbol_point(position.symbol)
         trail_distance = self.trailing_pips * point * 10
 
         if position.type == Signal.BUY:

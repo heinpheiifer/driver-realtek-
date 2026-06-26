@@ -2,7 +2,7 @@ alerts:
   discord: true
   telegram: true
 description: Candle Range Theory with killzone entries and liquidity sweeps
-enabled: false
+enabled: true
 magic_number: 789789
 name: CRT TBS
 parameters:
@@ -25,5 +25,5 @@ session:
     end_hour: 15
     start_hour: 13
 symbols:
-- XAUUSD
+- ETHUSD
 timeframe: M5
