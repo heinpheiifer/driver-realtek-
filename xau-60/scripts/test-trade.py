@@ -13,32 +13,19 @@ sys.path.insert(0, str(ROOT))
 from core.account_manager import AccountType, get_account_manager
 from core.mt5_connector import Signal
 from utils.mt5_backend import backend_label, get_backend_mode
+from utils.symbols import default_trading_symbol, resolve_broker_symbol
 
 
 def resolve_symbol(connector, preferred: str) -> str:
     """Pick the first symbol name that exists on the broker."""
-    base = preferred.upper()
-    candidates = [
-        base,
-        f"{base}.r",
-        f"{base}m",
-        f"{base}.a",
-        "GOLD",
-        "XAUUSD",
-    ]
-    seen: set[str] = set()
-    for sym in candidates:
-        if sym in seen:
-            continue
-        seen.add(sym)
-        if connector.get_symbol_info(sym):
-            return sym
-    return base
+    found = resolve_broker_symbol(connector, preferred)
+    return found or preferred.upper()
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Send one small test market order")
-    parser.add_argument("--symbol", default="XAUUSD", help="Symbol (default: XAUUSD)")
+    default_sym = default_trading_symbol()
+    parser.add_argument("--symbol", default=default_sym, help=f"Symbol (default: {default_sym})")
     parser.add_argument("--lots", type=float, default=0.01, help="Lot size (default: 0.01)")
     parser.add_argument("--side", choices=["buy", "sell"], default="buy")
     parser.add_argument(

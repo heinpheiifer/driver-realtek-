@@ -29,13 +29,15 @@ try:
     )
     from core.mt5_connector import MT5Connector, Signal, OrderResult
     from core.strategy_base import Position
+    from utils.symbols import default_trading_symbol
+    _DEFAULT_SYMBOL = default_trading_symbol()
 except ImportError as e:
     st.error(f"Import error: {e}")
-
+    _DEFAULT_SYMBOL = "ETHUSD"
 
 # Session state keys
 STATE_KEYS = {
-    "selected_symbol": "XAUUSD",
+    "selected_symbol": _DEFAULT_SYMBOL,
     "selected_timeframe": "M15",
     "chart_bars": 200,
     "auto_refresh": False,
@@ -308,11 +310,14 @@ def render_chart_panel():
     col_symbol, col_tf, col_bars, col_refresh = st.columns([2, 1, 1, 2])
 
     with col_symbol:
-        symbols = ["XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "BTCUSD", "US500", "US30"]
+        symbols = ["ETHUSD", "BTCUSD", "XAUUSD", "EURUSD", "GBPUSD", "USDJPY", "US500", "US30"]
+        current = st.session_state.get("selected_symbol", _DEFAULT_SYMBOL)
+        if current not in symbols:
+            symbols = [current] + symbols
         st.session_state["selected_symbol"] = st.selectbox(
             "Symbol",
             symbols,
-            index=symbols.index(st.session_state.get("selected_symbol", "XAUUSD")),
+            index=symbols.index(current),
             key="chart_symbol_select"
         )
 
@@ -551,6 +556,7 @@ def create_candlestick_chart(
 def generate_mock_ohlcv(symbol: str, bars: int) -> pd.DataFrame:
     """Generate mock OHLCV data for demonstration."""
     base_prices = {
+        "ETHUSD": 3500.0,
         "XAUUSD": 2000.0,
         "EURUSD": 1.0850,
         "GBPUSD": 1.2650,
@@ -592,7 +598,7 @@ def render_trade_panel():
     st.markdown("### Quick Trade")
 
     connector = get_connector()
-    symbol = st.session_state.get("selected_symbol", "XAUUSD")
+    symbol = st.session_state.get("selected_symbol", _DEFAULT_SYMBOL)
 
     # Current price
     if connector and connector.is_connected():

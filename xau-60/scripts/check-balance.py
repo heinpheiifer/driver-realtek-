@@ -8,6 +8,43 @@ sys.path.insert(0, str(ROOT))
 
 from core.account_manager import get_account_manager, ConnectionStatus
 from utils.mt5_backend import get_backend_mode, is_real_mt5_available, backend_label
+from utils.symbols import default_trading_symbol, resolve_broker_symbol
+
+
+def _print_symbol_margin(connector, info, preferred: str) -> None:
+    name = resolve_broker_symbol(connector, preferred)
+    if not name:
+        print(f"\n{preferred}: not found — add to MT5 Market Watch")
+        return
+    sinfo = connector.get_symbol_info(name)
+    if not sinfo:
+        return
+    print(f"\nSymbol {sinfo.name}: min lot {sinfo.min_lot}, step {sinfo.lot_step}")
+    tick = connector.get_tick(sinfo.name)
+    if not tick:
+        return
+    try:
+        from utils.mt5_backend import load_mt5_module
+
+        mt5 = load_mt5_module()
+        if hasattr(mt5, "order_calc_margin"):
+            need = mt5.order_calc_margin(
+                mt5.ORDER_TYPE_BUY,
+                sinfo.name,
+                sinfo.min_lot,
+                tick.ask,
+            )
+            if need is not None and need >= 0:
+                print(
+                    f"Margin for {sinfo.min_lot} lot BUY: ~{need:,.2f} "
+                    f"(free margin: {info.free_margin:,.2f} {info.currency})"
+                )
+                if need > info.free_margin:
+                    print("→ Not enough free margin at min lot for this symbol.")
+                else:
+                    print("→ Enough free margin for minimum lot.")
+    except Exception:
+        pass
 
 
 def main():
@@ -59,35 +96,10 @@ def main():
 
         connector = manager.get_connector(active.id)
         if connector:
-            for sym in ("XAUUSD", "XAUUSD.r", "XAUUSDm", "GOLD"):
-                sinfo = connector.get_symbol_info(sym)
-                if sinfo:
-                    print(f"\nSymbol {sinfo.name}: min lot {sinfo.min_lot}, step {sinfo.lot_step}")
-                    tick = connector.get_tick(sinfo.name)
-                    if tick:
-                        try:
-                            from utils.mt5_backend import load_mt5_module
-                            mt5 = load_mt5_module()
-                            if hasattr(mt5, "order_calc_margin"):
-                                need = mt5.order_calc_margin(
-                                    mt5.ORDER_TYPE_BUY,
-                                    sinfo.name,
-                                    sinfo.min_lot,
-                                    tick.ask,
-                                )
-                                if need is not None and need >= 0:
-                                    print(
-                                        f"Margin for {sinfo.min_lot} lot BUY: ~{need:,.2f} "
-                                        f"(free margin: {info.free_margin:,.2f})"
-                                    )
-                                    if need > info.free_margin:
-                                        print(
-                                            "→ Not enough free margin for minimum gold lot. "
-                                            "Deposit more, raise leverage, or test EURUSD first."
-                                        )
-                        except Exception:
-                            pass
-                    break
+            sym = default_trading_symbol()
+            _print_symbol_margin(connector, info, sym)
+            if sym.upper() != "XAUUSD":
+                _print_symbol_margin(connector, info, "XAUUSD")
         return 0
 
     print("\nCould not read balance.")

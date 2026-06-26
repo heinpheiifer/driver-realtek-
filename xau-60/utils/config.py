@@ -108,6 +108,9 @@ class RiskConfig:
 @dataclass
 class TradingConfig:
     """Trading settings configuration."""
+    default_symbol: str = field(
+        default_factory=lambda: get_env("DEFAULT_TRADING_SYMBOL", "ETHUSD")
+    )
     default_lot_size: float = field(default_factory=lambda: get_env("DEFAULT_LOT_SIZE", 0.01, float))
     default_magic_number: int = field(default_factory=lambda: get_env("DEFAULT_MAGIC_NUMBER", 123456, int))
     slippage: int = field(default_factory=lambda: get_env("SLIPPAGE", 10, int))
