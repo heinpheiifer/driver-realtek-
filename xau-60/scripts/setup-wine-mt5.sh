@@ -43,6 +43,7 @@ ensure_env "MT5_WINE_ENABLED" "true"
 ensure_env "MT5_WINE_HOST" "localhost"
 ensure_env "MT5_WINE_PORT" "18812"
 ensure_env "MT5_WINE_TIMEOUT" "300"
+ensure_env "MT5_WINE_USE_TERMINAL_SESSION" "true"
 
 # --- Install embeddable Windows Python in Wine if missing ---
 install_wine_python_embedded() {

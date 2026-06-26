@@ -77,7 +77,7 @@ def render_accounts_list(manager: AccountManager):
 
     col_a, col_b, col_c = st.columns([2, 2, 1])
     with col_c:
-        if st.button("Use Live Account", key="prefer_live_account", use_container_width=True):
+        if st.button("Use Live Account", key="prefer_live_account", width="stretch"):
             live_accounts = [
                 a for a in accounts if a.account_type == AccountType.LIVE
             ]
@@ -147,11 +147,11 @@ def render_accounts_list(manager: AccountManager):
             with col3:
                 # Connect/Disconnect button
                 if status == ConnectionStatus.CONNECTED:
-                    if st.button("Disconnect", key=f"disconnect_{account.id}", use_container_width=True):
+                    if st.button("Disconnect", key=f"disconnect_{account.id}", width="stretch"):
                         manager.disconnect(account.id)
                         st.rerun()
                 else:
-                    if st.button("Connect", key=f"connect_{account.id}", type="primary", use_container_width=True):
+                    if st.button("Connect", key=f"connect_{account.id}", type="primary", width="stretch"):
                         with st.spinner("Connecting..."):
                             if manager.connect(account.id):
                                 st.success("Connected!")
@@ -162,11 +162,11 @@ def render_accounts_list(manager: AccountManager):
             with col4:
                 # Set Active / Remove
                 if not is_active:
-                    if st.button("Set Active", key=f"activate_{account.id}", use_container_width=True):
+                    if st.button("Set Active", key=f"activate_{account.id}", width="stretch"):
                         manager.switch_account(account.id)
                         st.rerun()
 
-                if st.button("🗑️ Remove", key=f"remove_{account.id}", use_container_width=True):
+                if st.button("🗑️ Remove", key=f"remove_{account.id}", width="stretch"):
                     if st.session_state.get(f"confirm_remove_{account.id}"):
                         manager.remove_account(account.id)
                         st.success(f"Removed account: {account.name}")
@@ -179,6 +179,24 @@ def render_accounts_list(manager: AccountManager):
             last_err = manager.get_connection_error(account.id)
             if status != ConnectionStatus.CONNECTED and last_err:
                 st.error(last_err)
+
+            with st.expander("Update password / reconnect"):
+                new_pw = st.text_input(
+                    "Trading password",
+                    type="password",
+                    key=f"pw_{account.id}",
+                    help="Main trading password (not investor/read-only password)",
+                )
+                if st.button("Save password & Connect", key=f"save_pw_{account.id}"):
+                    if new_pw:
+                        manager.update_account(account.id, password=new_pw)
+                        if manager.connect(account.id):
+                            st.success("Connected!")
+                            st.rerun()
+                        else:
+                            st.error(_connection_failure_message(manager, account.id))
+                    else:
+                        st.warning("Enter your MT5 trading password.")
 
             # Show account info if connected
             if status == ConnectionStatus.CONNECTED:
@@ -315,7 +333,7 @@ def render_add_account(manager: AccountManager):
             help="Try to connect to MT5 immediately after saving the account"
         )
 
-        submitted = st.form_submit_button("Add Account", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Add Account", type="primary", width="stretch")
 
         if submitted:
             if not name or not login or not password or not server:
@@ -349,11 +367,11 @@ def render_connection_monitor(manager: AccountManager):
         """)
 
     with col2:
-        if st.button("Start Monitoring", use_container_width=True, key="start_monitor"):
+        if st.button("Start Monitoring", width="stretch", key="start_monitor"):
             manager.start_health_monitoring()
             st.success("Health monitoring started")
 
-        if st.button("Stop Monitoring", use_container_width=True, key="stop_monitor"):
+        if st.button("Stop Monitoring", width="stretch", key="stop_monitor"):
             manager.stop_health_monitoring()
             st.info("Health monitoring stopped")
 
@@ -416,10 +434,10 @@ def render_connection_monitor(manager: AccountManager):
         else:
             return 'color: #ef4444'
 
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
     # Refresh button
-    if st.button("🔄 Refresh Status", use_container_width=True, key="refresh_status"):
+    if st.button("🔄 Refresh Status", width="stretch", key="refresh_status"):
         st.rerun()
 
     # Connection log

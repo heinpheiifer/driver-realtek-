@@ -75,6 +75,9 @@ class MT5WineConfig:
     timeout: int = field(default_factory=lambda: get_env("MT5_WINE_TIMEOUT", 300, int))
     path: str = field(default_factory=lambda: get_env("MT5_WINE_PATH", ""))
     python: str = field(default_factory=lambda: get_env("MT5_WINE_PYTHON", "wine python"))
+    use_terminal_session: bool = field(
+        default_factory=lambda: get_env("MT5_WINE_USE_TERMINAL_SESSION", True, bool)
+    )
 
 
 @dataclass

@@ -16,6 +16,7 @@ from enum import Enum
 
 from utils.mt5_backend import get_backend_mode, load_mt5_module
 from utils.mt5_paths import resolve_mt5_terminal_path
+from utils.config import get_env
 
 # Native MT5 on Windows, remote bridge on Linux when MT5_BRIDGE_URL is set, else mock
 mt5 = load_mt5_module()
@@ -190,6 +191,59 @@ class MT5Connector:
         if message:
             logger.error(message)
 
+    def _format_mt5_error(
+        self, code: int, msg: str, context: str = "", login: Optional[int] = None
+    ) -> str:
+        """Turn MT5 error codes into actionable messages."""
+        text = f"MT5 {context} failed [{code}]: {msg}" if context else f"MT5 failed [{code}]: {msg}"
+        if code == -6 or "authorization failed" in (msg or "").lower():
+            acct = str(login) if login else "your account"
+            text += (
+                f". Fix: (1) Log into {acct} in MT5 Wine first (File → Login to trade account). "
+                "(2) Enable Algo Trading (green button on MT5 toolbar). "
+                "(3) Tools → Options → Expert Advisors → Allow algorithmic trading + Allow DLL imports. "
+                "(4) Re-enter your main trading password in Accounts if using API login."
+            )
+        return text
+
+    def _initialize_mt5(self, mode: str, terminal_path: Optional[str], timeout: int) -> bool:
+        """Connect Python API to a running MT5 terminal (Wine: attach without spawning)."""
+        if mode == "wine":
+            # Prefer attaching to the MT5 window already open in Wine (no new terminal).
+            if mt5.initialize(timeout=timeout):
+                return True
+            if terminal_path and mt5.initialize(path=terminal_path, timeout=timeout):
+                return True
+            code, msg = mt5.last_error()
+            self._set_connection_error(
+                self._format_mt5_error(int(code), str(msg), "initialize", login=None)
+                + " Is MetaTrader 5 open and logged in inside Wine?"
+            )
+            return False
+
+        init_params: Dict[str, Any] = {"timeout": timeout}
+        if terminal_path:
+            init_params["path"] = terminal_path
+        if mt5.initialize(**init_params):
+            return True
+        code, msg = mt5.last_error()
+        self._set_connection_error(self._format_mt5_error(int(code), str(msg), "initialize"))
+        return False
+
+    def _account_matches(self, login: Optional[int], server: Optional[str]) -> bool:
+        """True if MT5 terminal is on the requested account."""
+        info = mt5.account_info()
+        if not info or not login:
+            return False
+        if int(getattr(info, "login", 0)) != int(login):
+            return False
+        if server and getattr(info, "server", ""):
+            saved = server.strip().lower()
+            active = str(info.server).strip().lower()
+            if saved != active and saved not in active and active not in saved:
+                logger.warning(f"Server mismatch: saved={server!r} terminal={info.server!r}")
+        return True
+
     def connect(
         self,
         login: Optional[int] = None,
@@ -226,41 +280,55 @@ class MT5Connector:
                         return False
 
                 terminal_path = resolve_mt5_terminal_path(path)
-                init_params: Dict[str, Any] = {"timeout": timeout}
-                if terminal_path:
-                    init_params["path"] = terminal_path
-                elif mode == "wine":
-                    self._set_connection_error(
-                        "Could not find MT5 terminal in Wine. "
-                        "Set MT5_WINE_PATH in .env to your terminal64.exe path, "
-                        "or install MT5 under ~/.wine/drive_c/Program Files/"
-                    )
+
+                if mode == "wine" and not terminal_path:
+                    logger.warning("Wine MT5 path not found; trying attach to running terminal")
+
+                if not self._initialize_mt5(mode, terminal_path, timeout):
                     return False
 
-                if not mt5.initialize(**init_params):
-                    code, msg = mt5.last_error()
+                use_terminal = mode == "wine" and get_env(
+                    "MT5_WINE_USE_TERMINAL_SESSION", True, bool
+                )
+
+                # Use the account already logged in inside MT5 Wine (recommended).
+                if use_terminal or not password:
+                    if self._account_matches(login, server):
+                        logger.info(
+                            f"Using MT5 terminal session for account {login}"
+                        )
+                        self._connected = True
+                        self._update_account_info()
+                        return True
+                    info = mt5.account_info()
+                    if info and getattr(info, "login", 0):
+                        self._set_connection_error(
+                            f"MT5 Wine is logged in as {info.login}@{info.server}, "
+                            f"but this app expects {login}@{server}. "
+                            "In MT5 Wine use File → Login to trade account and switch to 517035."
+                        )
+                        return False
                     self._set_connection_error(
-                        f"MT5 initialize failed [{code}]: {msg}. "
-                        "Is MetaTrader 5 open in Wine?"
+                        "MT5 Wine is open but not logged in. "
+                        f"In MT5: File → Login to trade account → {login} / {server}."
                     )
                     return False
 
                 if login and password and server:
+                    password = password.strip()
                     if not mt5.login(login, password=password, server=server):
                         code, msg = mt5.last_error()
-                        # MT5 may already be logged in via the Wine GUI
-                        info = mt5.account_info()
-                        if info and int(getattr(info, "login", 0)) == int(login):
+                        if self._account_matches(login, server):
                             logger.info(
-                                f"Using account already logged in via MT5 terminal: {login}"
+                                f"API login failed but terminal session OK for {login}"
                             )
                         else:
                             self._set_connection_error(
-                                f"MT5 login failed [{code}]: {msg}. "
-                                f"Check password and that server name matches MT5 exactly "
-                                f"(saved: {server})."
+                                self._format_mt5_error(int(code), str(msg), "login", login)
+                                + f" Saved server: {server}."
                             )
-                            mt5.shutdown()
+                            if mode != "wine":
+                                mt5.shutdown()
                             return False
 
                 self._connected = True
