@@ -255,6 +255,7 @@ sudo systemctl enable --now xau60
 | No trades | Check session hours, strategy enabled, demo account has margin |
 | Linux “mock MT5” | Set `MT5_WINE_ENABLED=true` and run `start-wine-mt5linux.sh` |
 | Wine bridge not running | Open MT5 in Wine, run `./scripts/start-wine-mt5linux.sh` |
+| WinError 10048 / port in use | Bridge already running, or run `./scripts/stop-wine-mt5linux.sh` then start again |
 | Bridge unreachable (remote) | Windows firewall port 8021; MT5 open; correct IP in `.env` |
 
 ---

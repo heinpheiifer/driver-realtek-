@@ -158,7 +158,7 @@ else
   echo "  3. Re-run this script"
 fi
 
-chmod +x scripts/start-wine-mt5linux.sh scripts/check-wine-mt5.py scripts/setup-wine-mt5.sh 2>/dev/null || true
+chmod +x scripts/start-wine-mt5linux.sh scripts/stop-wine-mt5linux.sh scripts/check-wine-mt5.py scripts/setup-wine-mt5.sh 2>/dev/null || true
 
 echo ""
 echo "==> Setup summary"
