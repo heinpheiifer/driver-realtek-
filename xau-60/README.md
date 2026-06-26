@@ -62,7 +62,7 @@ A professional-grade, modular trading bot for MetaTrader 5 with a modern Streaml
 │   └── discord_bot.py         # Discord webhooks
 ├── ui/
 │   ├── app.py                 # Streamlit main app
-│   └── pages/
+│   └── views/
 │       ├── dashboard.py       # Live trading dashboard
 │       ├── strategies.py      # Strategy management
 │       ├── strategy_builder.py # Visual strategy builder

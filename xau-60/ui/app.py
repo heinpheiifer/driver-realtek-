@@ -4,8 +4,11 @@ Streamlit Trading Bot UI - Main Application.
 import sys
 from pathlib import Path
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Project root + ui package (views live under ui/views, not ui/pages — avoids Streamlit multipage clash)
+_UI_DIR = Path(__file__).parent
+_ROOT = _UI_DIR.parent
+sys.path.insert(0, str(_ROOT))
+sys.path.insert(0, str(_UI_DIR))
 
 import streamlit as st
 
@@ -533,26 +536,26 @@ def main():
         </div>
         """, unsafe_allow_html=True)
 
-    # Page routing
+    # Page routing (single sidebar nav — ui/pages was renamed to ui/views so Streamlit
+    # does not add a second page list at the bottom of the sidebar)
     if page == "Dashboard":
-        from pages.dashboard import render_dashboard
+        from views.dashboard import render_dashboard
         render_dashboard()
     elif page == "Strategies":
-        from pages.strategies import render_strategies
+        from views.strategies import render_strategies
         render_strategies()
     elif page == "Strategy Builder":
-        from pages.strategy_builder import render_strategy_builder
+        from views.strategy_builder import render_strategy_builder
         render_strategy_builder()
     elif page == "Backtest":
-        from pages.backtest import render_backtest
+        from views.backtest import render_backtest
         render_backtest()
     elif page == "Accounts":
-        from pages.accounts import render_accounts
+        from views.accounts import render_accounts
         render_accounts()
     elif page == "Settings":
-        from pages.settings import render_settings
+        from views.settings import render_settings
         render_settings()
 
 
-if __name__ == "__main__":
-    main()
+main()
