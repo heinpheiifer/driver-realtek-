@@ -236,11 +236,13 @@ def render_alert_settings(settings: dict):
             if st.button("Send Test", use_container_width=True, key="settings_telegram_test"):
                 token = settings["alerts"]["telegram"].get("token", "")
                 chat_id = settings["alerts"]["telegram"].get("chat_id", "")
-                if not token or not chat_id:
-                    st.error("Enter Bot Token and Chat ID first, then Save.")
-                else:
-                    from alerts.service import AlertService
+                from alerts.telegram_bot import validate_telegram_credentials
+                from alerts.service import AlertService
 
+                valid, err = validate_telegram_credentials(token, str(chat_id))
+                if not valid:
+                    st.error(err)
+                else:
                     svc = AlertService.from_config({
                         "alerts": {
                             "telegram": {
@@ -250,7 +252,7 @@ def render_alert_settings(settings: dict):
                             }
                         }
                     })
-                    ok, err = svc.send_test()
+                    ok, err = svc.send_test_telegram()
                     if ok:
                         st.success("Test message sent — check Telegram!")
                     else:
@@ -260,6 +262,10 @@ def render_alert_settings(settings: dict):
 
     # Discord settings
     st.markdown("#### Discord")
+    st.caption(
+        "In Discord: channel → Edit Channel → Integrations → Webhooks → New Webhook → copy URL. "
+        "**Save All Settings** after editing."
+    )
 
     discord = alerts.get("discord", {})
     settings["alerts"]["discord"]["enabled"] = st.toggle(
@@ -280,7 +286,27 @@ def render_alert_settings(settings: dict):
         col_test, col_space = st.columns([1, 4])
         with col_test:
             if st.button("Send Test", use_container_width=True, key="settings_discord_test"):
-                st.info("Test message sent!")
+                webhook = settings["alerts"]["discord"].get("webhook_url", "")
+                from alerts.discord_bot import validate_discord_webhook
+                from alerts.service import AlertService
+
+                valid, err = validate_discord_webhook(webhook)
+                if not valid:
+                    st.error(err)
+                else:
+                    svc = AlertService.from_config({
+                        "alerts": {
+                            "discord": {
+                                "enabled": True,
+                                "webhook_url": webhook,
+                            }
+                        }
+                    })
+                    ok, err = svc.send_test_discord()
+                    if ok:
+                        st.success("Test message sent — check Discord!")
+                    else:
+                        st.error(err)
 
 
 def render_general_settings(settings: dict):

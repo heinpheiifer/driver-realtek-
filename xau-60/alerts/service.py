@@ -8,8 +8,8 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-from alerts.discord_bot import CloseAlert, DiscordAlert, TradeAlert
-from alerts.telegram_bot import TelegramAlert
+from alerts.discord_bot import CloseAlert, DiscordAlert, TradeAlert, validate_discord_webhook
+from alerts.telegram_bot import TelegramAlert, validate_telegram_credentials
 
 
 class AlertService:
@@ -33,15 +33,23 @@ class AlertService:
         discord = None
 
         if tg_cfg.get("enabled") and tg_cfg.get("token") and tg_cfg.get("chat_id"):
-            telegram = TelegramAlert(
-                token=str(tg_cfg["token"]),
-                chat_id=str(tg_cfg["chat_id"]),
+            valid, err = validate_telegram_credentials(
+                str(tg_cfg["token"]), str(tg_cfg["chat_id"])
             )
-            if not telegram.enabled:
-                logger.warning("Telegram enabled in config but failed to initialize")
+            if valid:
+                telegram = TelegramAlert(
+                    token=str(tg_cfg["token"]),
+                    chat_id=str(tg_cfg["chat_id"]),
+                )
+            else:
+                logger.warning(f"Telegram config invalid: {err}")
 
         if dc_cfg.get("enabled") and dc_cfg.get("webhook_url"):
-            discord = DiscordAlert(webhook_url=str(dc_cfg["webhook_url"]))
+            valid, err = validate_discord_webhook(str(dc_cfg["webhook_url"]))
+            if valid:
+                discord = DiscordAlert(webhook_url=str(dc_cfg["webhook_url"]))
+            else:
+                logger.warning(f"Discord config invalid: {err}")
 
         service = cls(telegram=telegram, discord=discord)
         if service.is_active:
@@ -57,15 +65,50 @@ class AlertService:
             or (self.discord and self.discord.enabled)
         )
 
-    def send_test(self) -> tuple[bool, str]:
-        """Send a test message. Returns (success, error_message)."""
-        message = "✅ *XAU-60 test alert* — Telegram is working!"
-        if not self.telegram or not self.telegram.enabled:
-            return False, "Telegram not configured (enable + token + chat ID)"
+    def send_test_telegram(self) -> tuple[bool, str]:
+        """Send a Telegram test message. Returns (success, error_message)."""
+        if not self.telegram:
+            return False, "Telegram not configured — enable it and enter token + chat ID"
 
-        if self.telegram.send_message_sync(message):
+        valid, err = validate_telegram_credentials(self.telegram.token, self.telegram.chat_id)
+        if not valid:
+            return False, err
+
+        message = "XAU-60 test alert - Telegram is working!"
+        ok, api_err = self.telegram.send_message_sync(message, parse_mode=None)
+        if ok:
             return True, ""
+        if api_err:
+            hint = ""
+            low = api_err.lower()
+            if "unauthorized" in low:
+                hint = " Token is wrong — copy a fresh one from @BotFather."
+            elif "chat not found" in low:
+                hint = " Chat ID is wrong, or you haven't sent /start to your bot yet."
+            elif "bot was blocked" in low:
+                hint = " Unblock the bot in Telegram, then send /start."
+            return False, f"{api_err}.{hint}"
         return False, "Send failed — check token, chat ID, and that you /start the bot"
+
+    def send_test_discord(self) -> tuple[bool, str]:
+        """Send a Discord test message. Returns (success, error_message)."""
+        if not self.discord:
+            return False, "Discord not configured — enable it and paste your webhook URL"
+
+        valid, err = validate_discord_webhook(self.discord.webhook_url)
+        if not valid:
+            return False, err
+
+        ok, api_err = self.discord.send_message(
+            content="✅ **XAU-60 test alert** — Discord is working!"
+        )
+        if ok:
+            return True, ""
+        return False, api_err or "Discord send failed — check webhook URL is valid and not deleted"
+
+    def send_test(self) -> tuple[bool, str]:
+        """Backward-compatible alias for Telegram test."""
+        return self.send_test_telegram()
 
     def send_startup(self, strategies: List[str]) -> None:
         if self.telegram and self.telegram.enabled:

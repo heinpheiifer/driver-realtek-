@@ -38,7 +38,7 @@ def main() -> int:
         return 1
 
     svc = AlertService.from_config({"alerts": alerts})
-    ok, err = svc.send_test()
+    ok, err = svc.send_test_telegram()
     if ok:
         print("Test message sent — check your Telegram chat.")
         return 0

@@ -2,7 +2,7 @@
 Discord Alert System using webhooks.
 """
 import requests
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 from datetime import datetime
 from loguru import logger
@@ -35,6 +35,24 @@ class CloseAlert:
     timestamp: datetime
 
 
+_PLACEHOLDER_WEBHOOKS = frozenset({
+    "",
+    "https://discord.com/api/webhooks/xxx/xxx",
+    "your_webhook_url",
+})
+
+
+def validate_discord_webhook(webhook_url: str) -> Tuple[bool, str]:
+    url = str(webhook_url or "").strip()
+    if not url or url in _PLACEHOLDER_WEBHOOKS:
+        return False, "Webhook URL is missing or still the placeholder"
+    if not url.startswith("https://discord.com/api/webhooks/") and not url.startswith(
+        "https://discordapp.com/api/webhooks/"
+    ):
+        return False, "Webhook URL must start with https://discord.com/api/webhooks/"
+    return True, ""
+
+
 class DiscordAlert:
     """
     Discord webhook notification system.
@@ -53,15 +71,21 @@ class DiscordAlert:
         Args:
             webhook_url: Discord webhook URL
         """
-        self.webhook_url = webhook_url
-        self.enabled = bool(webhook_url)
+        self.webhook_url = webhook_url.strip() if webhook_url else ""
+        valid, _ = validate_discord_webhook(self.webhook_url)
+        self.enabled = valid
+        self._last_error = ""
         self.username = "Trading Bot"
         self.avatar_url = ""
 
         if self.enabled:
             logger.info("Discord alerts initialized")
 
-    def send_message(self, content: str = "", embed: Dict[str, Any] = None) -> bool:
+    @property
+    def last_error(self) -> str:
+        return self._last_error
+
+    def send_message(self, content: str = "", embed: Dict[str, Any] = None) -> Tuple[bool, str]:
         """
         Send a message to Discord.
 
@@ -73,7 +97,7 @@ class DiscordAlert:
             True if sent successfully
         """
         if not self.enabled:
-            return False
+            return False, "Discord not configured"
 
         payload = {
             "username": self.username,
@@ -92,12 +116,19 @@ class DiscordAlert:
             response = requests.post(
                 self.webhook_url,
                 json=payload,
-                timeout=10
+                timeout=15,
             )
-            return response.status_code == 204
+            if response.status_code in (200, 204):
+                self._last_error = ""
+                return True, ""
+            err = f"HTTP {response.status_code}: {response.text[:300]}"
+            self._last_error = err
+            logger.error(f"Discord webhook error: {err}")
+            return False, err
         except requests.RequestException as e:
+            self._last_error = str(e)
             logger.error(f"Discord webhook error: {e}")
-            return False
+            return False, str(e)
 
     def send_trade_alert(self, alert: TradeAlert) -> bool:
         """Send trade entry alert."""
@@ -120,7 +151,8 @@ class DiscordAlert:
             "footer": {"text": "Trading Bot"}
         }
 
-        return self.send_message(embed=embed)
+        ok, _ = self.send_message(embed=embed)
+        return ok
 
     def send_close_alert(self, alert: CloseAlert) -> bool:
         """Send position close alert."""
@@ -143,7 +175,8 @@ class DiscordAlert:
             "footer": {"text": "Trading Bot"}
         }
 
-        return self.send_message(embed=embed)
+        ok, _ = self.send_message(embed=embed)
+        return ok
 
     def send_daily_summary(
         self,
@@ -174,7 +207,8 @@ class DiscordAlert:
             "footer": {"text": "Trading Bot"}
         }
 
-        return self.send_message(embed=embed)
+        ok, _ = self.send_message(embed=embed)
+        return ok
 
     def send_error_alert(self, error: str, context: str = "") -> bool:
         """Send error notification."""
@@ -189,7 +223,8 @@ class DiscordAlert:
             "footer": {"text": "Trading Bot"}
         }
 
-        return self.send_message(embed=embed)
+        ok, _ = self.send_message(embed=embed)
+        return ok
 
     def send_startup_message(self, strategies: list) -> bool:
         """Send bot startup notification."""
@@ -203,7 +238,8 @@ class DiscordAlert:
             "footer": {"text": "Trading Bot"}
         }
 
-        return self.send_message(embed=embed)
+        ok, _ = self.send_message(embed=embed)
+        return ok
 
     def send_shutdown_message(self, reason: str = "Manual shutdown") -> bool:
         """Send bot shutdown notification."""
@@ -215,4 +251,5 @@ class DiscordAlert:
             "footer": {"text": "Trading Bot"}
         }
 
-        return self.send_message(embed=embed)
+        ok, _ = self.send_message(embed=embed)
+        return ok
