@@ -43,6 +43,10 @@ def _default_symbol_index(symbols: list[str]) -> int:
     preferred = default_trading_symbol()
     return symbols.index(preferred) if preferred in symbols else 0
 
+
+# Backwards compat — older builds referenced _CHART_SYMBOLS directly
+_CHART_SYMBOLS = _chart_symbols()
+
 try:
     from core.backtest_engine import BacktestEngine, BacktestResult
     from core.strategy_loader import StrategyLoader
@@ -98,10 +102,8 @@ def render_single_backtest():
 
             symbol = st.selectbox(
                 "Symbol",
-                options=_CHART_SYMBOLS,
-                index=_CHART_SYMBOLS.index(default_trading_symbol())
-                if default_trading_symbol() in _CHART_SYMBOLS
-                else 0,
+                options=_chart_symbols(),
+                index=_default_symbol_index(_chart_symbols()),
                 key="single_symbol_select"
             )
 
@@ -244,9 +246,11 @@ def render_comparison_backtest():
     col_sym, col_tf, col_dates = st.columns(3)
 
     with col_sym:
+        symbols = _chart_symbols()
         symbol = st.selectbox(
             "Symbol",
-            options=_CHART_SYMBOLS,
+            options=symbols,
+            index=_default_symbol_index(symbols),
             key="compare_symbol"
         )
 
