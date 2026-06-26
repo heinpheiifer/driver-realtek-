@@ -205,7 +205,7 @@ def render_account_summary():
 
     refresh_col, _ = st.columns([1, 4])
     with refresh_col:
-        if st.button("🔄 Refresh Balance", key="dashboard_refresh_balance", use_container_width=True):
+        if st.button("🔄 Refresh Balance", key="dashboard_refresh_balance", width="stretch"):
             if active_account:
                 manager.connect(active_account.id)
                 manager.get_account_info(active_account.id, refresh=True)
@@ -344,7 +344,7 @@ def render_chart_panel():
                 key="chart_auto_refresh"
             )
         with col_btn:
-            if st.button("🔄 Refresh", use_container_width=True, key="chart_refresh_btn"):
+            if st.button("🔄 Refresh", width="stretch", key="chart_refresh_btn"):
                 st.rerun()
 
     # Get chart data
@@ -366,7 +366,7 @@ def render_chart_panel():
 
     # Create candlestick chart
     fig = create_candlestick_chart(df, symbol, timeframe, connector)
-    st.plotly_chart(fig, use_container_width=True, key="main_chart")
+    st.plotly_chart(fig, width="stretch", key="main_chart")
 
     # Current price display
     if connector and connector.is_connected():
@@ -676,7 +676,7 @@ def render_trade_panel():
         buy_clicked = st.button(
             "🟢 BUY",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key="trade_buy_btn"
         )
 
@@ -684,7 +684,7 @@ def render_trade_panel():
         sell_clicked = st.button(
             "🔴 SELL",
             type="secondary",
-            use_container_width=True,
+            width="stretch",
             key="trade_sell_btn"
         )
 
@@ -706,7 +706,7 @@ def render_trade_panel():
     st.markdown("---")
 
     # Close All button
-    if st.button("❌ Close All Positions", type="secondary", use_container_width=True, key="close_all_btn"):
+    if st.button("❌ Close All Positions", type="secondary", width="stretch", key="close_all_btn"):
         close_all_positions()
 
     # Trade result display
@@ -989,7 +989,7 @@ def render_trade_history():
 
         if data:
             df = pd.DataFrame(data)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width="stretch", hide_index=True)
 
             # Summary stats
             total_profit = sum(float(d["Profit"].replace("$", "").replace("+", "")) for d in data)

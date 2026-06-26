@@ -93,12 +93,24 @@ echo ""
 # --- MT5 terminal ---
 echo "--- MT5 terminal (Wine) ---"
 if [[ -x .venv/bin/python ]]; then
-  TERM_PATH="$(.venv/bin/python -c "from utils.mt5_paths import find_wine_mt5_terminal; print(find_wine_mt5_terminal() or '')")"
-  if [[ -n "$TERM_PATH" ]]; then
-    ok "Found: $TERM_PATH"
-  else
-    warn "terminal64.exe not found under ~/.wine — set MT5_WINE_PATH in .env"
-  fi
+  .venv/bin/python -c "
+from utils.mt5_paths import (
+    find_mt5_from_running_process,
+    list_wine_mt5_terminals,
+    find_wine_mt5_terminal,
+)
+r = find_mt5_from_running_process()
+print('  Running process:', r or '(MT5 not running — open MT5 in Wine first)')
+for p in list_wine_mt5_terminals()[:5]:
+    print('  Found:', p)
+b = find_wine_mt5_terminal()
+if b:
+    ok \"Best path: $b\"
+else
+    fail \"No terminal64.exe — install BlackBull MT5 in Wine\"
+    echo \"  Fix: ./scripts/find-wine-mt5-path.sh\"
+fi
+"
 fi
 echo ""
 

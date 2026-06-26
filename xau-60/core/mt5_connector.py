@@ -206,18 +206,53 @@ class MT5Connector:
             )
         return text
 
-    def _initialize_mt5(self, mode: str, terminal_path: Optional[str], timeout: int) -> bool:
-        """Connect Python API to a running MT5 terminal (Wine: attach without spawning)."""
+    def _initialize_mt5(
+        self,
+        mode: str,
+        terminal_path: Optional[str],
+        timeout: int,
+        login: Optional[int] = None,
+        password: Optional[str] = None,
+        server: Optional[str] = None,
+    ) -> bool:
+        """Connect Python API to MT5 terminal."""
         if mode == "wine":
-            # Prefer attaching to the MT5 window already open in Wine (no new terminal).
-            if mt5.initialize(timeout=timeout):
-                return True
+            # Wine: path-first (attach to open BlackBull MT5), then bare attach, then full login.
             if terminal_path and mt5.initialize(path=terminal_path, timeout=timeout):
                 return True
+            if mt5.initialize(timeout=timeout):
+                return True
+            if (
+                terminal_path
+                and login
+                and password
+                and server
+                and mt5.initialize(
+                    path=terminal_path,
+                    login=int(login),
+                    password=password.strip(),
+                    server=server,
+                    timeout=timeout,
+                )
+            ):
+                return True
+
             code, msg = mt5.last_error()
+            from utils.mt5_paths import list_wine_mt5_terminals
+
+            extra = ""
+            if not terminal_path:
+                found = list_wine_mt5_terminals()
+                extra = (
+                    " MT5 path not found in Wine. Open MT5 once, then run: "
+                    "./scripts/find-wine-mt5-path.sh"
+                )
+                if found:
+                    extra += f" Found on disk: {found[0]}"
             self._set_connection_error(
-                self._format_mt5_error(int(code), str(msg), "initialize", login=None)
-                + " Is MetaTrader 5 open and logged in inside Wine?"
+                self._format_mt5_error(int(code), str(msg), "initialize", login)
+                + extra
+                + " Ensure MT5 is open, logged in, and Algo Trading is ON."
             )
             return False
 
@@ -227,7 +262,9 @@ class MT5Connector:
         if mt5.initialize(**init_params):
             return True
         code, msg = mt5.last_error()
-        self._set_connection_error(self._format_mt5_error(int(code), str(msg), "initialize"))
+        self._set_connection_error(
+            self._format_mt5_error(int(code), str(msg), "initialize", login)
+        )
         return False
 
     def _account_matches(self, login: Optional[int], server: Optional[str]) -> bool:
@@ -281,10 +318,14 @@ class MT5Connector:
 
                 terminal_path = resolve_mt5_terminal_path(path)
 
-                if mode == "wine" and not terminal_path:
-                    logger.warning("Wine MT5 path not found; trying attach to running terminal")
+                if mode == "wine" and terminal_path:
+                    logger.info(f"Wine MT5 terminal path: {terminal_path}")
+                elif mode == "wine":
+                    logger.warning("Wine MT5 path not found — run ./scripts/find-wine-mt5-path.sh")
 
-                if not self._initialize_mt5(mode, terminal_path, timeout):
+                if not self._initialize_mt5(
+                    mode, terminal_path, timeout, login, password, server
+                ):
                     return False
 
                 use_terminal = mode == "wine" and get_env(
@@ -305,7 +346,7 @@ class MT5Connector:
                         self._set_connection_error(
                             f"MT5 Wine is logged in as {info.login}@{info.server}, "
                             f"but this app expects {login}@{server}. "
-                            "In MT5 Wine use File → Login to trade account and switch to 517035."
+                            f"In MT5 Wine use File → Login to trade account and switch to {login}."
                         )
                         return False
                     self._set_connection_error(

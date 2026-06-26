@@ -115,19 +115,14 @@ def initialize(
     elif get_env("MT5_WINE_PATH", ""):
         kwargs["path"] = get_env("MT5_WINE_PATH", "")
     if login is not None:
-        kwargs["login"] = login
+        kwargs["login"] = int(login)
     if password:
         kwargs["password"] = password
     if server:
         kwargs["server"] = server
 
     try:
-        if kwargs.get("login"):
-            ok = client.initialize(**kwargs)
-        elif path or kwargs.get("path"):
-            ok = client.initialize(path=kwargs.get("path"), timeout=timeout, portable=portable)
-        else:
-            ok = client.initialize(timeout=timeout, portable=portable)
+        ok = client.initialize(**kwargs)
         _initialized = bool(ok)
         if not ok:
             err = client.last_error()
