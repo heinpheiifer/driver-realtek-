@@ -17,6 +17,13 @@ fi
 
 mkdir -p logs
 
+# Auto-start Wine MT5 bridge when enabled in .env
+if grep -qE '^MT5_WINE_ENABLED=(true|1|yes|on)' .env 2>/dev/null; then
+  echo "Wine MT5 mode — ensuring bridge is running..."
+  ./scripts/ensure-wine-bridge.sh || true
+  echo ""
+fi
+
 export STREAMLIT_SERVER_PORT=8020
 export STREAMLIT_SERVER_ADDRESS=0.0.0.0
 

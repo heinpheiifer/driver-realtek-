@@ -160,9 +160,18 @@ def render_account_summary():
                         )
                     else:
                         st.error(
-                            "MT5 Wine mode is enabled but the mt5linux server is not running. "
-                            "Open MT5 in Wine, then run `./scripts/start-wine-mt5linux.sh` in a terminal."
+                            "MT5 Wine bridge is not running on port 18812."
                         )
+                        st.code(
+                            "# Terminal 1 — open MT5 in Wine first, then:\n"
+                            "cd ~/tradenator-xau60/xau-60\n"
+                            "./scripts/start-wine-mt5linux.sh\n\n"
+                            "# Or restart everything (auto-starts bridge):\n"
+                            "./scripts/start.sh",
+                            language="bash",
+                        )
+                        if st.button("🔄 Check bridge again", key="recheck_wine_bridge"):
+                            st.rerun()
                 except Exception:
                     st.info(f"MT5 Wine mode: {backend_label()}")
             elif get_backend_mode() == "bridge":

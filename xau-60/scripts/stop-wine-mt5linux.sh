@@ -24,6 +24,15 @@ port_open() {
 
 echo "==> Stopping Wine MT5 bridge on port $PORT"
 
+PIDFILE="$ROOT/logs/wine-bridge.pid"
+if [[ -f "$PIDFILE" ]]; then
+  pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+  fi
+  rm -f "$PIDFILE"
+fi
+
 if command -v fuser >/dev/null 2>&1; then
   fuser -k "${PORT}/tcp" 2>/dev/null || true
 fi

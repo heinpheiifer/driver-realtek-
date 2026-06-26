@@ -16,9 +16,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 RESTART=false
+DAEMON=false
 for arg in "$@"; do
   case "$arg" in
     --restart|-r) RESTART=true ;;
+    --daemon|-d) DAEMON=true ;;
   esac
 done
 
@@ -97,5 +99,16 @@ echo "  MT5_WINE_ENABLED=true"
 echo "  MT5_WINE_HOST=localhost"
 echo "  MT5_WINE_PORT=$PORT"
 echo ""
+
+if [[ "$DAEMON" == true ]]; then
+  LOG="$ROOT/logs/wine-bridge.log"
+  PIDFILE="$ROOT/logs/wine-bridge.pid"
+  mkdir -p "$ROOT/logs"
+  echo "Logging to $LOG"
+  nohup "${WINE_PY_CMD[@]}" -m mt5linux --host "$BIND_HOST" -p "$PORT" >>"$LOG" 2>&1 &
+  echo $! > "$PIDFILE"
+  echo "Wine bridge started in background (pid $(cat "$PIDFILE"))."
+  exit 0
+fi
 
 exec "${WINE_PY_CMD[@]}" -m mt5linux --host "$BIND_HOST" -p "$PORT"
