@@ -17,6 +17,13 @@ fi
 
 mkdir -p logs
 
+# Free port 8020 if a previous UI instance is still running
+if ss -tln 2>/dev/null | grep -q ':8020 ' || netstat -tln 2>/dev/null | grep -q ':8020 '; then
+  echo "Port 8020 already in use — stopping old UI..."
+  "$(dirname "${BASH_SOURCE[0]}")/stop-ui.sh" || true
+  sleep 1
+fi
+
 # Auto-start Wine MT5 bridge when enabled in .env
 if grep -qE '^MT5_WINE_ENABLED=(true|1|yes|on)' .env 2>/dev/null; then
   echo "Wine MT5 mode — ensuring bridge is running..."
