@@ -67,6 +67,17 @@ class MT5BridgeConfig:
 
 
 @dataclass
+class MT5WineConfig:
+    """MT5 in Wine via mt5linux (same Linux laptop)."""
+    enabled: bool = field(default_factory=lambda: get_env("MT5_WINE_ENABLED", False, bool))
+    host: str = field(default_factory=lambda: get_env("MT5_WINE_HOST", "localhost"))
+    port: int = field(default_factory=lambda: get_env("MT5_WINE_PORT", 18812, int))
+    timeout: int = field(default_factory=lambda: get_env("MT5_WINE_TIMEOUT", 300, int))
+    path: str = field(default_factory=lambda: get_env("MT5_WINE_PATH", ""))
+    python: str = field(default_factory=lambda: get_env("MT5_WINE_PYTHON", "wine python"))
+
+
+@dataclass
 class TelegramConfig:
     """Telegram alert configuration."""
     enabled: bool = field(default_factory=lambda: get_env("TELEGRAM_ENABLED", False, bool))
@@ -121,6 +132,7 @@ class Config:
     """Main configuration class."""
     mt5: MT5Config = field(default_factory=MT5Config)
     mt5_bridge: MT5BridgeConfig = field(default_factory=MT5BridgeConfig)
+    mt5_wine: MT5WineConfig = field(default_factory=MT5WineConfig)
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
     discord: DiscordConfig = field(default_factory=DiscordConfig)
     risk: RiskConfig = field(default_factory=RiskConfig)
@@ -142,6 +154,14 @@ class Config:
                 "url": self.mt5_bridge.url,
                 "token": self.mt5_bridge.token,
                 "timeout": self.mt5_bridge.timeout,
+            },
+            "mt5_wine": {
+                "enabled": self.mt5_wine.enabled,
+                "host": self.mt5_wine.host,
+                "port": self.mt5_wine.port,
+                "timeout": self.mt5_wine.timeout,
+                "path": self.mt5_wine.path,
+                "python": self.mt5_wine.python,
             },
             "alerts": {
                 "telegram": {

@@ -94,13 +94,82 @@ Enable/disable in the **Strategies** page in the dashboard.
 
 ---
 
-## Linux Mint note
+## Linux Mint note — MT5 in Wine (same laptop)
 
-The Python `MetaTrader5` package is **Windows-only**. On Mint you have two options:
+If **MetaTrader 5 runs in Wine on this machine** (recommended for single-laptop setups):
 
-### Option A — MT5 bridge (recommended for Linux dashboard)
+### 1. Wine-side Python (one-time)
 
-Run the UI on Mint but connect to **real BlackBull balance** via a Windows PC on your LAN:
+Install [Python for Windows](https://www.python.org/downloads/windows/) inside Wine, then:
+
+```bash
+wine python -m pip install MetaTrader5 mt5linux
+```
+
+Find your Wine Python if `wine python` does not work:
+
+```bash
+find ~/.wine -name python.exe 2>/dev/null
+# Then: MT5_WINE_PYTHON="wine /path/to/python.exe" ./scripts/start-wine-mt5linux.sh
+```
+
+### 2. Linux-side Python
+
+```bash
+cd xau-60
+.venv/bin/pip install mt5linux
+```
+
+Edit `.env`:
+
+```bash
+MT5_WINE_ENABLED=true
+MT5_WINE_HOST=localhost
+MT5_WINE_PORT=18812
+```
+
+### 3. Every trading session
+
+**Terminal 1** — open MT5 in Wine, log into BlackBull.
+
+**Terminal 2** — start the RPyC bridge:
+
+```bash
+./scripts/start-wine-mt5linux.sh
+```
+
+**Terminal 3** — start XAU-60:
+
+```bash
+./scripts/start.sh
+```
+
+Verify:
+
+```bash
+python scripts/check-wine-mt5.py
+python scripts/check-balance.py
+```
+
+Dashboard shows **Live data from MT5 in Wine** with your real balance.
+
+---
+
+## Linux Mint note — other options
+
+The Python `MetaTrader5` package is **Windows-only**. Alternatives:
+
+### Option A — MT5 bridge (separate Windows PC)
+
+If MT5 runs on another Windows machine (not Wine on this laptop), see HTTP bridge setup below.
+
+### Option B — UI preview only (no Wine bridge)
+
+- Dashboard works with **mock data** until `MT5_WINE_ENABLED=true` and the mt5linux server is running.
+
+### Option C — HTTP bridge (remote Windows PC)
+
+Run the UI on Mint but connect via a Windows PC on your LAN:
 
 1. **On Windows** (where MT5 + BlackBull are installed):
    ```powershell
@@ -129,16 +198,17 @@ The dashboard will show **Live data via MT5 bridge** and your real balance.
 ### Option B — UI preview only (no bridge)
 
 - Dashboard, backtests, and strategy editing work with **mock data**.
-- No real balance or live orders until you use the bridge or run on Windows.
+- No real balance until Wine bridge or remote bridge is configured.
 
 ### Option C — Run everything on Windows
 
 Run the bot on a **Windows PC/VPS** where MT5 is installed; open the dashboard from Mint:
 
 ```bash
-# On Windows machine, then from Mint:
 http://WINDOWS_LOCAL_IP:8020
 ```
+
+*(Remote HTTP bridge section — only if MT5 is on another Windows PC:)*
 
 ---
 
@@ -176,8 +246,9 @@ sudo systemctl enable --now xau60
 | MT5 connect failed | MT5 must be open; check login/server in `.env` |
 | No XAUUSD data | Add symbol to Market Watch; check broker symbol name |
 | No trades | Check session hours, strategy enabled, demo account has margin |
-| Linux “mock MT5” | Set `MT5_BRIDGE_URL` in `.env` and run `start-bridge.ps1` on Windows |
-| Bridge unreachable | Windows firewall port 8021; MT5 open; correct IP in `.env` |
+| Linux “mock MT5” | Set `MT5_WINE_ENABLED=true` and run `start-wine-mt5linux.sh` |
+| Wine bridge not running | Open MT5 in Wine, run `./scripts/start-wine-mt5linux.sh` |
+| Bridge unreachable (remote) | Windows firewall port 8021; MT5 open; correct IP in `.env` |
 
 ---
 

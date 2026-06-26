@@ -150,7 +150,22 @@ def render_account_summary():
             st.markdown(
                 f"**Account:** {active_account.name} ({active_account.login}@{active_account.server}) — **{type_label}**"
             )
-            if get_backend_mode() == "bridge":
+            if get_backend_mode() == "wine":
+                try:
+                    from utils.mt5_wine_client import wine_reachable
+                    if wine_reachable():
+                        st.success(
+                            f"**Live data from MT5 in Wine** — {backend_label()}. "
+                            "Your real BlackBull balance is read from MT5 running in Wine on this laptop."
+                        )
+                    else:
+                        st.error(
+                            "MT5 Wine mode is enabled but the mt5linux server is not running. "
+                            "Open MT5 in Wine, then run `./scripts/start-wine-mt5linux.sh` in a terminal."
+                        )
+                except Exception:
+                    st.info(f"MT5 Wine mode: {backend_label()}")
+            elif get_backend_mode() == "bridge":
                 try:
                     from utils.mt5_bridge_client import bridge_reachable
                     if bridge_reachable():
@@ -168,9 +183,9 @@ def render_account_summary():
                     st.info(f"MT5 bridge mode: {backend_label()}")
             elif not is_real_mt5_available():
                 st.warning(
-                    "**UI preview mode (mock data).** To show your real BlackBull balance on Linux, "
-                    "run the MT5 bridge on a Windows PC with MetaTrader 5, then set "
-                    "`MT5_BRIDGE_URL=http://WINDOWS_IP:8021` in `.env`. See `SETUP_XAU60.md`."
+                    "**UI preview mode (mock data).** You run MT5 in Wine — set "
+                    "`MT5_WINE_ENABLED=true` in `.env`, run `./scripts/start-wine-mt5linux.sh`, "
+                    "then restart the app. See `SETUP_XAU60.md`."
                 )
             elif connection_status != ConnectionStatus.CONNECTED:
                 st.error(

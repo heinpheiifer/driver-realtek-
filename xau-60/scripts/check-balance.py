@@ -15,11 +15,17 @@ def main():
     if not is_real_mt5_available():
         print("\nNOTE: Real BlackBull balance requires either:")
         print("  - Windows + MT5 terminal (native mode), or")
-        print("  - MT5 bridge on Windows + MT5_BRIDGE_URL in .env (Linux/macOS)\n")
-    elif get_backend_mode() == "bridge":
+        print("  - MT5 in Wine + MT5_WINE_ENABLED=true (same laptop), or")
+        print("  - MT5 bridge on another Windows PC + MT5_BRIDGE_URL in .env\n")
+    if get_backend_mode() == "bridge":
         from utils.mt5_bridge_client import bridge_reachable
         if not bridge_reachable():
             print("\nERROR: MT5 bridge is not reachable. Run scripts/start-bridge.ps1 on Windows.\n")
+            return 1
+    elif get_backend_mode() == "wine":
+        from utils.mt5_wine_client import wine_reachable
+        if not wine_reachable():
+            print("\nERROR: Wine MT5 bridge not running. Run ./scripts/start-wine-mt5linux.sh\n")
             return 1
 
     manager = get_account_manager()
@@ -51,8 +57,10 @@ def main():
     print("\nCould not read balance.")
     if get_backend_mode() == "bridge":
         print("→ Check Windows MT5 is open, bridge is running, and server name matches exactly.")
+    elif get_backend_mode() == "wine":
+        print("→ Open MT5 in Wine, run ./scripts/start-wine-mt5linux.sh, check server name.")
     elif get_backend_mode() == "mock":
-        print("→ Set MT5_BRIDGE_URL in .env or run on Windows with MT5 open.")
+        print("→ Set MT5_WINE_ENABLED=true in .env (Wine) or MT5_BRIDGE_URL (remote Windows).")
     else:
         print("→ Open MT5, log in to the same account, check server name matches exactly.")
     return 1
