@@ -77,14 +77,16 @@ A professional-grade, modular trading bot for MetaTrader 5 with a modern Streaml
 
 ## Quick Start
 
-### Standalone app (port 8010)
+### Standalone app (port 8020)
+
+Uses **8020** so it does not conflict with Tradenator on **8010**.
 
 **Linux Mint / Ubuntu:**
 ```bash
 chmod +x scripts/*.sh
 ./scripts/install-linux.sh
 ./scripts/start.sh
-# Open http://localhost:8010
+# Open http://localhost:8020
 ```
 
 **Windows (MT5 live trading):**

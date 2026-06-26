@@ -1,5 +1,5 @@
 [server]
-port = 8010
+port = 8020
 address = "0.0.0.0"
 headless = true
 enableCORS = false
@@ -8,7 +8,7 @@ enableXsrfProtection = true
 [browser]
 gatherUsageStats = false
 serverAddress = "localhost"
-serverPort = 8010
+serverPort = 8020
 
 [theme]
 base = "dark"

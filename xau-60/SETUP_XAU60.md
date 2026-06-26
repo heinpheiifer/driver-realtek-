@@ -1,8 +1,8 @@
-# XAU-60 Setup Guide (Standalone app on port 8010)
+# XAU-60 Setup Guide (Standalone app on port 8020)
 
 This repo ([lordgaruda/XAU-60](https://github.com/lordgaruda/XAU-60)) is **MT5 Trading Bot Pro** with the **SMC Scalper** strategy for **XAUUSD** (gold) on **M15**.
 
-The web dashboard runs as its **own app on port 8010**.
+The web dashboard runs on **port 8020** so it does not conflict with **Tradenator on 8010**.
 
 ---
 
@@ -17,7 +17,7 @@ chmod +x scripts/*.sh
 ./scripts/start.sh
 ```
 
-Open: **http://localhost:8010**
+Open: **http://localhost:8020**
 
 ### Windows (required for live MT5 trading)
 
@@ -27,7 +27,7 @@ cd xau-60
 .\scripts\start-windows.ps1
 ```
 
-Open: **http://localhost:8010**
+Open: **http://localhost:8020**
 
 ---
 
@@ -87,7 +87,7 @@ Enable/disable in the **Strategies** page in the dashboard.
 
 | Command | Purpose |
 |---------|---------|
-| `./scripts/start.sh` | Web UI on **port 8010** |
+| `./scripts/start.sh` | Web UI on **port 8020** |
 | `python main.py --dry-run` | Test MT5 + strategies without orders |
 | `python main.py` | CLI live trading loop |
 | `python main.py --ui` | Same as start script |
@@ -105,7 +105,7 @@ Recommended: run the bot on a **Windows PC/VPS** where MT5 is installed; use Min
 
 ```bash
 # On Windows machine, bind LAN in start script, then from Mint:
-http://WINDOWS_LOCAL_IP:8010
+http://WINDOWS_LOCAL_IP:8020
 ```
 
 ---
@@ -122,7 +122,7 @@ After=network.target
 Type=simple
 User=YOUR_USER
 WorkingDirectory=/home/YOUR_USER/xau-60
-ExecStart=/home/YOUR_USER/xau-60/.venv/bin/streamlit run ui/app.py --server.port=8010 --server.address=127.0.0.1
+ExecStart=/home/YOUR_USER/xau-60/.venv/bin/streamlit run ui/app.py --server.port=8020 --server.address=127.0.0.1
 Restart=on-failure
 
 [Install]
@@ -139,7 +139,8 @@ sudo systemctl enable --now xau60
 
 | Problem | Fix |
 |---------|-----|
-| Port 8010 in use | `ss -tlnp \| grep 8010` — stop other app or change port in `.streamlit/config.toml` |
+| Port 8020 in use | Change port in `.streamlit/config.toml` and `scripts/start.sh` |
+| Tradenator on 8010 | Leave 8010 alone — XAU-60 uses 8020 by default |
 | MT5 connect failed | MT5 must be open; check login/server in `.env` |
 | No XAUUSD data | Add symbol to Market Watch; check broker symbol name |
 | No trades | Check session hours, strategy enabled, demo account has margin |
