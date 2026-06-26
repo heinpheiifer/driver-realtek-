@@ -109,8 +109,28 @@ def find_wine_mt5_terminal() -> Optional[str]:
 
 
 def find_mt5_from_running_process() -> Optional[str]:
-    """If MT5 is running under Wine, infer terminal64.exe path from /proc."""
+    """If MT5 is running under Wine, infer terminal64.exe path from /proc or ps."""
     prefix_paths = [os.path.realpath(str(p)) for p in wine_prefixes()]
+
+    def path_from_candidate(part: str) -> Optional[str]:
+        part = part.strip().strip('"')
+        if not part:
+            return None
+        normalized = part.replace("\\", "/")
+        lower = normalized.lower()
+        if "terminal64" not in lower and not lower.endswith("terminal.exe"):
+            return None
+        if normalized.startswith("Z:") or normalized.startswith("z:"):
+            unix = normalized[2:]
+            if Path(unix).is_file():
+                return unix_to_wine_path(unix)
+        p = Path(normalized)
+        if p.is_file():
+            return unix_to_wine_path(p)
+        for prefix in prefix_paths:
+            if normalized.startswith(prefix):
+                return unix_to_wine_path(normalized)
+        return None
 
     try:
         for entry in os.listdir("/proc"):
@@ -126,41 +146,63 @@ def find_mt5_from_running_process() -> Optional[str]:
             if "terminal64" not in line and "terminal.exe" not in line:
                 continue
             for part in parts:
-                if "terminal64.exe" in part.lower() or part.lower().endswith("terminal.exe"):
-                    p = Path(part.replace("\\", "/"))
-                    if p.is_file():
-                        return unix_to_wine_path(p)
-                    # Wine Z: path
-                    if part.startswith("Z:") or part.startswith("z:"):
-                        unix = part[2:].replace("\\", "/")
-                        if Path(unix).is_file():
-                            return unix_to_wine_path(unix)
+                found = path_from_candidate(part)
+                if found:
+                    return found
             try:
                 exe = os.readlink(f"/proc/{entry}/exe")
-                if "terminal64" in exe.lower():
-                    for prefix in prefix_paths:
-                        if exe.startswith(prefix):
-                            return unix_to_wine_path(exe)
+                found = path_from_candidate(exe)
+                if found:
+                    return found
+            except OSError:
+                pass
+            try:
+                cwd = os.readlink(f"/proc/{entry}/cwd")
+                for prefix in prefix_paths:
+                    if cwd.startswith(prefix):
+                        for name in ("terminal64.exe", "terminal.exe"):
+                            candidate = Path(cwd) / name
+                            if candidate.is_file():
+                                return unix_to_wine_path(candidate)
             except OSError:
                 pass
     except OSError:
         pass
 
-    try:
-        out = subprocess.check_output(
-            ["pgrep", "-a", "-f", "terminal64"],
-            text=True,
-            stderr=subprocess.DEVNULL,
-            timeout=3,
-        )
-        for line in out.splitlines():
-            match = re.search(r"(/[^ ]*terminal64\.exe)", line, re.I)
-            if match and Path(match.group(1)).is_file():
-                return unix_to_wine_path(match.group(1))
-    except (subprocess.SubprocessError, FileNotFoundError):
-        pass
+    for pattern in ("terminal64", "terminal.exe", "MetaTrader"):
+        try:
+            out = subprocess.check_output(
+                ["pgrep", "-a", "-f", pattern],
+                text=True,
+                stderr=subprocess.DEVNULL,
+                timeout=3,
+            )
+            for line in out.splitlines():
+                match = re.search(r"(/[^ ]*terminal64\.exe)", line, re.I)
+                if match and Path(match.group(1)).is_file():
+                    return unix_to_wine_path(match.group(1))
+                for token in line.split():
+                    found = path_from_candidate(token)
+                    if found:
+                        return found
+        except (subprocess.SubprocessError, FileNotFoundError):
+            continue
 
     return None
+
+
+def persist_mt5_wine_path(wine_path: str) -> bool:
+    """Save detected MT5 Wine path to .env as MT5_WINE_PATH."""
+    if not wine_path or not wine_path.strip():
+        return False
+    path = wine_path.strip().strip('"')
+    from utils.env_file import get_env_file_value, update_env_file
+
+    current = get_env_file_value("MT5_WINE_PATH") or get_env("MT5_WINE_PATH", "")
+    if current.strip().strip('"') == path:
+        return False
+    update_env_file("MT5_WINE_PATH", path)
+    return True
 
 
 def resolve_mt5_terminal_path(account_path: Optional[str] = None) -> Optional[str]:

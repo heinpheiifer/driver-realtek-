@@ -267,6 +267,8 @@ class AccountManager:
         self._connection_errors: Dict[str, str] = {}
         self._account_info_cache: Dict[str, AccountInfo] = {}
         self._last_ping: Dict[str, datetime] = {}
+        self._last_connect_attempt: Dict[str, datetime] = {}
+        self._connect_cooldown_seconds = 30
 
         # Health monitoring
         self._monitor_thread: Optional[threading.Thread] = None
@@ -570,12 +572,13 @@ class AccountManager:
         """
         return list(self._accounts.values())
 
-    def connect(self, account_id: Optional[str] = None) -> bool:
+    def connect(self, account_id: Optional[str] = None, *, force: bool = False) -> bool:
         """
         Connect to MT5 with specified account.
 
         Args:
             account_id: Account to connect (uses active if not specified)
+            force: If True, retry even when recently failed or already connecting
 
         Returns:
             True if connection successful
@@ -592,12 +595,39 @@ class AccountManager:
             return False
 
         with self._lock:
+            status = self._connection_status.get(account_id, ConnectionStatus.DISCONNECTED)
+            if status == ConnectionStatus.CONNECTING and not force:
+                logger.debug(f"Connect skipped — already connecting: {account_id}")
+                return False
+
+            connector = self._connectors.get(account_id)
+            if (
+                status == ConnectionStatus.CONNECTED
+                and connector
+                and connector.is_connected()
+                and not force
+            ):
+                return True
+
+            if not force:
+                last = self._last_connect_attempt.get(account_id)
+                if last and status in (ConnectionStatus.ERROR, ConnectionStatus.DISCONNECTED):
+                    elapsed = (datetime.now() - last).total_seconds()
+                    if elapsed < self._connect_cooldown_seconds:
+                        logger.debug(
+                            f"Connect cooldown ({int(self._connect_cooldown_seconds - elapsed)}s left)"
+                        )
+                        return False
+
             self._connection_status[account_id] = ConnectionStatus.CONNECTING
-            self._notify_status_change(account_id, ConnectionStatus.CONNECTING)
+            self._last_connect_attempt[account_id] = datetime.now()
+
+        self._notify_status_change(account_id, ConnectionStatus.CONNECTING)
 
         try:
             # Import connector here to avoid circular imports
             from core.mt5_connector import MT5Connector
+            from utils.mt5_backend import get_backend_mode
 
             # Create or reuse connector
             if account_id not in self._connectors:
@@ -605,12 +635,24 @@ class AccountManager:
 
             connector = self._connectors[account_id]
 
+            connect_path = account.path
+            if get_backend_mode() == "wine" and not connect_path:
+                from utils.mt5_paths import find_wine_mt5_terminal, persist_mt5_wine_path
+
+                detected = find_wine_mt5_terminal()
+                if detected:
+                    persist_mt5_wine_path(detected)
+                    connect_path = detected
+                    if account.path != detected:
+                        account.path = detected
+                        self._save_accounts()
+
             # Connect with credentials
             success = connector.connect(
                 login=account.login,
                 password=account.password,
                 server=account.server,
-                path=account.path,
+                path=connect_path,
                 timeout=60000
             )
 
@@ -631,6 +673,10 @@ class AccountManager:
                 return True
             else:
                 err = connector.get_last_connection_error() or "Connection failed"
+                if get_backend_mode() == "wine":
+                    from utils.mt5_wine_client import reset_wine_client
+
+                    reset_wine_client()
                 with self._lock:
                     self._connection_status[account_id] = ConnectionStatus.ERROR
                     self._connection_errors[account_id] = err
@@ -650,6 +696,18 @@ class AccountManager:
 
             logger.error(f"Connection error for {account_id}: {e}")
             return False
+
+    def connect_if_needed(self, account_id: Optional[str] = None) -> bool:
+        """Connect only when disconnected and not in a recent failure cooldown."""
+        account_id = account_id or self._active_account_id
+        if not account_id:
+            return False
+        status = self.get_connection_status(account_id)
+        if status == ConnectionStatus.CONNECTED:
+            connector = self._connectors.get(account_id)
+            if connector and connector.is_connected():
+                return True
+        return self.connect(account_id, force=False)
 
     def get_connection_error(self, account_id: Optional[str] = None) -> str:
         """Return the last connection error message for an account."""

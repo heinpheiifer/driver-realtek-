@@ -153,7 +153,7 @@ def render_accounts_list(manager: AccountManager):
                 else:
                     if st.button("Connect", key=f"connect_{account.id}", type="primary", width="stretch"):
                         with st.spinner("Connecting..."):
-                            if manager.connect(account.id):
+                            if manager.connect(account.id, force=True):
                                 st.success("Connected!")
                                 st.rerun()
                             else:
@@ -190,7 +190,7 @@ def render_accounts_list(manager: AccountManager):
                 if st.button("Save password & Connect", key=f"save_pw_{account.id}"):
                     if new_pw:
                         manager.update_account(account.id, password=new_pw)
-                        if manager.connect(account.id):
+                        if manager.connect(account.id, force=True):
                             st.success("Connected!")
                             st.rerun()
                         else:
@@ -256,7 +256,7 @@ def render_add_account(manager: AccountManager):
             connect_error = None
 
             if pending.get("connect_after_add"):
-                if manager.connect(account.id):
+                if manager.connect(account.id, force=True):
                     notice += " — Connected!"
                 else:
                     connect_error = _connection_failure_message(manager, account.id)
@@ -279,7 +279,7 @@ def render_add_account(manager: AccountManager):
             st.error(notice["error"])
         if st.button("Connect Now", key="connect_new_account"):
             with st.spinner("Connecting..."):
-                if manager.connect(notice["account_id"]):
+                if manager.connect(notice["account_id"], force=True):
                     st.success("Connected successfully!")
                     st.rerun()
                 else:

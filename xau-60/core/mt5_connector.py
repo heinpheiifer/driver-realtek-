@@ -206,6 +206,16 @@ class MT5Connector:
             )
         return text
 
+    def _auto_detect_wine_path(self) -> Optional[str]:
+        """Find MT5 in Wine and persist MT5_WINE_PATH when missing."""
+        from utils.mt5_paths import find_wine_mt5_terminal, persist_mt5_wine_path
+
+        detected = find_wine_mt5_terminal()
+        if detected:
+            persist_mt5_wine_path(detected)
+            logger.info(f"Auto-detected Wine MT5 path: {detected}")
+        return detected
+
     def _initialize_mt5(
         self,
         mode: str,
@@ -217,10 +227,15 @@ class MT5Connector:
     ) -> bool:
         """Connect Python API to MT5 terminal."""
         if mode == "wine":
-            # Wine: path-first (attach to open BlackBull MT5), then bare attach, then full login.
+            from utils.mt5_wine_client import reset_wine_client
+
+            if not terminal_path:
+                terminal_path = self._auto_detect_wine_path()
+
+            # Wine: path-first (attach to open BlackBull MT5), then bare attach, then API login.
             if terminal_path and mt5.initialize(path=terminal_path, timeout=timeout):
                 return True
-            if mt5.initialize(timeout=timeout):
+            if not terminal_path and mt5.initialize(timeout=timeout):
                 return True
             if (
                 terminal_path
@@ -236,15 +251,19 @@ class MT5Connector:
                 )
             ):
                 return True
+            # Last resort: attach without path when MT5 GUI is already running.
+            if terminal_path and mt5.initialize(timeout=timeout):
+                return True
 
             code, msg = mt5.last_error()
+            reset_wine_client()
             from utils.mt5_paths import list_wine_mt5_terminals
 
             extra = ""
             if not terminal_path:
                 found = list_wine_mt5_terminals()
                 extra = (
-                    " MT5 path not found in Wine. Open MT5 once, then run: "
+                    " MT5 path not found in Wine. Open MT5 in Wine, log in, then run: "
                     "./scripts/find-wine-mt5-path.sh"
                 )
                 if found:
@@ -317,11 +336,15 @@ class MT5Connector:
                         return False
 
                 terminal_path = resolve_mt5_terminal_path(path)
+                if mode == "wine" and not terminal_path:
+                    terminal_path = self._auto_detect_wine_path()
 
                 if mode == "wine" and terminal_path:
                     logger.info(f"Wine MT5 terminal path: {terminal_path}")
                 elif mode == "wine":
-                    logger.warning("Wine MT5 path not found — run ./scripts/find-wine-mt5-path.sh")
+                    logger.warning(
+                        "Wine MT5 path not found — open MT5 in Wine, then run ./scripts/find-wine-mt5-path.sh"
+                    )
 
                 if not self._initialize_mt5(
                     mode, terminal_path, timeout, login, password, server

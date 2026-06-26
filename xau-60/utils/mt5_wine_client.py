@@ -145,6 +145,19 @@ def shutdown() -> None:
     _initialized = False
 
 
+def reset_wine_client() -> None:
+    """Drop RPyC session after a failed initialize/login (avoids stale MT5 state)."""
+    global _initialized, _client, _last_error
+    if _client is not None:
+        try:
+            _client.shutdown()
+        except Exception:
+            pass
+    _client = None
+    _initialized = False
+    _last_error = (0, "")
+
+
 def login(login: int, password: str = "", server: str = "", timeout: int = 60000) -> bool:
     try:
         client = _ensure_client()

@@ -118,7 +118,7 @@ def render_account_summary():
     active_account = manager.get_active_account()
 
     if active_account and manager.get_connection_status(active_account.id) != ConnectionStatus.CONNECTED:
-        manager.connect(active_account.id)
+        manager.connect_if_needed(active_account.id)
 
     connection_status = (
         manager.get_connection_status(active_account.id)
@@ -207,7 +207,7 @@ def render_account_summary():
     with refresh_col:
         if st.button("🔄 Refresh Balance", key="dashboard_refresh_balance", width="stretch"):
             if active_account:
-                manager.connect(active_account.id)
+                manager.connect(active_account.id, force=True)
                 manager.get_account_info(active_account.id, refresh=True)
             st.rerun()
 
