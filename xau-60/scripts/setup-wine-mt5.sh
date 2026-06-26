@@ -24,6 +24,9 @@ echo "==> Installing Linux Python deps (mt5linux)..."
 ensure_env() {
   local key="$1"
   local value="$2"
+  if [[ "$value" == *" "* ]]; then
+    value="\"${value}\""
+  fi
   if grep -q "^${key}=" .env 2>/dev/null; then
     sed -i "s|^${key}=.*|${key}=${value}|" .env
   else

@@ -15,10 +15,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 if [[ -f .env ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source .env
-  set +a
+  while IFS= read -r line; do
+    [[ "$line" =~ ^MT5_WINE_ ]] || continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    value="${value%\"}"
+    value="${value#\"}"
+    export "$key=$value"
+  done < <(grep -E '^MT5_WINE_' .env)
 fi
 
 HOST="${MT5_WINE_HOST:-0.0.0.0}"
@@ -27,6 +31,8 @@ WINE_PYTHON="${MT5_WINE_PYTHON:-wine python}"
 
 # Expand $HOME in .env paths
 WINE_PYTHON="${WINE_PYTHON//\$HOME/$HOME}"
+
+read -ra WINE_PY_CMD <<< "$WINE_PYTHON"
 
 echo "==> XAU-60 Wine MT5 bridge (mt5linux RPyC)"
 echo "    Host: $HOST  Port: $PORT"
@@ -41,4 +47,4 @@ echo "  MT5_WINE_HOST=localhost"
 echo "  MT5_WINE_PORT=$PORT"
 echo ""
 
-exec $WINE_PYTHON -m mt5linux --host "$HOST" -p "$PORT"
+exec "${WINE_PY_CMD[@]}" -m mt5linux --host "$HOST" -p "$PORT"
