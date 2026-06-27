@@ -37,8 +37,13 @@ fi
 
 # Host the Linux app connects to (client side)
 CLIENT_HOST="${MT5_WINE_HOST:-localhost}"
-# Host the RPyC server binds inside Wine (keep on loopback)
+# Host the RPyC server binds inside Wine (must be loopback for Linux→Wine)
 BIND_HOST="${MT5_WINE_BIND_HOST:-127.0.0.1}"
+if [[ "$BIND_HOST" == "0.0.0.0" ]]; then
+  echo "WARNING: MT5_WINE_BIND_HOST=0.0.0.0 is not reachable from Linux."
+  echo "         Using 127.0.0.1 instead (set MT5_WINE_BIND_HOST=127.0.0.1 in .env)."
+  BIND_HOST="127.0.0.1"
+fi
 PORT="${MT5_WINE_PORT:-18812}"
 WINE_PYTHON="${MT5_WINE_PYTHON:-wine python}"
 

@@ -559,10 +559,18 @@ class MT5Connector:
 
                 if mode == "wine":
                     from utils.mt5_wine_client import wine_reachable
+
                     if not wine_reachable():
+                        host = get_env("MT5_WINE_HOST", "localhost")
+                        port = get_env("MT5_WINE_PORT", 18812, int)
                         self._set_connection_error(
-                            "Wine MT5 bridge is not running. "
-                            "Open MT5 in Wine, then run: ./scripts/start-wine-mt5linux.sh"
+                            f"Wine MT5 bridge not reachable on {host}:{port}. "
+                            "Fix: (1) Open MT5 in Wine (517035 logged in). "
+                            "(2) ./scripts/stop-wine-mt5linux.sh "
+                            "(3) Ensure .env has MT5_WINE_BIND_HOST=127.0.0.1 "
+                            "(NOT 0.0.0.0 — that breaks Linux loopback). "
+                            "(4) ./scripts/ensure-wine-bridge.sh "
+                            "(5) .venv/bin/python scripts/check-wine-mt5.py"
                         )
                         return False
 
