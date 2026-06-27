@@ -1,0 +1,41 @@
+# Trend Break + Trauma + RSI Strategy Configuration
+
+name: "Trend Break Trauma"
+enabled: true
+description: "Trend line break with EMA filter and RSI-based exits"
+
+symbols:
+  - ETHUSD
+
+timeframe: M15
+magic_number: 789456
+
+parameters:
+  rsi_period: 14
+  rsi_overbought: 70.0
+  rsi_oversold: 30.0
+  trauma_period: 21
+  trendline_lookback: 50
+  trendline_min_touches: 3
+  breakout_confirm_bars: 2
+
+risk:
+  use_atr_sl_tp: true
+  atr_sl_mult: 1.5
+  atr_tp_mult: 3.0
+  stop_loss_pips: 50.0
+  take_profit_pips: 100.0
+  trailing_stop: false
+  trailing_pips: 30.0
+  max_risk_percent: 2.0
+  lot_size: 0.1
+
+session:
+  use_time_filter: true
+  start_hour: 0
+  end_hour: 23
+  trade_friday: true
+
+alerts:
+  telegram: true
+  discord: true
