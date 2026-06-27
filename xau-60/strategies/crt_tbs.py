@@ -454,9 +454,10 @@ class CRTStrategy(StrategyBase):
         current_date = current_time.date()
 
         # Check if we already have today's range
-        if (self._current_asian_range and
-            self._current_asian_range.date.date() == current_date):
-            return True
+        if self._current_asian_range and self._current_asian_range.valid:
+            stored_date = self._get_utc_time(self._current_asian_range.date).date()
+            if stored_date == current_date:
+                return True
 
         # Calculate the Asian range
         asian_range = self._calculate_asian_range(data, current_time, symbol)
@@ -479,6 +480,7 @@ class CRTStrategy(StrategyBase):
     ) -> Optional[AsianRange]:
         """Calculate Asian session High/Low/Mid from data."""
         try:
+            current_time = self._get_utc_time(current_time)
             asian_date = current_time.date()
             asian_start = pd.Timestamp(
                 datetime.combine(asian_date, self.asian_start), tz="UTC"
@@ -488,6 +490,8 @@ class CRTStrategy(StrategyBase):
             )
 
             time_dt = pd.to_datetime(data["time"], utc=True)
+            if time_dt.dt.tz is None:
+                time_dt = time_dt.dt.tz_localize("UTC")
 
             mask = (time_dt >= asian_start) & (time_dt < asian_end)
             asian_data = data.loc[mask]

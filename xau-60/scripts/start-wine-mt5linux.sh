@@ -92,7 +92,7 @@ fi
 
 echo "Before continuing:"
 echo "  1. Open MetaTrader 5 in Wine and log into BlackBull"
-echo "  2. Wine Python needs: pip install MetaTrader5 mt5linux"
+echo "  2. Wine Python needs: pip install numpy MetaTrader5 mt5linux"
 echo ""
 echo "Linux .env:"
 echo "  MT5_WINE_ENABLED=true"
@@ -117,6 +117,12 @@ if [[ "$DAEMON" == true ]]; then
   echo "  sudo apt install tmux"
   echo "  Or run: ./scripts/start-wine-mt5linux.sh   (foreground, separate terminal)"
   exit 1
+fi
+
+# Prefer bootstrap that preloads numpy (fixes RPyC "np is not defined" on order_send)
+SERVE="$ROOT/scripts/wine_mt5linux_serve.py"
+if [[ -f "$SERVE" ]]; then
+  exec "${WINE_PY_CMD[@]}" "$SERVE" --host "$BIND_HOST" -p "$PORT"
 fi
 
 exec "${WINE_PY_CMD[@]}" -m mt5linux --host "$BIND_HOST" -p "$PORT"

@@ -282,21 +282,50 @@ class MT5Connector:
             vol = max(info.min_lot, steps * info.lot_step)
         return round(vol, 8)
 
+    def _sanitize_order_request(self, request: dict) -> dict:
+        """Coerce order dict to plain Python types (RPyC/mt5linux safe)."""
+        clean: dict = {}
+        for key, value in request.items():
+            if value is None:
+                continue
+            if hasattr(value, "item") and callable(value.item):
+                try:
+                    value = value.item()
+                except Exception:
+                    pass
+            if isinstance(value, Enum):
+                value = int(value.value) if isinstance(value.value, int) else value.value
+            elif hasattr(value, "value") and isinstance(value, (int, float, str)) is False:
+                try:
+                    value = int(value)
+                except (TypeError, ValueError):
+                    pass
+            if isinstance(value, float):
+                value = float(value)
+            elif isinstance(value, int) and not isinstance(value, bool):
+                value = int(value)
+            clean[key] = value
+        return clean
+
     def _order_send_deal(self, request: dict, symbol: str):
         """Send a market deal, using order_check + filling-mode fallbacks (retcode 10030)."""
         last_result = None
         attempts: List[dict] = []
+        wine_mode = get_backend_mode() == "wine"
 
         # Explicit ints — RPyC/mt5linux sometimes mishandles enum constants
+        base = self._sanitize_order_request(request)
         for filling in self._filling_modes_for_symbol(symbol):
-            attempts.append({**request, "type_filling": int(filling)})
-        attempts.append(dict(request))
+            attempts.append({**base, "type_filling": int(filling)})
+        attempts.append(dict(base))
 
         done_code = int(getattr(mt5, "TRADE_RETCODE_DONE", 10009))
 
         for req in attempts:
-            send_req = dict(req)
-            if hasattr(mt5, "order_check"):
+            send_req = self._sanitize_order_request(req)
+            # Wine RPyC server often lacks numpy in eval namespace — order_check triggers
+            # "name 'np' is not defined". Use direct order_send with filling fallbacks.
+            if hasattr(mt5, "order_check") and not wine_mode:
                 try:
                     check = mt5.order_check(send_req)
                     if check is not None:
