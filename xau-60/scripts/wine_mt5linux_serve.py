@@ -15,10 +15,11 @@ import sys
 
 try:
     import numpy as np  # noqa: F401 — required for mt5linux RPyC on Wine
+    import MetaTrader5 as mt5  # noqa: F401 — preload MT5 in Wine process
 except ImportError:
     print(
-        "ERROR: numpy not installed in Wine Python. Run:\n"
-        "  wine python -m pip install numpy MetaTrader5 mt5linux",
+        "ERROR: numpy/MetaTrader5 not installed in Wine Python. Run:\n"
+        "  bash scripts/fix-wine-numpy.sh",
         file=sys.stderr,
     )
     raise SystemExit(1)

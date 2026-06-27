@@ -356,11 +356,7 @@ class MT5Connector:
         for key, value in request.items():
             if value is None:
                 continue
-            if hasattr(value, "item") and callable(value.item):
-                try:
-                    value = value.item()
-                except Exception:
-                    pass
+            value = self._to_python_scalar(value)
             if isinstance(value, Enum):
                 value = int(value.value) if isinstance(value.value, int) else value.value
             elif hasattr(value, "value") and isinstance(value, (int, float, str)) is False:
@@ -372,8 +368,38 @@ class MT5Connector:
                 value = float(value)
             elif isinstance(value, int) and not isinstance(value, bool):
                 value = int(value)
+            elif isinstance(value, str):
+                value = str(value)
             clean[key] = value
         return clean
+
+    @staticmethod
+    def _to_python_scalar(value: Any) -> Any:
+        """Convert numpy / RPyC proxy scalars to plain Python (eval-safe for mt5linux)."""
+        if value is None:
+            return value
+        mod = getattr(type(value), "__module__", "") or ""
+        if mod.startswith("numpy"):
+            try:
+                return value.item()
+            except Exception:
+                return float(value)
+        if hasattr(value, "item") and callable(value.item):
+            try:
+                return value.item()
+            except Exception:
+                pass
+        return value
+
+    def _order_send_safe(self, request: dict):
+        """
+        order_send with sanitized plain-Python request.
+
+        mt5linux builds eval(f\"mt5.order_send({request})\") — numpy scalars in
+        the dict repr as np.float64(...) and fail on Wine without np in namespace.
+        """
+        send_req = self._sanitize_order_request(request)
+        return mt5.order_send(send_req)
 
     def _order_send_deal(self, request: dict, symbol: str):
         """Send a market deal, using order_check + filling-mode fallbacks (retcode 10030)."""
@@ -1222,7 +1248,7 @@ class MT5Connector:
             if stop_limit_price > 0:
                 request["stoplimit"] = stop_limit_price
 
-            result = mt5.order_send(request)
+            result = self._order_send_safe(request)
 
             if result is None:
                 error = mt5.last_error()
@@ -1446,18 +1472,18 @@ class MT5Connector:
 
             position = position[0]
 
-            new_sl = stop_loss if stop_loss is not None else position.sl
-            new_tp = take_profit if take_profit is not None else position.tp
+            new_sl = stop_loss if stop_loss is not None else float(position.sl)
+            new_tp = take_profit if take_profit is not None else float(position.tp)
 
             request = {
-                "action": mt5.TRADE_ACTION_SLTP,
-                "symbol": position.symbol,
-                "position": ticket,
+                "action": int(mt5.TRADE_ACTION_SLTP),
+                "symbol": str(position.symbol),
+                "position": int(ticket),
                 "sl": new_sl,
                 "tp": new_tp,
             }
 
-            result = mt5.order_send(request)
+            result = self._order_send_safe(request)
 
             if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
                 logger.error(f"Failed to modify position {ticket}")
@@ -1717,11 +1743,11 @@ class MT5Connector:
         """
         try:
             request = {
-                "action": mt5.TRADE_ACTION_REMOVE,
-                "order": ticket,
+                "action": int(mt5.TRADE_ACTION_REMOVE),
+                "order": int(ticket),
             }
 
-            result = mt5.order_send(request)
+            result = self._order_send_safe(request)
 
             if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
                 logger.error(f"Failed to cancel order {ticket}")

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install numpy in Wine Python + restart bridge (fixes order_send "np is not defined").
+# Install numpy in Wine Python + restart bridge (fixes order_send/modify "np is not defined").
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
