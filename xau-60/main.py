@@ -151,6 +151,7 @@ class TradingBot:
                 return False
             self.mt5 = manager.get_connector(active.id)
             self._owns_mt5_connector = False
+            manager.start_health_monitoring()
         else:
             self.mt5 = MT5Connector()
             self._owns_mt5_connector = True
@@ -227,8 +228,21 @@ class TradingBot:
         finally:
             self.shutdown()
 
+    def _ensure_mt5_connected(self) -> bool:
+        """Reconnect after Wine RPyC stream loss (bridge restart, sleep, etc.)."""
+        if self.mt5 is None:
+            return False
+        if self.mt5.is_connected():
+            return True
+        if hasattr(self.mt5, "reconnect") and self.mt5.reconnect():
+            return True
+        return False
+
     def _tick(self):
         """Process one tick cycle."""
+        if not self._ensure_mt5_connected():
+            return
+
         strategies = self.strategy_loader.get_enabled_strategies()
 
         for name, strategy in strategies.items():
@@ -266,6 +280,13 @@ class TradingBot:
 
         if self._owns_mt5_connector and self.mt5:
             self.mt5.disconnect()
+
+        try:
+            from core.account_manager import get_account_manager
+
+            get_account_manager().stop_health_monitoring()
+        except Exception:
+            pass
 
         logger.info("Trading bot stopped.")
 

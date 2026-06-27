@@ -186,10 +186,78 @@ class MT5Connector:
         self._lock = threading.RLock()
         self._symbols_cache: Dict[str, SymbolInfo] = {}
         self._last_connection_error: str = ""
+        self._connect_kwargs: Dict[str, Any] = {}
+        self._last_reconnect_attempt: float = 0.0
+        self._reconnect_cooldown: float = 15.0
 
     def get_last_connection_error(self) -> str:
         """Human-readable reason the last connect() attempt failed."""
         return self._last_connection_error
+
+    @staticmethod
+    def _is_stream_error(exc: Exception) -> bool:
+        """True when the Wine mt5linux RPyC session is dead."""
+        msg = str(exc).lower()
+        return any(
+            needle in msg
+            for needle in (
+                "stream has been closed",
+                "connection closed by peer",
+                "broken pipe",
+                "connection reset",
+                "eof occurred",
+                "rpyc",
+            )
+        )
+
+    def _invalidate_connection(self) -> None:
+        """Drop cached Wine RPyC client after a broken stream."""
+        self._connected = False
+        if get_backend_mode() == "wine":
+            try:
+                from utils.mt5_wine_client import reset_wine_client
+
+                reset_wine_client()
+            except Exception:
+                pass
+
+    def reconnect(self, force: bool = False) -> bool:
+        """
+        Re-establish MT5 after Wine RPyC stream loss.
+
+        Returns:
+            True if connect() succeeds
+        """
+        with self._lock:
+            now = time.monotonic()
+            if not force and (now - self._last_reconnect_attempt) < self._reconnect_cooldown:
+                return False
+            self._last_reconnect_attempt = now
+
+            if get_backend_mode() == "wine":
+                from utils.mt5_wine_client import wine_reachable
+
+                if not wine_reachable():
+                    self._invalidate_connection()
+                    logger.warning(
+                        "Wine MT5 bridge not reachable — run: ./scripts/ensure-wine-bridge.sh"
+                    )
+                    return False
+
+            if not self._connect_kwargs:
+                logger.warning("Cannot reconnect — no stored MT5 connection parameters")
+                return False
+
+            logger.info("Reconnecting to MT5 after RPyC stream loss...")
+            self._invalidate_connection()
+            return self.connect(**self._connect_kwargs)
+
+    def _recover_from_stream_error(self, exc: Exception, context: str) -> bool:
+        """Invalidate stale session and reconnect once."""
+        if not self._is_stream_error(exc):
+            return False
+        logger.warning(f"Wine MT5 stream lost during {context}: {exc}")
+        return self.reconnect(force=True)
 
     def _set_connection_error(self, message: str) -> None:
         self._last_connection_error = message
@@ -479,6 +547,13 @@ class MT5Connector:
         """
         with self._lock:
             self._last_connection_error = ""
+            self._connect_kwargs = {
+                "login": login,
+                "password": password,
+                "server": server,
+                "path": path,
+                "timeout": timeout,
+            }
             try:
                 mode = get_backend_mode()
 
@@ -587,7 +662,9 @@ class MT5Connector:
         try:
             info = mt5.terminal_info()
             return info is not None
-        except Exception:
+        except Exception as exc:
+            if self._is_stream_error(exc):
+                self._invalidate_connection()
             return False
 
     def _update_account_info(self) -> None:
@@ -611,7 +688,10 @@ class MT5Connector:
                     expert_allowed=getattr(info, 'trade_expert', True),
                 )
         except Exception as e:
-            logger.error(f"Failed to update account info: {e}")
+            if self._recover_from_stream_error(e, "update account info"):
+                self._update_account_info()
+            else:
+                logger.error(f"Failed to update account info: {e}")
 
     def get_account_info(self) -> Optional[AccountInfo]:
         """
@@ -704,7 +784,8 @@ class MT5Connector:
         symbol: str,
         timeframe: str,
         count: int = 100,
-        start_time: Optional[datetime] = None
+        start_time: Optional[datetime] = None,
+        _retry: bool = True,
     ) -> Optional[pd.DataFrame]:
         """
         Get OHLCV data for symbol.
@@ -747,6 +828,10 @@ class MT5Connector:
             return df[["time", "open", "high", "low", "close", "volume"]]
 
         except Exception as e:
+            if _retry and self._recover_from_stream_error(e, f"get_ohlcv {symbol}"):
+                return self.get_ohlcv(
+                    symbol, timeframe, count, start_time, _retry=False
+                )
             logger.error(f"Error getting OHLCV for {symbol}: {e}")
             return None
 
@@ -1513,7 +1598,8 @@ class MT5Connector:
     def get_positions(
         self,
         symbol: Optional[str] = None,
-        magic: Optional[int] = None
+        magic: Optional[int] = None,
+        _retry: bool = True,
     ) -> List[Position]:
         """
         Get open positions.
@@ -1556,6 +1642,8 @@ class MT5Connector:
             return result
 
         except Exception as e:
+            if _retry and self._recover_from_stream_error(e, "get_positions"):
+                return self.get_positions(symbol, magic, _retry=False)
             logger.error(f"Get positions error: {e}")
             return []
 
