@@ -21,11 +21,16 @@ if [[ ! -x .venv/bin/python ]]; then
 fi
 
 PY="$TM/.venv/bin/python"
-JUPYTER="$TM/.venv/bin/jupyter"
 
-if [[ ! -x "$JUPYTER" ]]; then
+if [[ ! -x "$PY" ]]; then
+  echo "No .venv in $TM — create one first:"
+  echo "  cd $TM && python3 -m venv .venv && .venv/bin/pip install -e . jupyterlab"
+  exit 1
+fi
+
+if ! "$PY" -m jupyter --version >/dev/null 2>&1; then
   echo "Installing jupyterlab in TradeMaster venv..."
-  "$PY" -m pip install jupyterlab
+  "$PY" -m pip install -U pip jupyterlab
 fi
 
 echo "══════════════════════════════════════════════════"
@@ -43,11 +48,11 @@ if pgrep -f "jupyter.*--port=${PORT}" >/dev/null 2>&1; then
   echo "Jupyter already on port $PORT — open:"
   echo "  http://127.0.0.1:${PORT}/lab"
   echo ""
-  "$JUPYTER" lab list 2>/dev/null | sed 's/^/  /' || true
+  "$PY" -m jupyter lab list 2>/dev/null | sed 's/^/  /' || true
   exit 0
 fi
 
 echo "Starting Jupyter Lab on http://127.0.0.1:${PORT}/lab"
 echo "  (Ctrl+C to stop)"
 echo ""
-exec "$JUPYTER" lab --port="$PORT" --ip=127.0.0.1 --no-browser
+exec "$PY" -m jupyter lab --port="$PORT" --ip=127.0.0.1 --no-browser
